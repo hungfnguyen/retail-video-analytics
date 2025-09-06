@@ -62,6 +62,13 @@
 
 ---
 
+## 📚 Tài liệu chi tiết
+
+- 📄 **Project Doc (Google Drive)**: [Tài liệu Retail Video Analytics](https://drive.google.com/drive/folders/15HIuR8GIeGHsRPt7F2PeaChrG9XlMYoa?usp=sharing)
+
+
+---
+
 ## 👥 Contributors
 - [Nguyễn Tấn Hùng](https://github.com/hungfnguyen)
 - [Nguyễn Công Đôn](https://github.com/CongDon1207)
