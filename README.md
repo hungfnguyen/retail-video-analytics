@@ -5,7 +5,7 @@
 > Monitoring: **Prometheus + Alertmanager (+ Telegram) + Grafana**
 > Orchestration (optional): **Airflow** cho maintenance/batch.
 
-![architecture](docs/architecture.png)
+![architecture](docs/architecture.jpg)
 
 ## 🎯 Mục tiêu
 
