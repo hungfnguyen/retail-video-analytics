@@ -1,0 +1,335 @@
+{
+    "uid": "rva_traffic_overview",
+    "title": "RVA - Traffic Overview",
+    "description": "Tổng quan lưu lượng khách hàng",
+    "editable": true,
+    "schemaVersion": 38,
+    "version": 1,
+    "time": {
+        "from": "now/d",
+        "to": "now"
+    },
+    "refresh": "5s",
+    "timezone": "browser",
+    "templating": {
+        "list": []
+    },
+    "panels": [
+        {
+            "id": 1,
+            "type": "stat",
+            "title": "👥 Total Visitors Today",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 5,
+                "w": 6,
+                "x": 0,
+                "y": 0
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "blue",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area"
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT COUNT(DISTINCT track_id) AS value FROM lakehouse.rva.gold_track_summary WHERE DATE(start_time) = CURRENT_DATE"
+                }
+            ]
+        },
+        {
+            "id": 2,
+            "type": "stat",
+            "title": "📈 Current Traffic",
+            "description": "Số người đang có mặt (detections trong 30 giây gần nhất)",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 5,
+                "w": 6,
+                "x": 6,
+                "y": 0
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "green",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "short"
+                }
+            },
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area"
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT COUNT(DISTINCT track_id) AS value FROM lakehouse.rva.silver_detections WHERE capture_ts >= CURRENT_TIMESTAMP - INTERVAL '45' SECOND AND track_id IS NOT NULL"
+                }
+            ]
+        },
+        {
+            "id": 3,
+            "type": "stat",
+            "title": "⏱️ Avg Duration",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 5,
+                "w": 6,
+                "x": 12,
+                "y": 0
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "orange",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "s"
+                }
+            },
+            "options": {
+                "colorMode": "value",
+                "graphMode": "area"
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT ROUND(AVG(duration_seconds), 1) AS value FROM lakehouse.rva.gold_track_summary WHERE DATE(start_time) = CURRENT_DATE AND duration_seconds > 0"
+                }
+            ]
+        },
+        {
+            "id": 4,
+            "type": "stat",
+            "title": "🕐 Peak Hour",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 5,
+                "w": 6,
+                "x": 18,
+                "y": 0
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "thresholds"
+                    },
+                    "thresholds": {
+                        "steps": [
+                            {
+                                "color": "purple",
+                                "value": null
+                            }
+                        ]
+                    },
+                    "unit": "none",
+                    "mappings": [
+                        {
+                            "type": "value",
+                            "options": {
+                                "0": {
+                                    "text": "00h"
+                                },
+                                "1": {
+                                    "text": "01h"
+                                },
+                                "2": {
+                                    "text": "02h"
+                                },
+                                "3": {
+                                    "text": "03h"
+                                },
+                                "4": {
+                                    "text": "04h"
+                                },
+                                "5": {
+                                    "text": "05h"
+                                },
+                                "6": {
+                                    "text": "06h"
+                                },
+                                "7": {
+                                    "text": "07h"
+                                },
+                                "8": {
+                                    "text": "08h"
+                                },
+                                "9": {
+                                    "text": "09h"
+                                },
+                                "10": {
+                                    "text": "10h"
+                                },
+                                "11": {
+                                    "text": "11h"
+                                },
+                                "12": {
+                                    "text": "12h"
+                                },
+                                "13": {
+                                    "text": "13h"
+                                },
+                                "14": {
+                                    "text": "14h"
+                                },
+                                "15": {
+                                    "text": "15h"
+                                },
+                                "16": {
+                                    "text": "16h"
+                                },
+                                "17": {
+                                    "text": "17h"
+                                },
+                                "18": {
+                                    "text": "18h"
+                                },
+                                "19": {
+                                    "text": "19h"
+                                },
+                                "20": {
+                                    "text": "20h"
+                                },
+                                "21": {
+                                    "text": "21h"
+                                },
+                                "22": {
+                                    "text": "22h"
+                                },
+                                "23": {
+                                    "text": "23h"
+                                }
+                            }
+                        }
+                    ]
+                }
+            },
+            "options": {
+                "colorMode": "value",
+                "graphMode": "none"
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT HOUR(ts_hour) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE DATE(ts_hour) = CURRENT_DATE GROUP BY HOUR(ts_hour) ORDER BY SUM(unique_tracks) DESC LIMIT 1"
+                }
+            ]
+        },
+        {
+            "id": 5,
+            "type": "timeseries",
+            "title": "📊 Traffic by Hour",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 0,
+                "y": 5
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 50
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT HOUR(ts_hour) AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE DATE(ts_hour) = CURRENT_DATE GROUP BY HOUR(ts_hour) ORDER BY HOUR(ts_hour) ASC"
+                }
+            ]
+        },
+        {
+            "id": 6,
+            "type": "timeseries",
+            "title": "📈 7-Day Trend",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 8,
+                "w": 12,
+                "x": 12,
+                "y": 5
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 20
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT DATE(ts_hour) AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE ts_hour >= CURRENT_DATE - INTERVAL '7' DAY GROUP BY DATE(ts_hour) ORDER BY DATE(ts_hour) ASC"
+                }
+            ]
+        },
+        {
+            "id": 7,
+            "type": "timeseries",
+            "title": "⏰ Real-time (Last 2 Hours)",
+            "datasource": "Trino Lakehouse",
+            "gridPos": {
+                "h": 7,
+                "w": 24,
+                "x": 0,
+                "y": 13
+            },
+            "fieldConfig": {
+                "defaults": {
+                    "color": {
+                        "mode": "palette-classic"
+                    },
+                    "custom": {
+                        "fillOpacity": 30
+                    }
+                }
+            },
+            "targets": [
+                {
+                    "refId": "A",
+                    "rawSql": "SELECT ts_minute AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_minute_by_cam WHERE ts_minute >= CURRENT_TIMESTAMP - INTERVAL '2' HOUR GROUP BY ts_minute ORDER BY ts_minute ASC"
+                }
+            ]
+        }
+    ]
+}

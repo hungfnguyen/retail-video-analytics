@@ -59,13 +59,6 @@ if __name__ == "__main__":
             # --- VISUALIZATION ---
             # Vẽ khung hình và ID lên ảnh để xem
             visualizer.draw_tracks(frame, objects)
-            
-            # Vẽ đường ranh giới ảo (Virtual Line) để dễ debug Zone Filtering
-            # Ví dụ: Kẻ vạch đỏ ở 30% màn hình (bên trái là hành lang)
-            limit_x = int(W * 0.3) 
-            cv2.line(frame, (limit_x, 0), (limit_x, H), (0, 0, 255), 2)
-            cv2.putText(frame, "IGNORE AREA", (10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 0, 255), 2)
-            cv2.putText(frame, "ACTIVE ZONE", (limit_x + 10, 50), cv2.FONT_HERSHEY_SIMPLEX, 1, (0, 255, 0), 2)
 
             # --- MAPPING & FILTERING ---
             detections = []
@@ -77,11 +70,7 @@ if __name__ == "__main__":
                 cx = x1 + w_box / 2.0
                 cy = y1 + h_box / 2.0
 
-                # 2. --- THAY ĐỔI 2: ZONE FILTERING (Lọc vùng) ---
-                # Logic: Nếu tâm người nằm bên trái vạch đỏ (Hành lang) -> Bỏ qua
-                if cx < limit_x:
-                    continue 
-                # ------------------------------------------------
+                # Zone filtering removed - track all people
 
                 # 3. Đóng gói object hợp lệ
                 detections.append({
