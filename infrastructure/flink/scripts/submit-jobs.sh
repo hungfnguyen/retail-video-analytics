@@ -65,18 +65,12 @@ main() {
     submit_job "org.rva.silver.SilverJob" "$USR_LIB/silver-job.jar" "Silver"
     sleep 3
     
-    # Submit 6 Gold jobs (riêng biệt để tránh SQLite lock)
+    # Submit 3 Gold jobs (after cleanup - removed zones and duplicate)
+    submit_job "org.rva.gold.GoldTrackSummaryJob" "$USR_LIB/gold-jobs.jar" "Gold-TrackSummary"
+    sleep 2
     submit_job "org.rva.gold.GoldMinuteByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-MinuteByCam"
     sleep 2
     submit_job "org.rva.gold.GoldHourByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-HourByCam"
-    sleep 2
-    submit_job "org.rva.gold.GoldPeoplePerMinuteJob" "$USR_LIB/gold-jobs.jar" "Gold-PeoplePerMinute"
-    sleep 2
-    submit_job "org.rva.gold.GoldZoneHeatmapJob" "$USR_LIB/gold-jobs.jar" "Gold-ZoneHeatmap"
-    sleep 2
-    submit_job "org.rva.gold.GoldZoneDwellJob" "$USR_LIB/gold-jobs.jar" "Gold-ZoneDwell"
-    sleep 2
-    submit_job "org.rva.gold.GoldTrackSummaryJob" "$USR_LIB/gold-jobs.jar" "Gold-TrackSummary"
     
     echo "[submit-jobs] ✓ Tất cả jobs đã được submit!"
 }

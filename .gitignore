@@ -49,3 +49,6 @@ detections_output.ndjson
 **/.ipynb_checkpoints/
 
 data/
+AGENTS.md
+CHANGELOG.md
+HANDOFF.md
