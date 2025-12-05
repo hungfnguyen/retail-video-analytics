@@ -1,112 +1,178 @@
 ﻿# Retail Video Analytics (Lakehouse, Realtime)
 
 > Realtime pipeline thu thập & xử lý **metadata video** cho chuỗi bán lẻ.
-> Stack: **GStreamer + YOLOv8 + DeepSort → Pulsar → Flink → Iceberg on MinIO → Trino → Grafana**
-> Orchestration (optional): **Airflow** cho maintenance/batch.
+> Stack: **YOLO11 + BoTSORT → Pulsar → Flink → Iceberg on MinIO → Trino → Grafana**
 
-![architecture](docs/architecture.png) 
+![Architecture](docs/architecture.png)
+
+---
 
 ## 📦 Thành phần chính
 
-  * **Ingestion Service**: `gstreamer + yolo v8 + deepsort` → phát hiện & tracking, xuất **JSON metadata** (không đẩy khung hình). DeepSORT trong module `vision/` được tinh chỉnh qua biến môi trường `DS_*` trong `vision/.env` để giữ ID ổn định hơn khi đối tượng bị che khuất ngắn trên camera tĩnh.
-  * **Transport**: **Apache Pulsar** (`Key_Shared` theo `camera_id`, schema Avro/JSON).
-  * **Stream Compute**: **Apache Flink** (để xử lý, làm sạch, và ghi dữ liệu).
-  * **Lakehouse**: **Apache Iceberg** (table format) + **REST Catalog** trên **MinIO** (kho lưu trữ).
-  * **Query**: **Trino** (Iceberg connector).
-  * **Visualization**: **Grafana** (BI near-real-time qua Trino).
-  * **(Optional) Orchestration**: **Airflow** (chạy các tác vụ bảo trì, dọn dẹp Iceberg).
+| Layer | Công nghệ | Mô tả |
+|-------|-----------|-------|
+| **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata (không đẩy khung hình) |
+| **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
+| **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
+| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên MinIO (S3-compatible) |
+| **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
+| **Visualization** | Grafana 11.3 | Dashboards near-real-time |
 
------
+---
+
+## 🏗️ Kiến trúc
+
+```
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│   Vision AI     │     │     Pulsar      │     │     Flink       │
+│  YOLO11+BoTSORT │────▶│   (messages)    │────▶│ Bronze→Silver→  │
+│   (detect/track)│     │                 │     │     Gold        │
+└─────────────────┘     └─────────────────┘     └────────┬────────┘
+                                                         │
+                                                         ▼
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│    Grafana      │◀────│     Trino       │◀────│    Iceberg      │
+│  (dashboards)   │     │   (SQL query)   │     │    (MinIO)      │
+└─────────────────┘     └─────────────────┘     └─────────────────┘
+```
+
+---
 
 ## ⚙️ Yêu cầu & Cài đặt
 
-  * Docker & Docker Compose
-  * (Tùy chọn) GPU cho YOLOv8
+### Yêu cầu hệ thống
+- Docker & Docker Compose
+- Python 3.10+ (cho Vision module)
+- (Tùy chọn) GPU CUDA 12.4 cho YOLO11
 
-### 1\. Chuẩn bị Biến môi trường
-
-Copy tệp `.env.example` thành `.env` và điền các thông tin credentials (ví dụ: `MINIO_ROOT_USER`, `MINIO_ROOT_PASSWORD`).
+### 1. Clone & Setup
 
 ```bash
+# Clone repository
+git clone https://github.com/hungfnguyen/retail-video-analytics.git
+cd retail-video-analytics
+
+# Tạo file .env từ template
 cp .env.example .env
-# Mở file .env và chỉnh sửa
+# Chỉnh sửa .env với credentials của bạn
 ```
 
-### 2\. Xây dựng (Build) và Khởi chạy
-
-Các image Flink và Airflow tùy chỉnh (nếu có) sẽ được tự động build.
+### 2. Khởi chạy Infrastructure
 
 ```bash
-# Khởi động toàn bộ hạ tầng ở chế độ nền (detached)
-docker compose up -d
+# Start toàn bộ stack (chờ 1-2 phút)
+docker compose up -d --build
+
+# Kiểm tra services
+docker ps
 ```
 
-### 3\. Cổng dịch vụ (Default Ports)
+> 💡 **Tự động hóa**: Service `flink-job-submitter` sẽ tự động submit 8 Flink jobs (Bronze, Silver, 6 Gold) khi stack khởi động xong.
 
-  * **Trino**: `8080`
-  * **Flink UI**: `8081`
-  * **Pulsar Admin**: `8082`
-  * **Airflow UI**: `8088`
-  * **MinIO API**: `9000`
-  * **MinIO Console**: `9001`
-  * **Iceberg REST**: `8181`
-  * **Grafana**: `3000`
-  * **Pulsar Broker**: `6650`
-
-**Lưu ý Pulsar (Docker Desktop):** broker dùng dual-listener.  
-  * Nội bộ docker: `pulsar://pulsar-broker:6650` (listenerName=`internal`).  
-  * Host/Windows: `pulsar://127.0.0.1:6650` (listenerName=`external`).
-
------
-
-## 📚 Tài liệu chi tiết
-
-  * 📄 **Project Doc (Google Drive)**: [Tài liệu Retail Video Analytics](https://drive.google.com/drive/folders/15HIuR8GIeGHsRPt7F2PeaChrG9XlMYoa?usp=sharing)
-  * 📄 **Hướng dẫn chạy (Local)**: Xem `docs/guide.md`
-  * 📄 **Luồng dữ liệu E2E**: Xem `docs/data-flow-guide.md`
-  * 🥈 **Silver (Bronze → Silver)**: SQL ở `flink-jobs/sql/*` và notebook `notebooks/explore_analytics.ipynb` (dùng Trino); quick-start bên dưới
-  * 🥇 **Gold (BI Views qua Trino)**: `flink-jobs/sql/gold_views.sql`
-
-### Silver quick-start
-
-Chạy theo thứ tự để dựng bảng Silver `rva.silver_detections` từ Bronze `rva.bronze_raw`:
+### 3. Setup Vision Module
 
 ```bash
-# 1) Setup Flink SQL session + Iceberg catalog
-docker exec -it flink-jobmanager bash -lc \
-  "/opt/flink/bin/sql-client.sh -f /opt/flink/usrlib/sql/silver_setup.sql"
+# Tạo virtual environment
+python -m venv venv
+source venv/Scripts/activate  # Windows Git Bash
 
-# 2) Tạo bảng Silver (chạy một lần)
-docker exec -it flink-jobmanager bash -lc \
-  "/opt/flink/bin/sql-client.sh -f /opt/flink/usrlib/sql/silver_create_table.sql"
-
-# 3) Streaming INSERT từ Bronze sang Silver
-docker exec -it flink-jobmanager bash -lc \
-  "/opt/flink/bin/sql-client.sh -f /opt/flink/usrlib/sql/silver_insert.sql"
-
-# Kiểm tra dữ liệu sinh ra trong MinIO
-docker exec minio mc ls -r local/warehouse/rva/silver_detections/data/
+# Cài dependencies
+pip install -r setup.txt
 ```
 
-### Gold quick-start (Trino Views)
-
-Tạo các view Gold phục vụ Grafana/BI trực tiếp trên Trino:
+### 4. Chạy Vision AI
 
 ```bash
-# Copy file SQL vào container Trino rồi thực thi
-docker cp flink-jobs/sql/gold_views.sql trino:/tmp/gold_views.sql
-docker exec -it trino trino --file /tmp/gold_views.sql
-
-# Kiểm tra các view đã tạo
-docker exec -it trino trino --execute "SHOW TABLES FROM lakehouse.rva"
-
-# Truy vấn nhanh
-docker exec -it trino trino --execute "SELECT * FROM lakehouse.rva.v_gold_minute_by_cam ORDER BY ts_minute DESC LIMIT 20"
+python vision/main.py
 ```
 
------
+> Vision module tự động stream metadata vào Pulsar topic `persistent://retail/metadata/events`.
+
+---
+
+## 🌐 Cổng dịch vụ
+
+| Service | Port | URL |
+|---------|------|-----|
+| **Flink UI** | 8081 | http://localhost:8081 |
+| **Grafana** | 3000 | http://localhost:3000 (admin/admin) |
+| **Trino** | 8083 | http://localhost:8083 |
+| **Pulsar Admin** | 8084 | http://localhost:8084 |
+| **MinIO Console** | 9001 | http://localhost:9001 |
+| **MinIO API** | 9000 | http://localhost:9000 |
+| **Iceberg REST** | 8181 | http://localhost:8181 |
+| **Pulsar Broker** | 6650 | pulsar://localhost:6650 |
+
+---
+
+## 📊 Grafana Dashboards
+
+Sau khi login Grafana (http://localhost:3000):
+
+- **RVA - People Overview**: Detections/unique people theo phút và camera
+- **RVA - Zone Dwell & Heatmap**: Visits và dwell time theo zone
+- **RVA - Track Summary**: Track với duration, movement và confidence
+
+---
+
+## 🔧 Vision Module Config
+
+Cấu hình trong `vision/config/settings.py` hoặc qua `.env`:
+
+| Biến | Mặc định | Mô tả |
+|------|----------|-------|
+| `MODEL_NAME` | `yolo11l.pt` | Model YOLO (n/s/m/l/x) |
+| `TRACKER_TYPE` | `botsort` | Tracker: `botsort` hoặc `bytetrack` |
+| `CONF_THRES` | `0.25` | Ngưỡng confidence |
+| `CLASS_FILTER` | `[0]` | Filter class (0=person) |
+| `CAMERA_ID` | `cam_01` | ID camera |
+| `STORE_ID` | `store_01` | ID cửa hàng |
+
+---
+
+## 📚 Tài liệu
+
+- 📄 **Hướng dẫn chi tiết**: [`docs/guide.md`](docs/guide.md)
+- 📄 **Luồng dữ liệu E2E**: [`docs/data-flow.md`](docs/data-flow.md)
+- 📄 **Google Drive**: [Tài liệu dự án](https://drive.google.com/drive/folders/15HIuR8GIeGHsRPt7F2PeaChrG9XlMYoa?usp=sharing)
+
+---
+
+## 🛠️ Troubleshooting
+
+### Kiểm tra Flink jobs
+
+```bash
+# Xem số lượng jobs đang chạy (expected: 8)
+curl -s http://localhost:8081/jobs/overview | jq '.jobs | length'
+
+# Hoặc mở Flink UI: http://localhost:8081
+```
+
+### Data không xuất hiện trong Trino
+
+Flink checkpoint mặc định 60s, chờ 60-90 giây sau khi chạy vision.
+
+```bash
+# Query kiểm tra Bronze
+docker exec trino trino --execute \
+  "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
+```
+
+### Reset toàn bộ
+
+```bash
+docker compose down -v
+docker compose up -d --build
+```
+
+---
 
 ## 👥 Contributors
 
-  * [Nguyễn Tấn Hùng](https://github.com/hungfnguyen)
-  * [Nguyễn Công Đôn](https://github.com/CongDon1207)
+- [Nguyễn Tấn Hùng](https://github.com/hungfnguyen)
+- [Nguyễn Công Đôn](https://github.com/CongDon1207)
+
+---
+
+**📝 Last Updated:** December 1, 2025
