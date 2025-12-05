@@ -159,6 +159,10 @@ docker exec trino trino --execute \
   "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
 ```
 
+### Grafana báo thiếu time field
+
+- Đảm bảo truy vấn Timeseries trả về cột `time` kiểu TIMESTAMP (dùng `ts_hour`/`ts_minute`, tránh `HOUR(ts_hour)` hoặc chỉ `DATE(ts_hour)`).
+
 ### Reset toàn bộ
 
 ```bash

@@ -271,7 +271,7 @@
             "targets": [
                 {
                     "refId": "A",
-                    "rawSql": "SELECT HOUR(ts_hour) AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE DATE(ts_hour) = CURRENT_DATE GROUP BY HOUR(ts_hour) ORDER BY HOUR(ts_hour) ASC"
+                    "rawSql": "SELECT ts_hour AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE DATE(ts_hour) = CURRENT_DATE GROUP BY ts_hour ORDER BY ts_hour ASC"
                 }
             ]
         },
@@ -299,7 +299,7 @@
             "targets": [
                 {
                     "refId": "A",
-                    "rawSql": "SELECT DATE(ts_hour) AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE ts_hour >= CURRENT_DATE - INTERVAL '7' DAY GROUP BY DATE(ts_hour) ORDER BY DATE(ts_hour) ASC"
+                    "rawSql": "SELECT CAST(DATE(ts_hour) AS TIMESTAMP) AS time, SUM(unique_tracks) AS value FROM lakehouse.rva.gold_hour_by_cam WHERE ts_hour >= CURRENT_DATE - INTERVAL '7' DAY GROUP BY DATE(ts_hour) ORDER BY DATE(ts_hour) ASC"
                 }
             ]
         },

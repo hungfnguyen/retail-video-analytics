@@ -4,6 +4,10 @@ Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail V
 
 ## 2025-12-01
 
+- **2025-12-05: Fix Iceberg REST dependency chain at docker-compose.yml - Thêm condition: service_healthy cho MinIO và minio-init trước khi Iceberg REST khởi động, tương tự Trino đợi Iceberg REST healthy. Giải quyết lỗi "Failed to load table" do Iceberg REST khởi động trước khi MinIO sẵn sàng (completed)**
+
+- **2025-12-05: Fix Grafana time axis at infrastructure/grafana/provisioning/dashboards/rva_traffic_overview.json - Thay HOUR(ts_hour)/DATE(ts_hour) bằng timestamp chuẩn (ts_hour, CAST(DATE(ts_hour) AS TIMESTAMP)) để Grafana Timeseries nhận đúng cột time, hết lỗi "Data is missing a time field"/"No data" (completed)**
+
 - **2025-12-01: Rewrite README.md with accurate Vision module info at README.md - Cập nhật Stack chính xác: YOLO11 + BoTSORT (thay vì GStreamer + YOLOv8 + DeepSort), thêm bảng thành phần, ports đúng theo docker-compose.yml, và Vision config table. Dựa trên docs/guide.md và source code thực tế (completed)**
 
 - **2025-12-01: Automate Flink job submission at infrastructure/flink/scripts/submit-jobs.sh & docker-compose.yml - Tạo script tự động submit 8 jobs khi khởi động stack. Thêm service `flink-job-submitter` vào Docker Compose. Fix lỗi healthcheck của `iceberg-rest` (thiếu curl, chuyển sang dùng bash tcp check) để đảm bảo dependency chain hoạt động đúng. Hệ thống hiện tự động chạy full pipeline (Bronze -> Silver -> 6 Gold) khi `docker compose up` (completed)**
