@@ -9,3 +9,4 @@ bin/pulsar-client consume \
   -s "view-data-sub5" -n 1 -p Earliest \
   | grep -o '{"schema_version.*}' \
   | python3 -m json.tool
+  
