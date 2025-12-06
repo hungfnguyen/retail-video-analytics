@@ -67,10 +67,10 @@ main() {
     
     # Submit 3 Gold jobs (after cleanup - removed zones and duplicate)
     submit_job "org.rva.gold.GoldTrackSummaryJob" "$USR_LIB/gold-jobs.jar" "Gold-TrackSummary"
-    sleep 2
-    submit_job "org.rva.gold.GoldMinuteByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-MinuteByCam"
-    sleep 2
-    submit_job "org.rva.gold.GoldHourByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-HourByCam"
+    # sleep 2
+    # submit_job "org.rva.gold.GoldMinuteByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-MinuteByCam"
+    # sleep 2
+    # submit_job "org.rva.gold.GoldHourByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-HourByCam"
     
     echo "[submit-jobs] ✓ Tất cả jobs đã được submit!"
 }
