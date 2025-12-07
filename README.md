@@ -4,6 +4,7 @@
 > Stack: **YOLO11 + BoTSORT → Pulsar → Flink → Iceberg on MinIO → Trino → Grafana**
 
 ![Architecture](docs/architecture.png)
+- **RVA - Traffic Patterns**: Visits per hour x day-of-week v… visit duration theo time-of-day (ph?c v? planning ca l?m, khuy?n m?i)
 
 ---
 

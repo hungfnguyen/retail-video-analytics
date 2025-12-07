@@ -39,8 +39,9 @@ s3.secret-key: minioadmin123
 
 # -- Execution Checkpointing --
 # Bắt buộc bật để Iceberg Sink có thể commit data
-execution.checkpointing.interval: 60s
-execution.checkpointing.min-pause: 30s
+# 30s cho near real-time analytics (trade-off giữa latency vs small files)
+execution.checkpointing.interval: 30s
+execution.checkpointing.min-pause: 15s
 execution.checkpointing.tolerable-failed-checkpoints: 5
 execution.checkpointing.externalized-checkpoint-retention: DELETE_ON_CANCELLATION
 

@@ -15,6 +15,23 @@ class YoloTrackerBase:
         print(f"[Tracker] Loading model: {model_path}")
         self.model = YOLO(model_path)
         self.tracker_yaml = resolve_tracker_config(tracker_yaml)
+        
+        # Auto-detect device (GPU if available, else CPU)
+        # Override: Force GPU với environment variable FORCE_GPU=1
+        force_gpu = os.getenv("FORCE_GPU", "0") == "1"
+        try:
+            import torch
+            if force_gpu:
+                self.device = 0
+                print(f"[Tracker] Device: GPU (cuda:0) - FORCED via FORCE_GPU=1")
+            else:
+                self.device = 0 if torch.cuda.is_available() else 'cpu'
+                device_name = f"GPU (cuda:{self.device})" if self.device == 0 else "CPU"
+                print(f"[Tracker] Device: {device_name}")
+        except ImportError:
+            self.device = 'cpu'
+            print(f"[Tracker] Device: CPU (torch not available)")
+        
         print(f"[Tracker] Tracker config: {self.tracker_yaml}")
         print("-" * 60)
 
@@ -38,6 +55,7 @@ class YoloTrackerBase:
             tracker=self.tracker_yaml,
             classes=classes,  # filter class
             conf=track_conf,
+            device=self.device,  # Auto-detected: GPU if available, else CPU
             stream=True,
             verbose=False
         )

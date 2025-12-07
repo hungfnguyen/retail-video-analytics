@@ -2,6 +2,14 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2025-12-07
+
+- **2025-12-07: Add Grafana traffic patterns dashboard at infrastructure/grafana/provisioning/dashboards/rva_traffic_patterns.json - Tạo dashboard business mới \"RVA - Traffic Patterns\" với 2 panel: Visits per hour x day-of-week v… Avg visit duration vs time-of-day dựa trên bảng `gold_track_summary`, phục vụ phân tích khung giờ vàng, planning ca làm và khuyến mãi (completed)**
+
+## 2025-12-06
+
+- **2025-12-06: Review Grafana traffic dashboard logic at infrastructure/grafana/provisioning/dashboards/rva_traffic_overview.json - Xác nhận các truy vấn Trino bám đúng schema Silver (`silver_detections`) và Gold (`gold_track_summary`), đề xuất dùng Pulsar topic stats + Trino lag query để kiểm tra tốc độ đầu vào so với khả năng xử lý của Flink jobs; không thay đổi code ứng dụng (completed)**
+
 ## 2025-12-01
 
 - **2025-12-05: Fix Iceberg REST dependency chain at docker-compose.yml - Thêm condition: service_healthy cho MinIO và minio-init trước khi Iceberg REST khởi động, tương tự Trino đợi Iceberg REST healthy. Giải quyết lỗi "Failed to load table" do Iceberg REST khởi động trước khi MinIO sẵn sàng (completed)**
