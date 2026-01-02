@@ -2,6 +2,16 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2026-01-02
+
+- **2026-01-02: Fix critical security vulnerabilities (issues #1, #4, #5) - Remove .env files (root và vision/) khỏi Git tracking, tạo .env.example templates đầy đủ, add .env và *.pt vào .gitignore. Move note.txt thành docs/cli-examples.md. Ngăn chặn rủi ro lộ credentials khi push lên public repo (completed)**
+
+- **2026-01-02: Improve PulsarEmitter reliability (issue #6) at vision/emit/pulsar_emitter.py - Thêm exponential backoff retry (max 3 attempts), structured logging với Python logging module, detailed error context tracking. Thay print() bằng logger với level INFO/WARNING/ERROR. Giảm silent failures khi gửi data lên Pulsar (completed)**
+
+- **2026-01-02: Fix resource leak trong Vision pipeline (issue #7) at vision/main.py - Refactor main loop với proper try/except/finally, ensure emitter.close() và cv2.destroyAllWindows() được gọi ngay cả khi có exception. Thêm structured logging thay print(). Ngăn file descriptor leaks (completed)**
+
+- **2026-01-02: Enhance Flink job submission script (issue #10) at infrastructure/flink/scripts/submit-jobs.sh - Thêm check_job_status() function để verify job RUNNING trước khi submit job tiếp theo, implement sequential dependency (Bronze must be RUNNING before Silver). Abort nếu Bronze/Silver fail. Tăng reliability của job orchestration (completed)**
+
 ## 2025-12-07
 
 - **2025-12-07: Add Grafana traffic patterns dashboard at infrastructure/grafana/provisioning/dashboards/rva_traffic_patterns.json - Tạo dashboard business mới \"RVA - Traffic Patterns\" với 2 panel: Visits per hour x day-of-week v… Avg visit duration vs time-of-day dựa trên bảng `gold_track_summary`, phục vụ phân tích khung giờ vàng, planning ca làm và khuyến mãi (completed)**
