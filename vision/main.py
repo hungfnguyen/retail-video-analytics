@@ -1,16 +1,21 @@
 # vision/main.py
 import uuid
 import cv2
+import logging
 from datetime import datetime, timezone
 
 # Import các module nội bộ
 from track.tracker_factory import create_tracker
 from utils.visualizer import Visualizer
 from config.settings import settings
-
-# --- THAY ĐỔI 1: Import PulsarEmitter thay vì JsonEmitter ---
-# (Đảm bảo bạn đã tạo file vision/emit/pulsar_emitter.py như hướng dẫn trước)
 from emit.pulsar_emitter import PulsarEmitter 
+
+# Configure logging
+logging.basicConfig(
+    level=logging.INFO,
+    format='%(asctime)s - %(name)s - %(levelname)s - %(message)s'
+)
+logger = logging.getLogger(__name__)
 
 if __name__ == "__main__":
     # --- CẤU HÌNH PIPELINE ---
@@ -28,25 +33,29 @@ if __name__ == "__main__":
     PULSAR_TOPIC = "persistent://retail/metadata/events"
 
     # --- KHỞI TẠO CÁC THÀNH PHẦN ---
-    print(f"[Main] Starting pipeline run: {pipeline_run_id}")
-    print(f"[Main] Config: Model={settings.MODEL_NAME}, Tracker={settings.TRACKER_TYPE}")
-    print(f"[Main] Ingestion Mode: Streaming to Pulsar ({PULSAR_URL})")
+    logger.info(f"Starting pipeline run: {pipeline_run_id}")
+    logger.info(f"Config: Model={settings.MODEL_NAME}, Tracker={settings.TRACKER_TYPE}")
+    logger.info(f"Ingestion Mode: Streaming to Pulsar ({PULSAR_URL})")
 
-    # 1. Tracker (AI Model)
-    tracker = create_tracker(settings.TRACKER_TYPE, settings.MODEL_NAME, conf_thres=settings.CONF_THRES)
+    # Khởi tạo các components với proper cleanup
+    tracker = None
+    emitter = None
     
-    # 2. Emitter (Gửi dữ liệu đi) -> Dùng PulsarEmitter
     try:
-        emitter = PulsarEmitter(PULSAR_URL, PULSAR_TOPIC)
-    except Exception as e:
-        print(f"[Error] Không thể kết nối Pulsar: {e}")
-        print("Gợi ý: Kiểm tra xem container pulsar-broker đã chạy chưa (docker ps)")
-        exit(1)
+        # 1. Tracker (AI Model)
+        tracker = create_tracker(settings.TRACKER_TYPE, settings.MODEL_NAME, conf_thres=settings.CONF_THRES)
+        
+        # 2. Emitter (Gửi dữ liệu đi) -> Dùng PulsarEmitter
+        try:
+            emitter = PulsarEmitter(PULSAR_URL, PULSAR_TOPIC)
+        except Exception as e:
+            logger.error(f"Không thể kết nối Pulsar: {e}")
+            logger.info("Gợi ý: Kiểm tra xem container pulsar-broker đã chạy chưa (docker ps)")
+            exit(1)
 
-    # 3. Visualizer (Vẽ hình)
-    visualizer = Visualizer()
+        # 3. Visualizer (Vẽ hình)
+        visualizer = Visualizer()
 
-    try:
         # --- VÒNG LẶP XỬ LÝ (PROCESSING LOOP) ---
         # settings.VIDEO_PATH: Đường dẫn video hoặc 0 (webcam)
         track_stream = tracker.track(settings.VIDEO_PATH, show=False, classes=settings.CLASS_FILTER)
@@ -87,7 +96,7 @@ if __name__ == "__main__":
 
             # --- EMIT (GỬI DỮ LIỆU) ---
             # Gửi dữ liệu đã lọc lên Pulsar
-            emitter.emit_frame(
+            success = emitter.emit_frame(
                 pipeline_run_id=pipeline_run_id,
                 source=source,
                 frame_index=idx,
@@ -99,21 +108,39 @@ if __name__ == "__main__":
                     "tracker_type": settings.TRACKER_TYPE,
                 }
             )
+            
+            # Log warning nếu gửi thất bại
+            if not success:
+                logger.warning(f"Failed to emit frame {idx}")
 
             # --- DISPLAY (HIỂN THỊ) ---
-            cv2.imshow("Retail Analytics (Zone Filtered)", frame)
+            cv2.imshow("Retail Analytics", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("[Main] Stop signal received.")
+                logger.info("Stop signal received from user")
                 break
 
     except KeyboardInterrupt:
-        print("[Main] Interrupted by user.")
+        logger.info("Pipeline interrupted by user (Ctrl+C)")
     except Exception as e:
-        print(f"[Main] Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error(f"Unexpected error in pipeline: {e}", exc_info=True)
     finally:
-        print("[Main] Cleaning up resources...")
-        emitter.close()
-        cv2.destroyAllWindows()
-        print("[Main] Pipeline stopped.")
+        # --- CLEANUP RESOURCES ---
+        logger.info("Cleaning up resources...")
+        
+        # Close emitter connection
+        if emitter:
+            try:
+                emitter.close()
+            except Exception as e:
+                logger.error(f"Error closing emitter: {e}")
+        
+        # Destroy OpenCV windows
+        try:
+            cv2.destroyAllWindows()
+        except Exception as e:
+            logger.error(f"Error destroying CV windows: {e}")
+        
+        # Note: tracker.track() từ ultralytics tự động release video capture
+        # khi generator kết thúc. Nếu dùng tracker khác, cần thêm tracker.release()
+        
+        logger.info("Pipeline stopped successfully")
