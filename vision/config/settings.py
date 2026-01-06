@@ -22,6 +22,9 @@ class Settings:
     # Tracker
     TRACKER_TYPE = os.getenv("TRACKER_TYPE", "botsort")  # botsort | bytetrack
     CONF_THRES = float(os.getenv("CONF_THRES", "0.25"))
+
+    PULSAR_SERVICE_URL = os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
+    PULSAR_TOPIC = os.getenv("PULSAR_TOPIC", "persistent://retail/metadata/events")
     
     # Filter
     # Parse string "[0, 1]" -> list [0, 1]

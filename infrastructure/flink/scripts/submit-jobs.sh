@@ -1,78 +1,133 @@
 #!/bin/bash
-# Script tự động submit Flink jobs sau khi JobManager sẵn sàng
+# Automatically submit Flink jobs after JobManager is ready.
 
-set -e
+set -euo pipefail
 
 FLINK_HOME=${FLINK_HOME:-/opt/flink}
 USR_LIB=${FLINK_USR_LIB_DIR:-/opt/flink/usrlib}
 
-# Hàm đợi JobManager sẵn sàng
 wait_for_jobmanager() {
-    echo "[submit-jobs] Đợi JobManager khởi động..."
-    local max_attempts=60
-    local attempt=0
-    
-    while [ $attempt -lt $max_attempts ]; do
-        if curl -sf http://flink-jobmanager:8081/overview > /dev/null 2>&1; then
-            echo "[submit-jobs] JobManager đã sẵn sàng!"
-            return 0
-        fi
-        attempt=$((attempt + 1))
-        sleep 2
-    done
-    
-    echo "[submit-jobs] ERROR: JobManager không khởi động được sau ${max_attempts} lần thử"
-    return 1
+  echo "[submit-jobs] Waiting for JobManager..."
+  local max_attempts=60
+  local attempt=0
+
+  while [ "${attempt}" -lt "${max_attempts}" ]; do
+    if curl -sf http://flink-jobmanager:8081/overview > /dev/null 2>&1; then
+      echo "[submit-jobs] JobManager is ready."
+      return 0
+    fi
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+
+  echo "[submit-jobs] ERROR: JobManager did not become ready after ${max_attempts} attempts."
+  return 1
 }
 
-# Hàm submit job với retry
+check_job_status_by_id() {
+  local job_id=$1
+  local max_wait=60
+  local attempt=0
+
+  echo "[submit-jobs] Waiting for job ${job_id} to become RUNNING..."
+
+  while [ "${attempt}" -lt "${max_wait}" ]; do
+    local response
+    response=$(curl -sf "http://flink-jobmanager:8081/jobs/${job_id}" 2>/dev/null || true)
+
+    if [ -n "${response}" ]; then
+      if echo "${response}" | grep -q '"state":"RUNNING"'; then
+        echo "[submit-jobs] Job ${job_id} is RUNNING."
+        return 0
+      fi
+      if echo "${response}" | grep -q '"state":"FAILED"'; then
+        echo "[submit-jobs] ERROR: Job ${job_id} is FAILED."
+        return 1
+      fi
+      if echo "${response}" | grep -q '"state":"CANCELED"'; then
+        echo "[submit-jobs] ERROR: Job ${job_id} is CANCELED."
+        return 1
+      fi
+      if echo "${response}" | grep -q '"state":"FINISHED"'; then
+        echo "[submit-jobs] ERROR: Job ${job_id} finished unexpectedly."
+        return 1
+      fi
+    fi
+
+    attempt=$((attempt + 1))
+    sleep 2
+  done
+
+  echo "[submit-jobs] ERROR: Timeout waiting for job ${job_id} to be RUNNING."
+  return 1
+}
+
 submit_job() {
-    local class_name=$1
-    local jar_file=$2
-    local job_name=$3
-    local max_retries=3
-    local retry=0
-    
-    while [ $retry -lt $max_retries ]; do
-        echo "[submit-jobs] Submitting ${job_name}..."
-        if $FLINK_HOME/bin/flink run -d -c "$class_name" "$jar_file" 2>&1; then
-            echo "[submit-jobs] ✓ ${job_name} submitted successfully"
-            return 0
-        fi
-        retry=$((retry + 1))
-        echo "[submit-jobs] Retry ${retry}/${max_retries} for ${job_name}..."
-        sleep 5
-    done
-    
-    echo "[submit-jobs] ✗ Failed to submit ${job_name}"
-    return 1
+  local class_name=$1
+  local jar_file=$2
+  local job_name=$3
+  local max_retries=3
+  local retry=0
+
+  while [ "${retry}" -lt "${max_retries}" ]; do
+    echo "[submit-jobs] Submitting ${job_name}..."
+
+    local out=""
+    if ! out=$("${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
+      out=""
+    fi
+
+    local job_id=""
+    job_id=$(echo "${out}" | grep -Eo 'JobID [0-9a-f]+' | awk '{print $2}' | tail -n 1 || true)
+
+    if [ -z "${job_id}" ]; then
+      echo "[submit-jobs] ERROR: Could not parse JobID for ${job_name}."
+      echo "${out}"
+      retry=$((retry + 1))
+      echo "[submit-jobs] Retry ${retry}/${max_retries} for ${job_name}..."
+      sleep 5
+      continue
+    fi
+
+    echo "[submit-jobs] ${job_name} submitted with JobID ${job_id}."
+    if check_job_status_by_id "${job_id}"; then
+      return 0
+    fi
+
+    retry=$((retry + 1))
+    echo "[submit-jobs] Retry ${retry}/${max_retries} for ${job_name}..."
+    sleep 5
+  done
+
+  echo "[submit-jobs] ERROR: Failed to submit ${job_name} after ${max_retries} attempts."
+  return 1
 }
 
-# Main
 main() {
-    # Đợi JobManager
-    wait_for_jobmanager || exit 1
-    
-    # Đợi thêm 5s để đảm bảo TaskManager đã register
-    echo "[submit-jobs] Đợi TaskManager register..."
-    sleep 10
-    
-    # Submit Bronze job
-    submit_job "org.rva.BronzeIngestJob" "$USR_LIB/bronze-job.jar" "Bronze"
-    sleep 3
-    
-    # Submit Silver job
-    submit_job "org.rva.silver.SilverJob" "$USR_LIB/silver-job.jar" "Silver"
-    sleep 3
-    
-    # Submit 3 Gold jobs (after cleanup - removed zones and duplicate)
-    submit_job "org.rva.gold.GoldTrackSummaryJob" "$USR_LIB/gold-jobs.jar" "Gold-TrackSummary"
-    # sleep 2
-    # submit_job "org.rva.gold.GoldMinuteByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-MinuteByCam"
-    # sleep 2
-    # submit_job "org.rva.gold.GoldHourByCamJob" "$USR_LIB/gold-jobs.jar" "Gold-HourByCam"
-    
-    echo "[submit-jobs] ✓ Tất cả jobs đã được submit!"
+  wait_for_jobmanager || exit 1
+
+  echo "[submit-jobs] Waiting for TaskManager registration..."
+  sleep 10
+
+  echo "[submit-jobs] === Submitting Bronze Layer ==="
+  if ! submit_job "org.rva.BronzeIngestJob" "${USR_LIB}/bronze-job.jar" "Bronze"; then
+    echo "[submit-jobs] ERROR: Bronze job failed, aborting."
+    exit 1
+  fi
+
+  echo "[submit-jobs] === Submitting Silver Layer ==="
+  if ! submit_job "org.rva.silver.SilverJob" "${USR_LIB}/silver-job.jar" "Silver"; then
+    echo "[submit-jobs] ERROR: Silver job failed, aborting."
+    exit 1
+  fi
+
+  echo "[submit-jobs] === Submitting Gold Layer ==="
+  if ! submit_job "org.rva.gold.GoldTrackSummaryJob" "${USR_LIB}/gold-jobs.jar" "Gold-TrackSummary"; then
+    echo "[submit-jobs] WARN: Gold-TrackSummary failed, continuing anyway."
+  fi
+
+  echo "[submit-jobs] Job submission complete."
+  echo "[submit-jobs] Check Flink UI at http://localhost:8081 for job status"
 }
 
 main "$@"

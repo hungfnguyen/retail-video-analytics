@@ -1,119 +1,119 @@
 # vision/main.py
+
 import uuid
 import cv2
+import logging
 from datetime import datetime, timezone
 
-# Import các module nội bộ
 from track.tracker_factory import create_tracker
 from utils.visualizer import Visualizer
 from config.settings import settings
+from emit.pulsar_emitter import PulsarEmitter
 
-# --- THAY ĐỔI 1: Import PulsarEmitter thay vì JsonEmitter ---
-# (Đảm bảo bạn đã tạo file vision/emit/pulsar_emitter.py như hướng dẫn trước)
-from emit.pulsar_emitter import PulsarEmitter 
+
+logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logger = logging.getLogger(__name__)
+
 
 if __name__ == "__main__":
-    # --- CẤU HÌNH PIPELINE ---
     pipeline_run_id = uuid.uuid4().hex
-    
-    # Metadata nguồn phát (giả lập camera store_01)
+
     source = {
         "store_id": settings.STORE_ID,
         "camera_id": settings.CAMERA_ID,
-        "stream_id": settings.STREAM_ID
+        "stream_id": settings.STREAM_ID,
     }
 
-    # Cấu hình Pulsar (Kết nối từ máy Host vào Docker container)
-    PULSAR_URL = "pulsar://localhost:6650"
-    PULSAR_TOPIC = "persistent://retail/metadata/events"
+    pulsar_url = settings.PULSAR_SERVICE_URL
+    pulsar_topic = settings.PULSAR_TOPIC
 
-    # --- KHỞI TẠO CÁC THÀNH PHẦN ---
-    print(f"[Main] Starting pipeline run: {pipeline_run_id}")
-    print(f"[Main] Config: Model={settings.MODEL_NAME}, Tracker={settings.TRACKER_TYPE}")
-    print(f"[Main] Ingestion Mode: Streaming to Pulsar ({PULSAR_URL})")
+    logger.info("Starting pipeline run: %s", pipeline_run_id)
+    logger.info("Config: Model=%s, Tracker=%s", settings.MODEL_NAME, settings.TRACKER_TYPE)
+    logger.info("Ingestion: Pulsar (%s) topic=%s", pulsar_url, pulsar_topic)
 
-    # 1. Tracker (AI Model)
-    tracker = create_tracker(settings.TRACKER_TYPE, settings.MODEL_NAME, conf_thres=settings.CONF_THRES)
-    
-    # 2. Emitter (Gửi dữ liệu đi) -> Dùng PulsarEmitter
-    try:
-        emitter = PulsarEmitter(PULSAR_URL, PULSAR_TOPIC)
-    except Exception as e:
-        print(f"[Error] Không thể kết nối Pulsar: {e}")
-        print("Gợi ý: Kiểm tra xem container pulsar-broker đã chạy chưa (docker ps)")
-        exit(1)
-
-    # 3. Visualizer (Vẽ hình)
-    visualizer = Visualizer()
+    tracker = None
+    emitter = None
 
     try:
-        # --- VÒNG LẶP XỬ LÝ (PROCESSING LOOP) ---
-        # settings.VIDEO_PATH: Đường dẫn video hoặc 0 (webcam)
+        tracker = create_tracker(settings.TRACKER_TYPE, settings.MODEL_NAME, conf_thres=settings.CONF_THRES)
+
+        try:
+            emitter = PulsarEmitter(pulsar_url, pulsar_topic)
+        except Exception as e:
+            logger.error("Cannot connect to Pulsar: %s", e)
+            logger.info("Hint: ensure docker compose is running and the Pulsar port is reachable from host.")
+            raise SystemExit(1)
+
+        visualizer = Visualizer()
+
         track_stream = tracker.track(settings.VIDEO_PATH, show=False, classes=settings.CLASS_FILTER)
 
         for idx, record in enumerate(track_stream, start=1):
             frame = record["frame"]
-            H, W = frame.shape[:2]
+            height, width = frame.shape[:2]
             objects = record["objects"]
 
-            # --- VISUALIZATION ---
-            # Vẽ khung hình và ID lên ảnh để xem
             visualizer.draw_tracks(frame, objects)
 
-            # --- MAPPING & FILTERING ---
             detections = []
             for j, obj in enumerate(objects):
-                # 1. Lấy tọa độ
                 x1, y1, x2, y2 = map(float, obj["bbox"])
                 w_box = x2 - x1
                 h_box = y2 - y1
                 cx = x1 + w_box / 2.0
                 cy = y1 + h_box / 2.0
 
-                # Zone filtering removed - track all people
+                detections.append(
+                    {
+                        "det_id": f"{idx}-{j}",
+                        "class": obj.get("label", "person"),
+                        "class_id": int(obj.get("cls", 0)),
+                        "conf": float(obj.get("conf", 0.0)),
+                        "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                        "bbox_norm": {"x": x1 / width, "y": y1 / height, "w": w_box / width, "h": h_box / height},
+                        "centroid": {"x": int(cx), "y": int(cy)},
+                        "centroid_norm": {"x": cx / width, "y": cy / height},
+                        "track_id": None if obj.get("id", -1) < 0 else int(obj["id"]),
+                    }
+                )
 
-                # 3. Đóng gói object hợp lệ
-                detections.append({
-                    "det_id": f"{idx}-{j}",
-                    "class": obj.get("label", "person"),
-                    "class_id": int(obj.get("cls", 0)),
-                    "conf": float(obj.get("conf", 0.0)),
-                    "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-                    "bbox_norm": {"x": x1/W, "y": y1/H, "w": w_box/W, "h": h_box/H},
-                    "centroid": {"x": int(cx), "y": int(cy)},
-                    "centroid_norm": {"x": cx/W, "y": cy/H},
-                    "track_id": None if obj.get("id", -1) < 0 else int(obj["id"]),
-                })
-
-            # --- EMIT (GỬI DỮ LIỆU) ---
-            # Gửi dữ liệu đã lọc lên Pulsar
-            emitter.emit_frame(
+            success = emitter.emit_frame(
                 pipeline_run_id=pipeline_run_id,
                 source=source,
                 frame_index=idx,
                 capture_ts_iso=datetime.now(timezone.utc).isoformat(),
-                image_size={"width": W, "height": H},
-                detections=detections, 
+                image_size={"width": width, "height": height},
+                detections=detections,
                 runtime={
                     "model_name": settings.MODEL_NAME,
                     "tracker_type": settings.TRACKER_TYPE,
-                }
+                },
             )
 
-            # --- DISPLAY (HIỂN THỊ) ---
-            cv2.imshow("Retail Analytics (Zone Filtered)", frame)
+            if not success:
+                logger.warning("Failed to emit frame %s", idx)
+
+            cv2.imshow("Retail Analytics", frame)
             if cv2.waitKey(1) & 0xFF == ord("q"):
-                print("[Main] Stop signal received.")
+                logger.info("Stop signal received from user")
                 break
 
     except KeyboardInterrupt:
-        print("[Main] Interrupted by user.")
+        logger.info("Pipeline interrupted by user (Ctrl+C)")
     except Exception as e:
-        print(f"[Main] Error: {e}")
-        import traceback
-        traceback.print_exc()
+        logger.error("Unexpected error in pipeline: %s", e, exc_info=True)
     finally:
-        print("[Main] Cleaning up resources...")
-        emitter.close()
-        cv2.destroyAllWindows()
-        print("[Main] Pipeline stopped.")
+        logger.info("Cleaning up resources...")
+
+        if emitter is not None:
+            try:
+                emitter.close()
+            except Exception as e:
+                logger.error("Error closing emitter: %s", e)
+
+        try:
+            cv2.destroyAllWindows()
+        except Exception as e:
+            logger.error("Error destroying OpenCV windows: %s", e)
+
+        logger.info("Pipeline stopped")

@@ -55,7 +55,7 @@ public class ParseDetections extends TableFunction<Row> {
                     if (x2 < x1) x2 = x1;
                     if (y2 < y1) y2 = y1;
 
-                    long trackId = det.path("track_id").asLong(-1L);
+                    Long trackId = det.hasNonNull("track_id") ? det.get("track_id").asLong() : null;
 
                     Row out = Row.of(
                         captureMs, imgW, imgH,

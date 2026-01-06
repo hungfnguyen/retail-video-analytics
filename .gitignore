@@ -1,4 +1,6 @@
-
+AGENTS.md
+.codex
+.claude
 # Bytecode / cache
 *__pycache__/
 *.py[cod]
@@ -52,3 +54,9 @@ data/
 AGENTS.md
 CHANGELOG.md
 HANDOFF.md
+# Environment files (local config only)
+!.env
+!vision/.env
+
+# Model backup files
+vision/main.py.backup
