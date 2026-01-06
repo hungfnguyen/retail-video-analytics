@@ -37,7 +37,8 @@ class PulsarEmitter:
         self.initial_backoff = initial_backoff
         
         try:
-            self.client = pulsar.Client(service_url)
+            # Use listener_name='external' to connect via localhost when running from host
+            self.client = pulsar.Client(service_url, listener_name='external')
             self.producer = self.client.create_producer(topic)
             logger.info(f"Successfully connected to topic '{topic}'")
         except Exception as e:

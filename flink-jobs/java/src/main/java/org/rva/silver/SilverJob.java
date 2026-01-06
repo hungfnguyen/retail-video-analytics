@@ -23,7 +23,7 @@ public class SilverJob {
         cfg.put("type", "iceberg");
         cfg.put("catalog-impl", "org.apache.iceberg.rest.RESTCatalog");
         cfg.put("uri", getenv("ICEBERG_REST_URI", "http://iceberg-rest:8181"));
-        cfg.put("warehouse", getenv("ICEBERG_WAREHOUSE", "s3://warehouse/iceberg"));
+        cfg.put("warehouse", ensureWarehouseSuffix(getenv("ICEBERG_WAREHOUSE", "s3://warehouse"), "/iceberg"));
         cfg.put("io-impl", "org.apache.iceberg.aws.s3.S3FileIO");
         cfg.put("s3.endpoint", getenv("S3_ENDPOINT", "http://minio:9000"));
         cfg.put("s3.path-style-access", getenv("S3_PATH_STYLE", "true"));
@@ -156,5 +156,17 @@ public class SilverJob {
         if (a != null && !a.isBlank()) return a;
         if (b != null && !b.isBlank()) return b;
         return null;
+    }
+
+    private static String ensureWarehouseSuffix(String warehouse, String suffix) {
+        if (warehouse == null || warehouse.isEmpty()) {
+            return warehouse;
+        }
+        String normalized = warehouse.endsWith("/") ? warehouse.substring(0, warehouse.length() - 1) : warehouse;
+        String normalizedSuffix = suffix.startsWith("/") ? suffix : "/" + suffix;
+        if (normalized.endsWith(normalizedSuffix)) {
+            return normalized;
+        }
+        return normalized + normalizedSuffix;
     }
 }
