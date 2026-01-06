@@ -3,3 +3,4 @@ detect/models/
 metadata/
 __pycache__/
 video/
+!.env
