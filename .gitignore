@@ -55,8 +55,8 @@ AGENTS.md
 CHANGELOG.md
 HANDOFF.md
 # Environment files (local config only)
-.env
-vision/.env
+!.env
+!vision/.env
 
 # Model backup files
 vision/main.py.backup
