@@ -11,7 +11,7 @@ Real-time people detection, tracking, and crowd density analysis for retail stor
 
 ## Architecture
 
-![Retail Video Analytics Architecture](assets/images/architecture.png)
+![Retail Video Analytics Architecture](docs/images/architecture.png)
 
 ## Tech Stack
 
