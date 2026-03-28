@@ -11,6 +11,7 @@ AGENTS.md
 venv/
 env/
 .venv/
+.env
 
 # IDE / Editor settings
 .vscode/
