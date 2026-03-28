@@ -1,0 +1,18 @@
+version: "3.9"
+
+# Development overrides: hot reload via volume mounts
+services:
+  vision:
+    volumes:
+      - ../services/vision:/app/services/vision
+    command: uv run --reload rva-vision
+
+  api:
+    volumes:
+      - ../services/api:/app/services/api
+    command: uv run uvicorn api.main:app --reload --host 0.0.0.0 --port 8000
+
+  streamlit:
+    volumes:
+      - ../services/streamlit:/app/services/streamlit
+    command: uv run streamlit run services/streamlit/src/streamlit_app/app.py --server.port 8501 --server.address 0.0.0.0
