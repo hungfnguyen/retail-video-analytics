@@ -114,29 +114,43 @@ services:
     build:
       context: ..
       dockerfile: docker/vision/Dockerfile
-    runtime: nvidia
+    container_name: rva-vision
+    restart: unless-stopped
     environment:
-      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-key.json
+      - VISION_MODEL_PATH=/app/data/models/${MODEL_NAME:-yolo11n.pt}
+      - VISION_DEVICE=cuda:0
+      - VISION_CONFIDENCE_THRESHOLD=${CONF_THRES:-0.5}
+      - CAMERAS_CONFIG_PATH=/app/configs/cameras.yaml
       - PULSAR_SERVICE_URL=pulsar://pulsar:6650
-      - PULSAR_TOPIC=${PULSAR_TOPIC:-persistent://retail/metadata/events}
-      - POSTGRES_DSN=postgresql://rva:${POSTGRES_PASSWORD:-rva_secret}@postgres:5432/rva_metadata
+      - PULSAR_TOPIC_DETECTIONS=${PULSAR_TOPIC:-persistent://rva/ingest/detections}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID}
+      - GCS_BUCKET_NAME=${GCS_FRAMES_BUCKET:-rva-frames}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-key.json
       - REDIS_URL=redis://redis:6379
-      - GCS_FRAMES_BUCKET=${GCS_FRAMES_BUCKET:-rva-frames}
-      - CAMERA_ID=${CAMERA_ID:-cam_01}
-      - STORE_ID=${STORE_ID:-store_01}
-      - MODEL_NAME=${MODEL_NAME:-yolo11l.pt}
-      - VIDEO_PATH=${VIDEO_PATH:-data/videos/sample.mp4}
-      - CONF_THRES=${CONF_THRES:-0.25}
-      - FRAME_SAVE_INTERVAL=${FRAME_SAVE_INTERVAL:-1}
+      - POSTGRES_DSN=postgresql://rva:${POSTGRES_PASSWORD:-rva_secret}@postgres:5432/rva_metadata
     volumes:
-      - ../data/videos:/app/data/videos
-      - ../data/models:/app/data/models
+      - ../data/models:/app/data/models:ro
+      - ../configs:/app/configs:ro
       - ${GCS_KEY_PATH:-/dev/null}:/secrets/gcs-key.json:ro
     depends_on:
+      pulsar:
+        condition: service_healthy
       redis:
         condition: service_healthy
-      postgres:
-        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 8G
+    healthcheck:
+      test: ["CMD", "python3.11", "-c", "import torch; assert torch.cuda.is_available()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
     networks:
       - rva-net
 

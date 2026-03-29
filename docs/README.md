@@ -26,7 +26,8 @@ docs/
 ├── 05_ACTION_PLAN.md                  # Implementation guide by phase
 ├── 06_TECH_COMPARISON.md              # Technology decisions and rationale
 ├── 07_VISION_MODULE_CHANGES.md        # Vision module: FrameSaver & TrackLifecycle
-└── 08_PROJECT_STRUCTURE.md            # Monorepo layout & uv workspace
+├── 08_PROJECT_STRUCTURE.md            # Monorepo layout & uv workspace
+└── 09_CAMERA_PROCESSING_ARCHITECTURE.md  # Multi-camera processing: RTSPReader, CameraWorker, scaling
 ```
 
 ---
