@@ -39,3 +39,8 @@ Real-time people detection, tracking, and crowd density analysis for retail stor
 | Flink UI | http://localhost:8081 |
 | Pulsar Admin | http://localhost:8084 |
 | GCS Console | https://console.cloud.google.com/storage |
+
+## UI Concept: Live Heatmap Overlay
+*(Reference preview of the expected real-time dashboard)*
+
+![Heatmap Preview](docs/images/heatmap-preview.png)
