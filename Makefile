@@ -6,8 +6,14 @@ setup-gcp:     ## Create GCS bucket and set lifecycle policy
 	bash scripts/setup_gcp.sh
 
 # ── Run (local) ──────────────────────────────────────────
-run-vision:    ## Run vision service locally
+run-vision:    ## Run vision service (multi-camera, reads cameras.yaml)
 	uv run rva-vision
+
+run-vision-dev: ## Run vision with alternate dev camera config
+	CAMERAS_CONFIG_PATH=configs/cameras.dev.yaml uv run rva-vision
+
+run-vision-test: ## Run vision with a local video file instead of RTSP
+	VIDEO_PATH=data/videos/test.mp4 uv run rva-vision
 
 run-api:       ## Run API service locally
 	uv run rva-api
