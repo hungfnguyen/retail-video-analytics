@@ -13,6 +13,10 @@ Real-time people detection, tracking, and crowd density analysis for retail stor
 
 ![Retail Video Analytics Architecture](docs/images/architecture.png)
 
+## Multi-Camera Processing Architecture
+
+![Multi-Camera Processing Architecture](docs/images/vision-pipeline-architecture.png)
+
 ## Tech Stack
 
 | Component | Technology |
