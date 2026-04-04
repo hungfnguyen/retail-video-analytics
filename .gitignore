@@ -60,3 +60,6 @@ HANDOFF.md
 
 # Model backup files
 vision/main.py.backup
+
+.opencode
+.agent
