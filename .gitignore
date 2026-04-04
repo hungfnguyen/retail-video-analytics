@@ -11,6 +11,7 @@ AGENTS.md
 venv/
 env/
 .venv/
+.env
 
 # IDE / Editor settings
 .vscode/
@@ -56,7 +57,17 @@ CHANGELOG.md
 HANDOFF.md
 # Environment files (local config only)
 !.env
-!vision/.env
+
+# Scala / sbt
+*.class
+*.jar
+!services/flink-jobs/lib/*.jar
+.bsp/
+project/target/
+project/project/
+
+# uv
+uv.lock
 
 # Model backup files
 vision/main.py.backup

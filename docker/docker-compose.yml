@@ -1,0 +1,198 @@
+version: "3.9"
+
+networks:
+  rva-net:
+    driver: bridge
+
+volumes:
+  postgres-data:
+  redis-data:
+  pulsar-data:
+  grafana-data:
+
+services:
+  # ── Infrastructure ────────────────────────────────────────
+
+  pulsar:
+    image: apachepulsar/pulsar:3.3.2
+    command: bin/pulsar standalone
+    ports:
+      - "6650:6650"
+      - "8084:8080"
+    volumes:
+      - pulsar-data:/pulsar/data
+      - ../infra/pulsar/standalone.conf:/pulsar/conf/standalone.conf:ro
+    networks:
+      - rva-net
+    healthcheck:
+      test: ["CMD", "bin/pulsar-admin", "brokers", "healthcheck"]
+      interval: 30s
+      timeout: 10s
+      retries: 5
+
+  flink-jobmanager:
+    image: flink:1.18
+    command: jobmanager
+    ports:
+      - "8081:8081"
+    environment:
+      - FLINK_PROPERTIES=jobmanager.rpc.address:flink-jobmanager
+    volumes:
+      - ../infra/flink/flink-conf.yaml:/opt/flink/conf/flink-conf.yaml:ro
+      - ../services/flink-jobs/target/scala-2.12:/opt/flink/jobs
+    networks:
+      - rva-net
+
+  flink-taskmanager:
+    image: flink:1.18
+    command: taskmanager
+    environment:
+      - FLINK_PROPERTIES=jobmanager.rpc.address:flink-jobmanager
+    depends_on:
+      - flink-jobmanager
+    networks:
+      - rva-net
+
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+    volumes:
+      - redis-data:/data
+    networks:
+      - rva-net
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  postgres:
+    image: postgres:16-alpine
+    ports:
+      - "5432:5432"
+    environment:
+      POSTGRES_DB: rva_metadata
+      POSTGRES_USER: rva
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD:-rva_secret}
+    volumes:
+      - postgres-data:/var/lib/postgresql/data
+      - ../infra/postgres/init.sql:/docker-entrypoint-initdb.d/init.sql:ro
+    networks:
+      - rva-net
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U rva -d rva_metadata"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
+
+  trino:
+    image: trinodb/trino:418
+    ports:
+      - "8083:8080"
+    volumes:
+      - ../infra/trino/config.properties:/etc/trino/config.properties:ro
+      - ../infra/trino/jvm.config:/etc/trino/jvm.config:ro
+      - ../infra/trino/node.properties:/etc/trino/node.properties:ro
+      - ../infra/trino/catalog:/etc/trino/catalog:ro
+    networks:
+      - rva-net
+
+  grafana:
+    image: grafana/grafana:11.3.0
+    ports:
+      - "3000:3000"
+    volumes:
+      - grafana-data:/var/lib/grafana
+      - ../infra/grafana/provisioning:/etc/grafana/provisioning:ro
+    networks:
+      - rva-net
+
+  # ── Application Services ──────────────────────────────────
+
+  vision:
+    build:
+      context: ..
+      dockerfile: docker/vision/Dockerfile
+    container_name: rva-vision
+    restart: unless-stopped
+    environment:
+      - VISION_MODEL_PATH=/app/data/models/${MODEL_NAME:-yolo11n.pt}
+      - VISION_DEVICE=cuda:0
+      - VISION_CONFIDENCE_THRESHOLD=${CONF_THRES:-0.5}
+      - CAMERAS_CONFIG_PATH=/app/configs/cameras.yaml
+      - PULSAR_SERVICE_URL=pulsar://pulsar:6650
+      - PULSAR_TOPIC_DETECTIONS=${PULSAR_TOPIC:-persistent://rva/ingest/detections}
+      - GCS_PROJECT_ID=${GCS_PROJECT_ID}
+      - GCS_BUCKET_NAME=${GCS_FRAMES_BUCKET:-rva-frames}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-key.json
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_DSN=postgresql://rva:${POSTGRES_PASSWORD:-rva_secret}@postgres:5432/rva_metadata
+    volumes:
+      - ../data/models:/app/data/models:ro
+      - ../configs:/app/configs:ro
+      - ${GCS_KEY_PATH:-/dev/null}:/secrets/gcs-key.json:ro
+    depends_on:
+      pulsar:
+        condition: service_healthy
+      redis:
+        condition: service_healthy
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: nvidia
+              count: 1
+              capabilities: [gpu]
+        limits:
+          memory: 8G
+    healthcheck:
+      test: ["CMD", "python3.11", "-c", "import torch; assert torch.cuda.is_available()"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+    networks:
+      - rva-net
+
+  api:
+    build:
+      context: ..
+      dockerfile: docker/api/Dockerfile
+    ports:
+      - "8000:8000"
+    environment:
+      - REDIS_URL=redis://redis:6379
+      - POSTGRES_DSN=postgresql://rva:${POSTGRES_PASSWORD:-rva_secret}@postgres:5432/rva_metadata
+      - GCS_FRAMES_BUCKET=${GCS_FRAMES_BUCKET:-rva-frames}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-key.json
+    volumes:
+      - ${GCS_KEY_PATH:-/dev/null}:/secrets/gcs-key.json:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    networks:
+      - rva-net
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8000/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+  streamlit:
+    build:
+      context: ..
+      dockerfile: docker/streamlit/Dockerfile
+    ports:
+      - "8501:8501"
+    environment:
+      - BACKEND_URL=http://api:8000
+      - GCS_FRAMES_BUCKET=${GCS_FRAMES_BUCKET:-rva-frames}
+      - GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-key.json
+    volumes:
+      - ${GCS_KEY_PATH:-/dev/null}:/secrets/gcs-key.json:ro
+    depends_on:
+      - api
+    networks:
+      - rva-net
