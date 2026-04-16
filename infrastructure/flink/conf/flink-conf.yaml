@@ -1,0 +1,59 @@
+# ==========================================
+# Flink Cluster Configuration (Fixed for S3)
+# ==========================================
+
+# -- JobManager & TaskManager Network --
+jobmanager.rpc.address: flink-jobmanager
+jobmanager.rpc.port: 6123
+jobmanager.bind-host: 0.0.0.0
+jobmanager.memory.process.size: 1600m
+
+taskmanager.bind-host: 0.0.0.0
+taskmanager.memory.process.size: 3200m
+taskmanager.numberOfTaskSlots: 4
+
+# -- REST Interface (Web UI) --
+rest.address: flink-jobmanager
+rest.port: 8081
+rest.bind-address: 0.0.0.0
+
+# -- Parallelism & Timeouts --
+parallelism.default: 2
+slot.request.timeout: 120000
+
+# -- Blob & Query Server --
+blob.server.port: 6124
+query.server.port: 6125
+
+# -- CHECKPOINT & STATE BACKEND (FIXED) --
+# Sử dụng Filesystem backend nhưng lưu trên S3 (MinIO) thay vì Local File
+state.backend.type: filesystem
+state.checkpoints.dir: file:///opt/flink/state/checkpoints
+state.savepoints.dir: file:///opt/flink/state/savepoints
+
+# Cấu hình kết nối MinIO cho Flink System (Checkpointing)
+s3.endpoint: http://minio:9000
+s3.path.style.access: true
+s3.access-key: minioadmin
+s3.secret-key: minioadmin123
+
+# -- Execution Checkpointing --
+# Bắt buộc bật để Iceberg Sink có thể commit data
+# 30s cho near real-time analytics (trade-off giữa latency vs small files)
+execution.checkpointing.interval: 30s
+execution.checkpointing.min-pause: 15s
+execution.checkpointing.tolerable-failed-checkpoints: 5
+execution.checkpointing.externalized-checkpoint-retention: DELETE_ON_CANCELLATION
+
+# -- Java Options (Fix Java 17+ Access Issues) --
+# Cho phép truy cập module java.util để Kryo serializer hoạt động
+env.java.opts: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+env.java.opts.jobmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+env.java.opts.taskmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
+
+# -- Resource Overrides --
+taskmanager.memory.process.size: 8192m
+taskmanager.numberOfTaskSlots: 8
+parallelism.default: 1
+
+query.server.port: 6125

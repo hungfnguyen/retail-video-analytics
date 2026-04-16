@@ -1,0 +1,80 @@
+0 person        # người
+1 bicycle       # xe đạp
+2 car           # ô tô
+3 motorcycle    # xe máy
+4 airplane      # máy bay
+5 bus           # xe buýt
+6 train         # tàu hỏa
+7 truck         # xe tải
+8 boat          # thuyền
+9 traffic light # đèn giao thông
+10 fire hydrant # trụ cứu hỏa
+11 stop sign    # biển dừng
+12 parking meter # đồng hồ đỗ xe
+13 bench        # ghế dài
+14 bird         # chim
+15 cat          # mèo
+16 dog          # chó
+17 horse        # ngựa
+18 sheep        # cừu
+19 cow          # bò
+20 elephant     # voi
+21 bear         # gấu
+22 zebra        # ngựa vằn
+23 giraffe      # hươu cao cổ
+24 backpack     # ba lô
+25 umbrella     # ô, dù
+26 handbag      # túi xách
+27 tie          # cà vạt
+28 suitcase     # vali
+29 frisbee      # đĩa bay
+30 skis         # ván trượt tuyết
+31 snowboard    # ván trượt tuyết
+32 sports ball  # bóng thể thao
+33 kite         # diều
+34 baseball bat # gậy bóng chày
+35 baseball glove # găng bóng chày
+36 skateboard   # ván trượt
+37 surfboard    # ván lướt sóng
+38 tennis racket # vợt tennis
+39 bottle       # chai
+40 wine glass   # ly rượu
+41 cup          # cốc
+42 fork         # nĩa
+43 knife        # dao
+44 spoon        # thìa
+45 bowl         # bát
+46 banana       # chuối
+47 apple        # táo
+48 sandwich     # bánh sandwich
+49 orange       # cam
+50 broccoli     # bông cải xanh
+51 carrot       # cà rốt
+52 hot dog      # xúc xích
+53 pizza        # bánh pizza
+54 donut        # bánh donut
+55 cake         # bánh kem
+56 chair        # ghế
+57 couch        # ghế sofa
+58 potted plant # cây cảnh
+59 bed          # giường
+60 dining table # bàn ăn
+61 toilet       # bồn cầu
+62 tv           # tivi
+63 laptop       # máy tính xách tay
+64 mouse        # chuột
+65 remote       # điều khiển
+66 keyboard     # bàn phím
+67 cell phone   # điện thoại
+68 microwave    # lò vi sóng
+69 oven         # lò nướng
+70 toaster      # máy nướng bánh
+71 sink         # bồn rửa
+72 refrigerator # tủ lạnh
+73 book         # sách
+74 clock        # đồng hồ
+75 vase         # lọ hoa
+76 scissors     # kéo
+77 teddy bear   # gấu bông
+78 hair drier   # máy sấy tóc
+79 toothbrush   # bàn chải đánh răng

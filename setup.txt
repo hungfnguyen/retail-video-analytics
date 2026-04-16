@@ -1,0 +1,25 @@
+# Core
+opencv-python>=4.8
+numpy>=1.24
+
+# GPU Torch (CUDA 12.4)
+torch==2.4.1+cu124
+torchvision==0.19.1+cu124
+--extra-index-url https://download.pytorch.org/whl/cu124
+
+# Detection / Tracking
+ultralytics>=8.2
+deep-sort-realtime>=1.3
+lap>=0.5.12
+torchreid==0.2.5
+
+# Config
+python-dotenv>=1.0.0
+
+# Messaging
+pulsar-client[avro]==3.5.0
+
+gdown
+
+
+

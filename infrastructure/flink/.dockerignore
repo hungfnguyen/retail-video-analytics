@@ -1,0 +1,15 @@
+# Docker ignore for Flink build
+**/__pycache__/
+**/*.py[cod]
+**/*$py.class
+**/.pytest_cache/
+**/node_modules/
+**/.git/
+**/.vscode/
+**/.idea/
+**/logs/
+**/tmp/
+**/*.log
+**/data/videos/
+**/detections_output.ndjson
+**/flink-jobs/lib/*.jar

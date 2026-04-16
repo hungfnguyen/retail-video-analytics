@@ -1,0 +1,18 @@
+tracker_type: botsort # (str) Tracker backend: botsort|bytetrack; choose botsort to enable BoT-SORT features
+track_high_thresh: 0.3 # (float) First-stage match threshold; TĂNG để track chặt chẽ hơn (0.25 -> 0.5)
+track_low_thresh: 0.1 # (float) Second-stage threshold; TĂNG để giảm false matches (0.1 -> 0.2)
+new_track_thresh: 0.6 # (float) Start new track threshold; TĂNG cao để tránh tạo ID mới linh tinh (0.15 -> 0.6)
+track_buffer: 200 # (int) TĂNG buffer để giữ track qua occlusion ~1-3s ở 30FPS
+match_thresh: 0.7 # (float) GIẢM nhẹ để dễ tái-ghép sau occlusion (~1s)
+fuse_score: True # (bool) Fuse detection score with motion/IoU for matching; stabilizes weak detections
+
+# BoT-SORT specifics
+gmc_method: none # (str) Global motion compensation: sparseOptFlow|orb|none; helps moving camera scenes
+
+# ReID model related thresh
+# (float) Min appearance similarity for ReID; raise to avoid identity swaps
+with_reid: True
+model: auto
+# model: auto
+proximity_thresh: 0.7 # (float) Min IoU to consider tracks proximate for ReID; higher is stricter
+appearance_thresh: 0.2 

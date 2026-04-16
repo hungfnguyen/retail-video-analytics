@@ -1,0 +1,12 @@
+# Ultralytics 🚀 AGPL-3.0 License - https://ultralytics.com/license
+
+# ByteTrack tracker defaults for mode="track"
+# Docs: https://docs.ultralytics.com/modes/track/
+
+tracker_type: bytetrack # (str) Tracker backend: botsort|bytetrack; choose bytetrack for the classic baseline
+track_high_thresh: 0.5 # (float) TĂNG để track chính xác hơn (0.25 -> 0.5)
+track_low_thresh: 0.2 # (float) TĂNG để giảm noise (0.1 -> 0.2)
+new_track_thresh: 0.6 # (float) TĂNG cao để tránh tạo ID mới linh tinh (0.25 -> 0.6)
+track_buffer: 90 # (int) TĂNG để giữ track lâu hơn khi bị che khuất (30 -> 90)
+match_thresh: 0.8 # (float) Association similarity threshold (IoU/cost); tune with detector quality
+fuse_score: True # (bool) Fuse detection score with motion/IoU for matching; stabilizes weak detections
