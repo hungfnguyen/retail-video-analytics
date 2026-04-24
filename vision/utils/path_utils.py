@@ -2,9 +2,9 @@ from pathlib import Path
 import os
 
 def get_project_root() -> Path:
-    """Trả về thư mục gốc của dự án."""
-    # Giả sử file này nằm ở utils/path_utils.py, nên root là cha của cha
-    return Path(__file__).resolve().parent.parent
+    """Return the project root directory."""
+    # This file lives in vision/utils, so the repository root is two levels up.
+    return Path(__file__).resolve().parents[2]
 
 def resolve_model_path(model_name: str) -> Path:
     """
