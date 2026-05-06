@@ -1,4 +1,4 @@
-# vision/main.py
+# services/vision/main.py
 
 import uuid
 import cv2

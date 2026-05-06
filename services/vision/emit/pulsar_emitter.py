@@ -1,4 +1,4 @@
-# vision/emit/pulsar_emitter.py
+# services/vision/emit/pulsar_emitter.py
 import json
 import logging
 import time

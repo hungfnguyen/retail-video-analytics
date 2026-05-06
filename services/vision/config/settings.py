@@ -2,10 +2,10 @@ import os
 from pathlib import Path
 from dotenv import load_dotenv
 
-# Define base dir (vision folder)
+# Define base dir (services/vision folder)
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-# Load .env file from vision directory
+# Load .env file from services/vision directory
 load_dotenv(BASE_DIR / ".env")
 
 class Settings:
@@ -16,7 +16,7 @@ class Settings:
     _video_path_raw = os.getenv("VIDEO_PATH", "video/video3.mp4")
     VIDEO_PATH = str(BASE_DIR / _video_path_raw) if not Path(_video_path_raw).is_absolute() else _video_path_raw
 
-    _out_jsonl_raw = os.getenv("OUT_JSONL", "../data/metadata/video.jsonl")
+    _out_jsonl_raw = os.getenv("OUT_JSONL", "../../data/metadata/video.jsonl")
     OUT_JSONL = str(BASE_DIR / _out_jsonl_raw) if not Path(_out_jsonl_raw).is_absolute() else _out_jsonl_raw
     
     # Tracker

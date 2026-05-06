@@ -26,11 +26,7 @@ Hệ thống tracking người và vật thể trong môi trường bán lẻ s�
 ## 📁 Cấu trúc thư mục
 
 ```
-retail/
-├── data/                    # Video đầu vào
-│   ├── video.mp4
-│   └── ...
-│
+services/vision/
 ├── detect/                  # Module phát hiện đối tượng
 │   ├── models/              # Các file weight YOLO (.pt)
 │   │   ├── yolo11n.pt       # nano (nhanh nhất, nhẹ nhất)
@@ -57,13 +53,8 @@ retail/
 ├── emit/                    # Module xuất metadata
 │   └── json_emitter.py      # Ghi tracking results sang JSONL
 │
-├── metadata/                # Thư mục lưu output JSONL
-│   └── video.jsonl
-│
 ├── main.py                  # Script chính để chạy tracking
-├── setup.txt                # Dependencies
-├── README.md                # File này
-└── AGENTS.md                # Coding rules cho agents
+└── README.md                # File này
 ```
 
 ---
@@ -88,8 +79,8 @@ retail/
 ### Bước 1: Clone repository
 
 ```bash
-git clone https://github.com/CongDon1207/retail_tracking_object.git
-cd retail_tracking_object
+git clone https://github.com/hungfnguyen/retail-video-analytics.git
+cd retail-video-analytics
 ```
 
 ### Bước 2: Tạo môi trường ảo Python
@@ -143,15 +134,15 @@ Truy cập trang chính thức Ultralytics và tải model:
 
 **Đặt file .pt vào thư mục:**
 ```
-detect/models/yolo11l.pt
+services/vision/detect/models/yolo11l.pt
 ```
 
 ### Bước 6: Chuẩn bị video test
 
-Đưa video vào thư mục `data/`:
+Đưa video vào thư mục `services/vision/video/`:
 ```
-data/video.mp4
-data/video2.mp4
+services/vision/video/video.mp4
+services/vision/video/video2.mp4
 ```
 
 Hoặc dùng video có sẵn trong project (nếu có).
@@ -163,7 +154,7 @@ Hoặc dùng video có sẵn trong project (nếu có).
 ### Chạy tracking cơ bản
 
 ```bash
-python main.py
+python services/vision/main.py
 ```
 
 ### Tùy chỉnh trong `main.py`
@@ -171,7 +162,7 @@ python main.py
 ```python
 # --- Cấu hình ---
 model_name = "yolo11l.pt"           # Model YOLO sử dụng
-video_path = "data/video2.mp4"      # Đường dẫn video
+video_path = "video/video2.mp4"     # Đường dẫn tương đối từ services/vision/
 tracker_type = "botsort"            # "botsort" hoặc "bytetrack"
 class_filter = [0]                  # [0] = chỉ track người
 
@@ -190,7 +181,7 @@ class_filter = [0]                  # [0] = chỉ track người
 
 2. **File JSONL** (metadata):
    ```
-   metadata/video2.jsonl
+   data/metadata/video.jsonl
    ```
    Mỗi dòng là 1 frame với thông tin tracking đầy đủ.
 
@@ -267,9 +258,9 @@ Nếu `False`, cài đặt lại PyTorch với CUDA 12.4 hoặc dùng CPU.
 
 Đảm bảo file `.pt` nằm đúng trong `detect/models/`:
 ```
-detect/models/yolo11l.pt  ✅
-detect/yolo11l.pt         ❌
-yolo11l.pt                ❌
+services/vision/detect/models/yolo11l.pt  ✅
+services/vision/detect/yolo11l.pt         ❌
+yolo11l.pt                              ❌
 ```
 
 ### Lỗi: Thiếu dependencies

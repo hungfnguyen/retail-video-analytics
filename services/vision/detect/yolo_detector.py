@@ -1,4 +1,4 @@
-# vision/detect/yolo_detector.py
+# services/vision/detect/yolo_detector.py
 
 from pathlib import Path
 

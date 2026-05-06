@@ -56,10 +56,10 @@ CHANGELOG.md
 HANDOFF.md
 # Environment files (local config only)
 !.env
-!vision/.env
+!services/vision/.env
 
 # Model backup files
-vision/main.py.backup
+services/vision/main.py.backup
 .agent
 .opencode
-
+.mp4

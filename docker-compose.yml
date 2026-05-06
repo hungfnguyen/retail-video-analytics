@@ -51,7 +51,7 @@ services:
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
       - flink_state:/opt/flink/state
-      - ./flink-jobs/sql:/opt/flink/usrlib/sql
+      - ./services/flink-jobs/sql:/opt/flink/usrlib/sql
     environment:
       AWS_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
