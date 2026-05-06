@@ -1,128 +1,91 @@
-# Retail Video Analytics — Documentation Index
+# Retail Video Analytics - Thesis Documentation
 
-## Overview
+## Mục tiêu
 
-Retail Video Analytics (RVA) is an end-to-end streaming pipeline for real-time people detection, tracking, and density analysis in retail store environments.
+Retail Video Analytics là đồ án tốt nghiệp theo hướng Data Engineering: xây dựng hệ thống thu nhận, xử lý, lưu trữ và phục vụ dữ liệu sinh ra từ camera siêu thị. Trọng tâm của đồ án không chỉ là nhận diện người bằng Computer Vision, mà là thiết kế một data platform có streaming, lakehouse, schema contract, realtime serving, batch analytics, monitoring và kế hoạch đánh giá rõ ràng.
 
-### Design: Heatmap-First, No Zones
+Thiết kế mới dùng hướng **metadata-first**:
 
-| Feature | Status | Description |
-|---------|--------|-------------|
-| **Heatmap Overlay** | Primary | Density visualization directly on video frames |
-| **Bounding Boxes** | Primary | Track IDs displayed per detection (P:137, P:200, ...) |
-| **Zone Analytics** | Removed | Not needed — heatmap provides full spatial information |
+- Video frame chỉ được lưu mẫu để tra cứu và minh họa.
+- Dữ liệu chính của hệ thống là event metadata: camera, timestamp, track, bbox, confidence, heatmap cell.
+- Realtime path phục vụ live heatmap và cảnh báo.
+- Lakehouse path phục vụ phân tích lịch sử, báo cáo và truy vấn SQL.
 
----
+## Bộ tài liệu
 
-## Document Structure
+| File | Vai trò |
+|---|---|
+| [00_THESIS_SCOPE.md](./00_THESIS_SCOPE.md) | Phạm vi đồ án, mục tiêu, câu hỏi nghiên cứu, tiêu chí thành công |
+| [01_TARGET_ARCHITECTURE.md](./01_TARGET_ARCHITECTURE.md) | Kiến trúc đích, các layer, công nghệ và luồng tổng thể |
+| [02_DATA_FLOW_AND_CONTRACTS.md](./02_DATA_FLOW_AND_CONTRACTS.md) | Data flow, event schema, topic contract, idempotency, data quality |
+| [03_STREAMING_PIPELINE.md](./03_STREAMING_PIPELINE.md) | Thiết kế Flink streaming jobs, watermark, window, state, alerting |
+| [04_LAKEHOUSE_DESIGN.md](./04_LAKEHOUSE_DESIGN.md) | Thiết kế Iceberg lakehouse theo Bronze, Silver, Gold |
+| [05_OPERATIONAL_STORAGE.md](./05_OPERATIONAL_STORAGE.md) | PostgreSQL, Redis, GCS và access pattern cho serving |
+| [06_CAMERA_EDGE_PROCESSING.md](./06_CAMERA_EDGE_PROCESSING.md) | Xử lý camera tại edge: RTSP, YOLO, tracking, worker, publisher |
+| [07_DASHBOARD_AND_SERVING.md](./07_DASHBOARD_AND_SERVING.md) | FastAPI, Streamlit, Grafana, API và dashboard requirements |
+| [08_IMPLEMENTATION_ROADMAP.md](./08_IMPLEMENTATION_ROADMAP.md) | Roadmap triển khai codebase mới theo milestone |
+| [09_EVALUATION_PLAN.md](./09_EVALUATION_PLAN.md) | Kế hoạch đánh giá chức năng, hiệu năng, chất lượng dữ liệu |
 
-```
-docs/
-├── README.md                          # This file — documentation index
-├── 01_ARCHITECTURE_ANALYSIS.md        # System architecture overview
-├── 02_ARCHITECTURE_IMPROVED.md        # Dual-Path architecture (Fast + Slow path)
-├── 03_DATABASE_SCHEMA.md              # PostgreSQL & Redis schema (heatmap-first, no zones)
-├── 04_VISUALIZATION_REQUIREMENTS.md   # UI & dashboard specifications
-├── 05_ACTION_PLAN.md                  # Implementation guide by phase
-├── 06_TECH_COMPARISON.md              # Technology decisions and rationale
-├── 07_VISION_MODULE_CHANGES.md        # Vision module: FrameSaver & TrackLifecycle
-├── 08_PROJECT_STRUCTURE.md            # Monorepo layout & uv workspace
-└── 09_CAMERA_PROCESSING_ARCHITECTURE.md  # Multi-camera processing: RTSPReader, CameraWorker, scaling
-```
+## Kiến trúc tóm tắt
 
----
-
-## Architecture Summary
-
-### Dual-Path Architecture
-
-```
-Camera → YOLO11 + BoTSORT
-    │
-    ├──────────────────────┬──────────────────────┐
-    │                      │                      │
-    ▼                      ▼                      ▼
-Pulsar                  GCS                PostgreSQL
-(metadata,            (keyframes,           (track events:
- 30 FPS)               1 frame/sec)          start/end/sample)
-    │
-    ├─────────────────────────┐
-    │                         │
-    ▼                         ▼
-FAST PATH                SLOW PATH
-Flink CEP                Flink Batch
-(< 1 second)             (90-120 seconds)
-    │                         │
-    ▼                         ▼
-Redis                      Iceberg
-(heatmap:live,            (Bronze→Silver→Gold)
- alerts, stats)               │
-    │                         ▼
-    │                       Trino
-    │                         │
-    └──────────┬──────────────┘
-               │
-               ▼
-         Streamlit (primary)    +    Grafana (KPI analytics)
-         - Live heatmap overlay       - Historical trends
-         - Track replay               - Daily summaries
-         - Alert panel                - System health
+```text
+Camera / Video File
+    |
+    v
+Vision Edge Service
+RTSPReader -> YOLO11 -> BoTSORT -> Detection Publisher
+    |
+    +--> Pulsar: detection frame events
+    +--> GCS: sampled frames
+    +--> PostgreSQL: track lifecycle metadata
+    |
+    v
+Apache Flink
+    |
+    +--> Fast path: Redis + PostgreSQL alerts + FastAPI WebSocket
+    |
+    +--> Lakehouse path: Iceberg Bronze -> Silver -> Gold on GCS
+                                  |
+                                  v
+                                Trino
+                                  |
+                                  v
+                      Grafana / Streamlit / SQL analysis
 ```
 
-### Visualization: Heatmap Overlay on Video
+## Công nghệ chính
 
-```
-┌──────────────────────────────────────────────────────────┐
-│                 VIDEO FRAME + HEATMAP                    │
-│  ┌────────────────────────────────────────────────────┐  │
-│  │                                                    │  │
-│  │    ██████████              ███████████████        │  │
-│  │   ████HOT█████  P:137    █████████HOT█████ P:200  │  │
-│  │    ██████████              ███████████████        │  │
-│  │                                                    │  │
-│  │          ┌─────┐                                   │  │
-│  │          │P:62 │  ← Bounding box + Track ID       │  │
-│  │          └─────┘                                   │  │
-│  │                                                    │  │
-│  └────────────────────────────────────────────────────┘  │
-│   Cold ════════════════════════════════════════ Hot      │
-└──────────────────────────────────────────────────────────┘
-```
+| Layer | Công nghệ | Mục đích |
+|---|---|---|
+| Vision edge | Python, OpenCV, YOLO11, BoTSORT | Đọc camera, detect person, tracking |
+| Messaging | Apache Pulsar | Message bus cho detection events |
+| Streaming | Apache Flink | Realtime metrics, alerting, ETL streaming |
+| Realtime state | Redis | Live heatmap, current count, active tracks |
+| Operational DB | PostgreSQL | Camera config, track lifecycle, alerts |
+| Object storage | Google Cloud Storage | Sampled frames, Iceberg table data |
+| Lakehouse | Apache Iceberg | Bronze, Silver, Gold analytical tables |
+| Query | Trino | SQL engine cho Iceberg |
+| Serving | FastAPI, Streamlit, Grafana | API, live UI, historical dashboard |
+| Observability | Prometheus, Grafana | System metrics và pipeline health |
 
----
+## Nguyên tắc thiết kế
 
-## Reading Guide
+1. **Data Engineering first**: mọi module phải tạo ra dữ liệu có schema, lineage, timestamp và khả năng replay.
+2. **Metadata-first**: không xử lý video như dữ liệu analytics chính; chỉ lưu sampled frames để tra cứu.
+3. **Dual path**: realtime path tối ưu latency, lakehouse path tối ưu tính đúng và phân tích lịch sử.
+4. **Heatmap-first, no fixed zones**: mật độ được tính từ tọa độ bbox/centroid trên toàn frame, không phụ thuộc vùng vẽ tay.
+5. **Operational storage tách khỏi analytical storage**: Redis/PostgreSQL phục vụ ứng dụng, Iceberg/Trino phục vụ phân tích.
+6. **MVP có thể chạy local**: demo đồ án phải chạy được với video file, Docker Compose và dữ liệu giả lập nếu không có camera thật.
 
-### Recommended order for developers:
+## Cổng dịch vụ đề xuất
 
-1. `01_ARCHITECTURE_ANALYSIS.md` — System architecture and data flow
-2. `02_ARCHITECTURE_IMPROVED.md` — Dual-Path design details
-3. `07_VISION_MODULE_CHANGES.md` — Vision module components
-4. `03_DATABASE_SCHEMA.md` — PostgreSQL & Redis schema
-5. `04_VISUALIZATION_REQUIREMENTS.md` — UI specifications
-6. `05_ACTION_PLAN.md` — Implementation steps
-7. `06_TECH_COMPARISON.md` — Technology decision rationale
-
----
-
-## Latency Summary
-
-| Path | Latency | Use Case |
-|------|---------|----------|
-| **Fast Path** | < 1 second | Live heatmap, density alerts |
-| **Slow Path** | 90-120 seconds | Historical charts, Grafana dashboards |
-| **Frame lookup** | < 2 seconds | View frame at alert time |
-
----
-
-## Services & Ports
-
-| Service | Port | Purpose |
-|---------|------|---------|
-| Streamlit | 8501 | Primary dashboard |
-| Grafana | 3000 | Analytics dashboard |
-| Backend (FastAPI) | 8000 | REST API + WebSocket |
-| Flink UI | 8081 | Pipeline monitoring |
-| Pulsar Admin | 8084 | Message broker UI |
-| GCS Console | cloud | Object storage (console.cloud.google.com) |
+| Service | Port | Vai trò |
+|---|---:|---|
+| FastAPI | 8000 | REST API, WebSocket, MJPEG endpoint |
+| Streamlit | 8501 | Live monitor, event search, track replay |
+| Grafana | 3000 | Historical KPI và system dashboard |
+| Flink UI | 8081 | Theo dõi streaming jobs |
+| Pulsar Admin | 8080 hoặc 8084 | Theo dõi broker và topic |
 | Trino | 8083 | SQL query engine |
+| Redis | 6379 | Realtime state |
+| PostgreSQL | 5432 | Operational metadata |
