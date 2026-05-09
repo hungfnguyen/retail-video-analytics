@@ -69,7 +69,7 @@ Nội dung:
 
 - Redis client.
 - PostgreSQL async client.
-- GCS client.
+- S3 client.
 - Trino client.
 
 ### `rva-messaging`
@@ -132,7 +132,7 @@ Tasks:
 - Tích hợp BoTSORT hoặc tracker tương đương.
 - Build `DetectionFrameEvent`.
 - Publish vào Pulsar.
-- Sample frame và lưu GCS hoặc local adapter.
+- Sample frame và lưu S3 hoặc local adapter.
 - Ghi track lifecycle vào PostgreSQL.
 
 Output:
@@ -170,7 +170,7 @@ Thời lượng: 5 đến 10 ngày.
 
 Tasks:
 
-- Configure Iceberg catalog trên GCS hoặc local warehouse.
+- Configure Iceberg catalog trên S3 hoặc local warehouse.
 - Write Bronze table.
 - Build Silver detections table.
 - Build Gold minute metrics.
@@ -196,12 +196,12 @@ Tasks:
 - Heatmap endpoints.
 - Alerts endpoints.
 - Track search endpoints.
-- GCS signed URL endpoint.
+- S3 pre-signed URL endpoint.
 - Optional MJPEG stream endpoint.
 
 Output:
 
-- API trả dữ liệu từ Redis/PostgreSQL/Trino/GCS.
+- API trả dữ liệu từ Redis/PostgreSQL/Trino/S3.
 - Swagger/OpenAPI dùng được.
 - Integration tests cho API chính.
 
@@ -275,7 +275,7 @@ Nếu thời gian hạn chế, MVP tối thiểu cần:
 Có thể hoãn:
 
 - Multi-camera process manager đầy đủ.
-- GCS thật, thay bằng local object storage adapter nếu cần.
+- S3 thật, thay bằng local object storage adapter nếu cần.
 - Advanced alert logic.
 - Track replay đẹp.
 - Production authentication.
@@ -287,7 +287,7 @@ Có thể hoãn:
 | GPU không đủ | Vision chậm | Dùng YOLO11n, giảm FPS, dùng video file ngắn |
 | Flink/Iceberg cấu hình lâu | Chậm roadmap | MVP dùng local warehouse trước |
 | Streamlit video không mượt | UI kém | Dùng latest frame polling hoặc MJPEG |
-| GCS credentials phức tạp | Block demo | Tạo local storage adapter có cùng interface |
+| S3 credentials phức tạp | Block demo | Tạo local storage adapter có cùng interface |
 | Dữ liệu detection nhiễu | Metric sai | Thêm threshold và data quality report |
 | Quá nhiều công nghệ | Khó hoàn thành | Giữ MVP nhỏ, phần production nêu trong docs |
 

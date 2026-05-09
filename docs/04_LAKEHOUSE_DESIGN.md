@@ -16,7 +16,7 @@ Lakehouse là nơi lưu trữ dữ liệu lịch sử và phục vụ phân tíc
 |---|---|
 | Table format | Apache Iceberg |
 | File format | Parquet |
-| Object storage | Google Cloud Storage |
+| Object storage | AWS S3 |
 | Query engine | Trino |
 | Writer | Flink |
 | Optional batch/backfill | Flink batch hoặc Python/Spark trong tương lai |
@@ -40,14 +40,14 @@ Gold
 
 | Namespace | Vai trò |
 |---|---|
-| `rva_bronze` | Raw hoặc gần raw event data |
-| `rva_silver` | Cleaned, flattened, validated records |
-| `rva_gold` | Aggregate tables phục vụ dashboard |
-| `rva_quality` | Optional: data quality reports |
+| `retail_bronze` | Raw hoặc gần raw event data |
+| `retail_silver` | Cleaned, flattened, validated records |
+| `retail_gold` | Aggregate tables phục vụ dashboard |
+| `retail_quality` | Optional: data quality reports |
 
 ## 5. Bronze tables
 
-### `rva_bronze.detection_frames`
+### `retail_bronze.detection_frames`
 
 Lưu một record cho mỗi frame event.
 
@@ -82,7 +82,7 @@ Retention:
 
 ## 6. Silver tables
 
-### `rva_silver.detections`
+### `retail_silver.detections`
 
 Flatten từ `detection_frames`, một row cho mỗi detection object hợp lệ.
 
@@ -116,7 +116,7 @@ Quality rules:
 - Bbox được clip trong frame.
 - `grid_x`, `grid_y` nằm trong grid.
 
-### `rva_silver.track_lifecycle`
+### `retail_silver.track_lifecycle`
 
 | Column | Type | Ghi chú |
 |---|---|---|
@@ -131,7 +131,7 @@ Quality rules:
 | `frame_uri` | string | Nullable |
 | `event_date` | date | Partition helper |
 
-### `rva_silver.camera_frame_metrics`
+### `retail_silver.camera_frame_metrics`
 
 Một row cho mỗi frame, dùng để phân tích FPS, count và model behavior.
 
@@ -150,7 +150,7 @@ Một row cho mỗi frame, dùng để phân tích FPS, count và model behavior
 
 ## 7. Gold tables
 
-### `rva_gold.camera_minute_metrics`
+### `retail_gold.camera_minute_metrics`
 
 | Column | Type | Ghi chú |
 |---|---|---|
@@ -165,7 +165,7 @@ Một row cho mỗi frame, dùng để phân tích FPS, count và model behavior
 | `avg_confidence` | double | Model signal |
 | `event_date` | date | Partition |
 
-### `rva_gold.camera_hourly_heatmap`
+### `retail_gold.camera_hourly_heatmap`
 
 Lưu sparse heatmap theo giờ.
 
@@ -181,7 +181,7 @@ Lưu sparse heatmap theo giờ.
 | `total_points` | long |
 | `event_date` | date |
 
-### `rva_gold.store_daily_metrics`
+### `retail_gold.store_daily_metrics`
 
 | Column | Type |
 |---|---|
@@ -228,7 +228,7 @@ SELECT
     camera_id,
     max(max_person_count) AS peak_count,
     avg(avg_person_count) AS avg_count
-FROM rva_gold.camera_minute_metrics
+FROM retail_gold.camera_minute_metrics
 WHERE store_id = 'store_001'
   AND event_date = DATE '2026-05-05'
 GROUP BY 1, 2
@@ -242,7 +242,7 @@ SELECT
     camera_id,
     max(max_person_count) AS peak_count,
     avg(avg_person_count) AS avg_count
-FROM rva_gold.camera_minute_metrics
+FROM retail_gold.camera_minute_metrics
 WHERE event_date >= CURRENT_DATE - INTERVAL '7' DAY
 GROUP BY camera_id
 ORDER BY peak_count DESC;
@@ -255,7 +255,7 @@ SELECT
     hour_start,
     heatmap_cells,
     max_value
-FROM rva_gold.camera_hourly_heatmap
+FROM retail_gold.camera_hourly_heatmap
 WHERE camera_id = 'cam_01'
   AND event_date = DATE '2026-05-05'
 ORDER BY hour_start;
@@ -280,7 +280,7 @@ Quy trình:
 
 ## 12. Data quality tables
 
-### `rva_quality.pipeline_quality_daily`
+### `retail_quality.pipeline_quality_daily`
 
 | Column | Type |
 |---|---|

@@ -49,7 +49,7 @@
 | Test | Expected result |
 |---|---|
 | Vision publish event | Pulsar topic nhận `DetectionFrameEvent` |
-| Frame sampling | GCS/local storage có frame mỗi 1 giây |
+| Frame sampling | S3/local storage có frame mỗi 1 giây |
 | Track lifecycle | PostgreSQL có start/sample/end |
 | Realtime count | Redis `stats:count` cập nhật |
 | Heatmap | Redis `heatmap:live` có cells |

@@ -17,7 +17,7 @@
 | **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata (không đẩy khung hình) |
 | **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
 | **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
-| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên MinIO (S3-compatible) |
+| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
 | **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
 | **Visualization** | Grafana 11.3 | Dashboards near-real-time |
 
@@ -152,8 +152,8 @@ Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/visi
 ## 📚 Tài liệu
 
 - 📄 **Documentation index**: [`docs/README.md`](docs/README.md)
+- 📄 **S3 Infrastructure design**: [`docs/10_S3_INFRASTRUCTURE.md`](docs/10_S3_INFRASTRUCTURE.md)
 - 📄 **Phase 1 refactor note**: [`docs/note/REFACTOR_STRATEGY_PHASED_MIGRATION.md`](docs/note/REFACTOR_STRATEGY_PHASED_MIGRATION.md)
-- 📄 **Google Drive**: [Tài liệu dự án](https://drive.google.com/drive/folders/15HIuR8GIeGHsRPt7F2PeaChrG9XlMYoa?usp=sharing)
 
 ---
 

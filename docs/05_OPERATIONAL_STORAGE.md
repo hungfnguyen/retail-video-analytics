@@ -6,7 +6,7 @@ Operational storage phục vụ ứng dụng chạy realtime và tra cứu nhanh
 
 - Redis dùng cho state ngắn hạn, latency thấp.
 - PostgreSQL dùng cho metadata nghiệp vụ và event cần tra cứu.
-- GCS dùng cho sampled frames.
+- S3 dùng cho sampled frames.
 - Iceberg không nằm trong operational path chính mà phục vụ analytics.
 
 ## 2. Phân chia trách nhiệm
@@ -15,7 +15,7 @@ Operational storage phục vụ ứng dụng chạy realtime và tra cứu nhanh
 |---|---|---:|---|
 | Redis | Live count, heatmap, active tracks, alert queue | Giây đến giờ | Read/write rất nhanh |
 | PostgreSQL | Cameras, track lifecycle, alert history, configs | Dài hạn | Query theo camera/time/id |
-| GCS | Sampled frames, optional clips, Iceberg data files | Ngày đến năm | Object lookup |
+| S3 | Sampled frames, optional clips, Iceberg data files | Ngày đến năm | Object lookup |
 | Iceberg | Historical analytical data | Dài hạn | SQL scan/aggregate |
 
 ## 3. PostgreSQL schema
@@ -218,32 +218,32 @@ PUBLISH channel:alerts '{"type":"alert","alert_id":"..."}'
 | `channel:alerts` | Alert events |
 | `channel:camera-health` | Online/offline status |
 
-## 6. GCS object layout
+## 6. S3 object layout
 
 Sampled frame path:
 
 ```text
-gs://{bucket}/frames/{event_date}/{store_id}/{camera_id}/{hour}/{HH-mm-ss}_{frame_index}.jpg
+s3://retail-video-analytics/frames/{event_date}/{store_id}/{camera_id}/{hour}/{HH-mm-ss}_{frame_index}.jpg
 ```
 
 Ví dụ:
 
 ```text
-gs://rva-frames/frames/2026-05-05/store_001/cam_01/10/10-30-00_001502.jpg
+s3://retail-video-analytics/frames/2026-05-05/store_001/cam_01/10/10-30-00_001502.jpg
 ```
 
 Optional clip path:
 
 ```text
-gs://{bucket}/clips/{event_date}/{store_id}/{camera_id}/{alert_id}.mp4
+s3://retail-video-analytics/clips/{event_date}/{store_id}/{camera_id}/{alert_id}.mp4
 ```
 
 Iceberg warehouse path:
 
 ```text
-gs://{bucket}/warehouse/rva_bronze/
-gs://{bucket}/warehouse/rva_silver/
-gs://{bucket}/warehouse/rva_gold/
+s3://retail-video-analytics/warehouse/retail_bronze/
+s3://retail-video-analytics/warehouse/retail_silver/
+s3://retail-video-analytics/warehouse/retail_gold/
 ```
 
 ## 7. Frame retention
@@ -264,7 +264,7 @@ gs://{bucket}/warehouse/rva_gold/
 | Current count | Redis |
 | Heatmap live | Redis |
 | Active alerts | Redis + PostgreSQL |
-| Latest frame | GCS hoặc MJPEG stream |
+| Latest frame | S3 hoặc MJPEG stream |
 | Camera health | Redis/PostgreSQL |
 
 ### Event investigation
@@ -273,7 +273,7 @@ gs://{bucket}/warehouse/rva_gold/
 |---|---|
 | Search alerts | PostgreSQL |
 | Load track lifecycle | PostgreSQL |
-| Load sampled frame | GCS signed URL |
+| Load sampled frame | S3 pre-signed URL |
 | Historical metrics | Trino/Iceberg |
 
 ## 9. Consistency model
@@ -291,6 +291,6 @@ gs://{bucket}/warehouse/rva_gold/
 - Redis có thể trả live heatmap trong dưới 500 ms ở demo.
 - PostgreSQL không bị dùng làm raw event store.
 - Track và alert có unique key để chống duplicate.
-- GCS path nhất quán và tra cứu được từ event.
+- S3 path nhất quán và tra cứu được từ event.
 - API có thể lấy dữ liệu live từ Redis và lịch sử từ PostgreSQL/Trino.
 

@@ -17,7 +17,7 @@ Camera edge processing là entry point của hệ thống. Module này chuyển 
 | Output | Đích | Tần suất |
 |---|---|---:|
 | DetectionFrameEvent | Pulsar | Mỗi frame xử lý |
-| Sampled frame JPEG | GCS | 1 frame/giây hoặc cấu hình |
+| Sampled frame JPEG | S3 | 1 frame/giây hoặc cấu hình |
 | Track lifecycle | PostgreSQL hoặc Pulsar | start/sample/end |
 | Camera/system metrics | Prometheus hoặc Pulsar | 5 đến 10 giây |
 
@@ -161,7 +161,7 @@ Publisher không được block inference loop quá lâu.
 | Sink | Cách gửi |
 |---|---|
 | Pulsar | Async producer, batching nhỏ |
-| GCS | ThreadPoolExecutor hoặc async upload queue |
+| S3 | ThreadPoolExecutor hoặc async upload queue |
 | PostgreSQL | Async pool, sample position theo interval |
 | Metrics | Non-blocking best-effort |
 
@@ -247,13 +247,13 @@ VISION_CONFIDENCE_THRESHOLD=0.4
 VISION_TRACKER=botsort
 
 PULSAR_SERVICE_URL=pulsar://pulsar:6650
-PULSAR_TOPIC_DETECTION_FRAMES=persistent://rva/ingest/detection-frames-v1
+PULSAR_TOPIC_DETECTION_FRAMES=persistent://retail/ingest/detection-frames-v1
 
 POSTGRES_DSN=postgresql://rva:rva_secret@postgres:5432/rva_metadata
 REDIS_URL=redis://redis:6379
 
-GCS_BUCKET_NAME=rva-frames
-GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-service-account.json
+S3_BUCKET_NAME=retail-video-analytics
+AWS_ACCESS_KEY_ID=your-access-key-id
 ```
 
 ## 14. Failure scenarios
@@ -264,7 +264,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-service-account.json
 | Worker crash | CameraManager restarts worker |
 | GPU OOM | Worker logs error, exits, manager restarts after backoff |
 | Pulsar unavailable | Publisher retries and buffers bounded events |
-| GCS upload fail | Skip frame after retry, metadata still published |
+| S3 upload fail | Skip frame after retry, metadata still published |
 | PostgreSQL fail | Track lifecycle retry or degrade temporarily |
 | Redis fail | Vision path continues because Redis is not direct dependency |
 
@@ -289,7 +289,7 @@ GOOGLE_APPLICATION_CREDENTIALS=/secrets/gcs-service-account.json
 ## 17. Success criteria
 
 - Chạy được một video file và publish detection events vào Pulsar.
-- CameraWorker không block khi GCS upload chậm.
+- CameraWorker không block khi S3 upload chậm.
 - Worker crash được CameraManager restart.
 - Event có `event_id`, `camera_id`, `capture_ts`, `detections`.
 - Sampled frame path được gắn vào event khi có frame được lưu.

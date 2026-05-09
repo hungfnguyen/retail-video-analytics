@@ -20,11 +20,12 @@ Thiết kế mới dùng hướng **metadata-first**:
 | [02_DATA_FLOW_AND_CONTRACTS.md](./02_DATA_FLOW_AND_CONTRACTS.md) | Data flow, event schema, topic contract, idempotency, data quality |
 | [03_STREAMING_PIPELINE.md](./03_STREAMING_PIPELINE.md) | Thiết kế Flink streaming jobs, watermark, window, state, alerting |
 | [04_LAKEHOUSE_DESIGN.md](./04_LAKEHOUSE_DESIGN.md) | Thiết kế Iceberg lakehouse theo Bronze, Silver, Gold |
-| [05_OPERATIONAL_STORAGE.md](./05_OPERATIONAL_STORAGE.md) | PostgreSQL, Redis, GCS và access pattern cho serving |
+| [05_OPERATIONAL_STORAGE.md](./05_OPERATIONAL_STORAGE.md) | PostgreSQL, Redis, S3 và access pattern cho serving |
 | [06_CAMERA_EDGE_PROCESSING.md](./06_CAMERA_EDGE_PROCESSING.md) | Xử lý camera tại edge: RTSP, YOLO, tracking, worker, publisher |
 | [07_DASHBOARD_AND_SERVING.md](./07_DASHBOARD_AND_SERVING.md) | FastAPI, Streamlit, Grafana, API và dashboard requirements |
 | [08_IMPLEMENTATION_ROADMAP.md](./08_IMPLEMENTATION_ROADMAP.md) | Roadmap triển khai codebase mới theo milestone |
 | [09_EVALUATION_PLAN.md](./09_EVALUATION_PLAN.md) | Kế hoạch đánh giá chức năng, hiệu năng, chất lượng dữ liệu |
+| [10_S3_INFRASTRUCTURE.md](./10_S3_INFRASTRUCTURE.md) | Thiết kế S3 bucket, folder structure, Iceberg namespace, partitioning, access control |
 
 ## Kiến trúc tóm tắt
 
@@ -36,7 +37,7 @@ Vision Edge Service
 RTSPReader -> YOLO11 -> BoTSORT -> Detection Publisher
     |
     +--> Pulsar: detection frame events
-    +--> GCS: sampled frames
+    +--> S3: sampled frames
     +--> PostgreSQL: track lifecycle metadata
     |
     v
@@ -44,7 +45,7 @@ Apache Flink
     |
     +--> Fast path: Redis + PostgreSQL alerts + FastAPI WebSocket
     |
-    +--> Lakehouse path: Iceberg Bronze -> Silver -> Gold on GCS
+    +--> Lakehouse path: Iceberg Bronze -> Silver -> Gold on S3
                                   |
                                   v
                                 Trino
@@ -62,7 +63,7 @@ Apache Flink
 | Streaming | Apache Flink | Realtime metrics, alerting, ETL streaming |
 | Realtime state | Redis | Live heatmap, current count, active tracks |
 | Operational DB | PostgreSQL | Camera config, track lifecycle, alerts |
-| Object storage | Google Cloud Storage | Sampled frames, Iceberg table data |
+| Object storage | AWS S3 | Sampled frames, Iceberg table data |
 | Lakehouse | Apache Iceberg | Bronze, Silver, Gold analytical tables |
 | Query | Trino | SQL engine cho Iceberg |
 | Serving | FastAPI, Streamlit, Grafana | API, live UI, historical dashboard |

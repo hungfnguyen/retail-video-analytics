@@ -2,7 +2,7 @@
 
 ## 1. Mục tiêu
 
-Serving layer biến dữ liệu trong Redis, PostgreSQL, GCS và Iceberg thành API và dashboard cho người dùng. Layer này không xử lý analytics nặng trực tiếp trên raw data; nó gọi đúng storage theo từng use case.
+Serving layer biến dữ liệu trong Redis, PostgreSQL, S3 và Iceberg thành API và dashboard cho người dùng. Layer này không xử lý analytics nặng trực tiếp trên raw data; nó gọi đúng storage theo từng use case.
 
 ## 2. Thành phần
 
@@ -14,7 +14,7 @@ Serving layer biến dữ liệu trong Redis, PostgreSQL, GCS và Iceberg thành
 | Trino | SQL backend cho historical analytics |
 | Redis | Live serving state |
 | PostgreSQL | Operational metadata |
-| GCS | Signed URL cho sampled frames |
+| S3 | Pre-signed URL cho sampled frames |
 
 ## 3. Persona và dashboard
 
@@ -33,7 +33,7 @@ Responsibilities:
 
 - Đọc Redis cho live stats.
 - Đọc PostgreSQL cho alerts và track metadata.
-- Tạo GCS signed URL cho sampled frame.
+- Tạo S3 pre-signed URL cho sampled frame.
 - Query Trino cho historical metrics.
 - Cung cấp WebSocket hoặc Server-Sent Events cho live updates.
 - Cung cấp MJPEG endpoint nếu cần video stream mượt hơn Streamlit polling.
@@ -107,7 +107,7 @@ GET /api/v1/tracks/search?camera_id=cam_01&start=...&end=...
 ### 5.6 Frames
 
 ```text
-GET /api/v1/frames/signed-url?uri=gs://...
+GET /api/v1/frames/signed-url?uri=s3://...
 GET /api/v1/stream/{camera_id}/mjpeg
 ```
 
@@ -171,7 +171,7 @@ Features:
 Data source:
 
 - PostgreSQL via API.
-- GCS signed frame URL via API.
+- S3 pre-signed frame URL via API.
 
 ### 7.3 Track Replay
 
@@ -185,7 +185,7 @@ Features:
 Data source:
 
 - PostgreSQL track events.
-- Sampled frames from GCS.
+- Sampled frames from S3.
 
 ### 7.4 Historical Analytics
 
@@ -251,8 +251,8 @@ Streamlit không phải frontend realtime tối ưu cho video FPS cao. Thiết k
 
 ## 10. Security
 
-- Không trả trực tiếp GCS private URI cho browser nếu bucket private.
-- API tạo signed URL có thời hạn ngắn.
+- Không trả trực tiếp S3 private URI cho browser nếu bucket private.
+- API tạo pre-signed URL có thời hạn ngắn.
 - RTSP URL không hiển thị trên dashboard.
 - Dashboard auth có thể đơn giản trong MVP nhưng cần nêu hướng production.
 - Không hiển thị hoặc lưu PII.

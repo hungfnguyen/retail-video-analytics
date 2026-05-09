@@ -30,7 +30,7 @@ Mục tiêu:
                               |                               |
                               v                               v
                  +------------------------+        +----------------------+
-                 | Apache Pulsar          |        | GCS sampled frames   |
+                 | Apache Pulsar          |        | S3 sampled frames    |
                  | detection frame events |        | jpg, 1 fps optional  |
                  +-----------+------------+        +----------+-----------+
                              |                                |
@@ -69,7 +69,7 @@ Mục tiêu:
 | Stream processing | Flink | Validation, dedup, window aggregate, alert, lakehouse write |
 | Realtime serving | Redis | Live heatmap, current count, active track state |
 | Operational storage | PostgreSQL | Camera config, track lifecycle, alert history |
-| Object storage | GCS | Sampled frames, Iceberg table files |
+| Object storage | S3 | Sampled frames, Iceberg table files |
 | Lakehouse | Iceberg | Bronze, Silver, Gold analytical tables |
 | Query | Trino | SQL query cho dashboard và analyst |
 | Application | FastAPI, Streamlit | API, live dashboard, event investigation |
@@ -133,7 +133,7 @@ Pulsar -> Flink -> Iceberg Bronze -> Silver -> Gold -> Trino -> Grafana
 | Realtime state | Redis | Latency thấp, data structure phù hợp heatmap và counter |
 | Operational DB | PostgreSQL | ACID, JSONB, partitioning, query metadata tốt |
 | Lakehouse table | Apache Iceberg | Schema evolution, hidden partitioning, Trino support |
-| Object storage | GCS | Managed object storage, phù hợp frame và Iceberg files |
+| Object storage | S3 | Managed object storage, phù hợp frame và Iceberg files |
 | Query engine | Trino | Interactive SQL trên Iceberg |
 | API | FastAPI | Python async, REST, WebSocket, MJPEG endpoint |
 | Dashboard | Streamlit, Grafana | Streamlit cho live investigation, Grafana cho KPI/ops |
@@ -173,7 +173,7 @@ Lợi ích:
 
 - Video file thay cho camera RTSP.
 - Docker Compose chạy Pulsar, Flink, Redis, PostgreSQL, Trino, Grafana, API, Streamlit.
-- GCS có thể thay bằng bucket thật hoặc adapter local trong môi trường dev.
+- S3 có thể thay bằng bucket thật hoặc adapter local (MinIO) trong môi trường dev.
 - Một đến hai camera/video stream.
 
 ### Single VM demo
@@ -187,7 +187,7 @@ Lợi ích:
 
 - Edge VM tại từng store xử lý camera.
 - Pulsar/Flink/Lakehouse tập trung.
-- GCS dùng bucket chung có prefix theo store.
+- S3 dùng bucket chung có prefix theo store.
 - Redis/PostgreSQL có HA hoặc managed service.
 
 ## 9. Quyết định kiến trúc quan trọng
@@ -209,7 +209,7 @@ Lợi ích:
 | Vision | RTSP/video file | Pulsar events, sampled frames, optional track lifecycle |
 | Flink realtime | Pulsar events | Redis state, alerts, metrics |
 | Flink lakehouse | Pulsar events | Iceberg Bronze/Silver/Gold |
-| API | Redis, PostgreSQL, GCS, Trino | REST, WebSocket, MJPEG |
+| API | Redis, PostgreSQL, S3, Trino | REST, WebSocket, MJPEG |
 | Streamlit | API | Live UI, event search, replay |
 | Grafana | Trino, Prometheus | KPI và system dashboards |
 

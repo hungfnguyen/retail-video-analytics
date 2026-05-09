@@ -242,7 +242,7 @@ Nhược điểm:
 | Checkpoint timeout | 2 phút |
 | Min pause | 10 giây |
 | State backend | RocksDB hoặc filesystem state backend cho demo |
-| Checkpoint storage | local volume hoặc GCS path |
+| Checkpoint storage | local volume hoặc S3 path |
 | Restart strategy | fixed delay hoặc exponential delay |
 
 Lakehouse commit vào Iceberg thường gắn với checkpoint. Vì vậy historical path có latency cao hơn realtime path.

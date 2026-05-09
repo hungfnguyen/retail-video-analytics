@@ -14,7 +14,7 @@ Vision Edge Service
     |
     +--> DetectionFrameEvent -> Pulsar topic detection_frames
     |
-    +--> Sampled frame jpg -> GCS
+    +--> Sampled frame jpg -> S3
     |
     +--> TrackLifecycleEvent -> PostgreSQL hoặc Pulsar topic track_lifecycle
     |
@@ -48,11 +48,11 @@ Quy tắc:
 
 | Topic | Nội dung | Partition key |
 |---|---|---|
-| `persistent://rva/ingest/detection-frames-v1` | Detection frame events từ vision | `store_id:camera_id` |
-| `persistent://rva/ops/track-lifecycle-v1` | Track start/end/sample nếu publish qua broker | `store_id:camera_id:track_id` |
-| `persistent://rva/ops/alerts-v1` | Alert events | `store_id:camera_id` |
-| `persistent://rva/ops/system-metrics-v1` | FPS, lag, worker health | `service_id` |
-| `persistent://rva/dlq/invalid-events-v1` | Event lỗi schema hoặc quality rule | `source_topic` |
+| `persistent://retail/ingest/detection-frames-v1` | Detection frame events từ vision | `store_id:camera_id` |
+| `persistent://retail/ops/track-lifecycle-v1` | Track start/end/sample nếu publish qua broker | `store_id:camera_id:track_id` |
+| `persistent://retail/ops/alerts-v1` | Alert events | `store_id:camera_id` |
+| `persistent://retail/ops/system-metrics-v1` | FPS, lag, worker health | `service_id` |
+| `persistent://retail/dlq/invalid-events-v1` | Event lỗi schema hoặc quality rule | `source_topic` |
 
 Trong MVP có thể chỉ dùng topic detection frame và để Flink sinh ra alert/metrics.
 
@@ -82,7 +82,7 @@ Một message tương ứng một frame đã xử lý.
   },
   "frame_ref": {
     "saved": true,
-    "uri": "gs://rva-frames/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
+    "uri": "s3://retail-video-analytics/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
   },
   "detections": [
     {
@@ -152,7 +152,7 @@ Track lifecycle có thể được ghi trực tiếp vào PostgreSQL bởi visio
     "x": 200,
     "y": 410
   },
-  "frame_uri": "gs://rva-frames/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
+  "frame_uri": "s3://retail-video-analytics/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
 }
 ```
 
@@ -252,7 +252,7 @@ Quy tắc versioning:
 - Không lưu thông tin định danh cá nhân.
 - Không dùng face recognition.
 - Sampled frame có lifecycle retention ngắn.
-- RTSP URL và GCS credentials không commit vào repo.
+- RTSP URL và S3 credentials không commit vào repo.
 - Dashboard chỉ hiển thị track ID kỹ thuật, không hiển thị danh tính người.
 
 ## 14. Contract testing
