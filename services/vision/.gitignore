@@ -1,6 +1,0 @@
-venv/
-detect/models/
-metadata/
-__pycache__/
-!.env
-.agent

@@ -1,65 +1,63 @@
-AGENTS.md
-.codex
-.claude
-# Bytecode / cache
-*__pycache__/
-*.py[cod]
-*$py.class
-
-# Virtual environments
-.venv312/
-venv/
-env/
-.venv/
-
-# IDE / Editor settings
+# IDE / AI Agents
 .vscode/
 .idea/
 *.code-workspace
+AGENTS.md
+.codex
+.claude
+.serena/
+.agent
+.opencode
 
-# Build / distribution artifacts
-build/
-dist/
-*.egg-info/
-
-# Logs & temp
-*.log
-logs/
-tmp/
-temp/
-
-# Checkpoints / model weights (except explicitly tracked yolo file)
-checkpoints/
-weights/
-*.pt
-!yolov8n.pt
-
-
-# OS / misc
-.DS_Store
-Thumbs.db
-
-# Python tooling
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
 .mypy_cache/
 .pytest_cache/
 coverage.xml
 .coverage*
 
-.serena/
-detections_output.ndjson
-**/target/
-**/.ipynb_checkpoints/
+# Virtual Environments
+.venv/
+venv/
+env/
+.venv312/
 
+# Environment Variables (QUAN TRỌNG)
+.env
+
+# Data & Models
 data/
-AGENTS.md
+checkpoints/
+weights/
+*.pt
+detections_output.ndjson
+
+# Logs & Temp
+*.log
+logs/
+tmp/
+temp/
+
+# Build
+build/
+dist/
+*.egg-info/
+
+# OS
+.DS_Store
+Thumbs.db
+
+# Docs generated (nếu có)
 CHANGELOG.md
 HANDOFF.md
-# Environment files (local config only)
-!.env
-!services/vision/.env
 
-# Model backup files
-services/vision/main.py.backup
-.agent
-.opencode
-.mp4
+# Video files (tránh commit video test nặng)
+*.mp4
+
+# Jupyter
+**/.ipynb_checkpoints/
+
+# Java/Target (nếu lỡ dính)
+**/target/
