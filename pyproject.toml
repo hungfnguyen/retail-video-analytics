@@ -1,0 +1,12 @@
+[project]
+name = "retail-video-analytics"
+version = "0.1.0"
+description = "Retail Video Analytics - Monorepo"
+requires-python = ">=3.12"
+dependencies = []
+
+[tool.uv.workspace]
+members = ["services/vision", "packages/*"]
+
+[dependency-groups]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
