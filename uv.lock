@@ -1075,18 +1075,30 @@ wheels = [
 
 [[package]]
 name = "pulsar-client"
-version = "3.5.0"
+version = "3.11.0"
 source = { registry = "https://pypi.org/simple" }
 dependencies = [
     { name = "certifi" },
 ]
 wheels = [
-    { url = "https://files.pythonhosted.org/packages/81/19/4b145766df706aa5e09f60bbf5f87b934e6ac950fddd18f4acd520c465b9/pulsar_client-3.5.0-cp312-cp312-macosx_10_15_universal2.whl", hash = "sha256:d61f663d85308e12f44033ba95af88730f581a7e8da44f7a5c080a3aaea4878d", size = 10967548, upload-time = "2024-04-13T15:19:56.854Z" },
-    { url = "https://files.pythonhosted.org/packages/bf/bd/9bc05ee861b46884554a4c61f96edb9602de131dd07982c27920e554ab5b/pulsar_client-3.5.0-cp312-cp312-manylinux_2_17_aarch64.manylinux2014_aarch64.whl", hash = "sha256:2a1ba0be25b6f747bcb28102b7d906ec1de48dc9f1a2d9eacdcc6f44ab2c9e17", size = 5189598, upload-time = "2024-04-13T15:20:00.678Z" },
-    { url = "https://files.pythonhosted.org/packages/76/00/379bedfa6f1c810553996a4cb0984fa2e2c89afc5953df0936e1c9636003/pulsar_client-3.5.0-cp312-cp312-manylinux_2_17_x86_64.manylinux2014_x86_64.whl", hash = "sha256:a181e3e60ac39df72ccb3c415d7aeac61ad0286497a6e02739a560d5af28393a", size = 5430145, upload-time = "2024-04-13T15:20:03.844Z" },
-    { url = "https://files.pythonhosted.org/packages/88/c8/8a37d75aa9132a69a28061c9e5f4b516328a1968b58bbae018f431c6d3d4/pulsar_client-3.5.0-cp312-cp312-musllinux_1_1_aarch64.whl", hash = "sha256:3c72895ff7f51347e4f78b0375b2213fa70dd4790bbb78177b4002846f1fd290", size = 5708960, upload-time = "2024-04-13T15:20:07.354Z" },
-    { url = "https://files.pythonhosted.org/packages/6e/9a/abd98661e3f7ae3a8e1d3fb0fc7eba1a30005391ebd575ab06a66021256c/pulsar_client-3.5.0-cp312-cp312-musllinux_1_1_x86_64.whl", hash = "sha256:547dba1b185a17eba915e51d0a3aca27c80747b6187e5cd7a71a3ca33921decc", size = 5915227, upload-time = "2024-04-13T15:20:10.13Z" },
-    { url = "https://files.pythonhosted.org/packages/a2/51/db376181d05716de595515fac736e3d06e96d3345ba0e31c0a90c352eae1/pulsar_client-3.5.0-cp312-cp312-win_amd64.whl", hash = "sha256:443b786eed96bc86d2297a6a42e79f39d1abf217ec603e0bd303f3488c0234af", size = 3306515, upload-time = "2024-04-13T15:20:13.137Z" },
+    { url = "https://files.pythonhosted.org/packages/45/6b/0450054257785a2249f28502d6fcd8697ee3bb6dea15459b29253c74276b/pulsar_client-3.11.0-cp312-cp312-macosx_13_0_universal2.whl", hash = "sha256:5c36e5b6bcd6b9e78e0f87fae4661500d5cf5bdc46b8d7d7dc144040c52cc8cf", size = 10608767, upload-time = "2026-04-16T08:30:51.312Z" },
+    { url = "https://files.pythonhosted.org/packages/e0/ac/2b43bd4d0d56a109d48c3a09ccb931c5e051fa0f1fabb07b794fc6d0efca/pulsar_client-3.11.0-cp312-cp312-manylinux_2_28_aarch64.whl", hash = "sha256:d89a31e5eb0bc97441b2ea44575f1726f1c8db47e6800e542c9d043abeb9c0d9", size = 7564305, upload-time = "2026-04-16T08:30:55.525Z" },
+    { url = "https://files.pythonhosted.org/packages/67/f2/e8f8687df99062b002a517ddee059e78eb57e9accca03e1da58f4354908b/pulsar_client-3.11.0-cp312-cp312-manylinux_2_28_x86_64.whl", hash = "sha256:c5b09e834f45e320ffc433a2af944304b3ad7b55e2703cadd3c6f5792e115f2f", size = 7552822, upload-time = "2026-04-16T08:30:59.19Z" },
+    { url = "https://files.pythonhosted.org/packages/76/af/d9dda5c6b48f63789f682dbea0a82f2818fc61386d69f0add10622d706d4/pulsar_client-3.11.0-cp312-cp312-musllinux_1_2_aarch64.whl", hash = "sha256:268fc6e0302f623af8d5960b40718df943c8703c0ea92c063cbf5315d1fc845c", size = 8080600, upload-time = "2026-04-16T08:31:02.894Z" },
+    { url = "https://files.pythonhosted.org/packages/6f/7d/1a0488eaf708071567be00bc8cae4b2f79219ae07b7018b8a1bcafc1dc0a/pulsar_client-3.11.0-cp312-cp312-musllinux_1_2_x86_64.whl", hash = "sha256:a9e4bb24e852fdb0452765620ee782a5da21ce89ff400b42e570084279657add", size = 7928548, upload-time = "2026-04-16T08:31:06.591Z" },
+    { url = "https://files.pythonhosted.org/packages/eb/ea/c53140246aae588b5ed53a6d5c2fa90629d69e7e268db87683f904acba11/pulsar_client-3.11.0-cp312-cp312-win_amd64.whl", hash = "sha256:a46ee827083023b5d9a559173d91f8b1baabedfa36a4d67a039da40d4b659652", size = 3893093, upload-time = "2026-04-16T08:31:09.213Z" },
+    { url = "https://files.pythonhosted.org/packages/e8/00/2bf7dc0c34b519a9d93236ddc4f5288dfcb8e9261ecd066a45b1b69e4d27/pulsar_client-3.11.0-cp313-cp313-macosx_13_0_universal2.whl", hash = "sha256:2b1d5f00f4727627f225b9b46368ad33f33d39b2ecacb505338f7de248551938", size = 10609781, upload-time = "2026-04-16T08:31:13.555Z" },
+    { url = "https://files.pythonhosted.org/packages/f1/f7/ce23b97a5665118ff21cb0bc018933945ffc8efc07b683d8082cabcff2ec/pulsar_client-3.11.0-cp313-cp313-manylinux_2_28_aarch64.whl", hash = "sha256:1bf3fedfb845fbe8c3ea375883a45e977f94b7c13f913444bf570ea70cd5c3ce", size = 7567507, upload-time = "2026-04-16T08:31:17.682Z" },
+    { url = "https://files.pythonhosted.org/packages/cc/f1/77f104138d29fc679566c80e19499790a1212117af733430d37d3b0a00db/pulsar_client-3.11.0-cp313-cp313-manylinux_2_28_x86_64.whl", hash = "sha256:44c60088293b6547fa37a6ca1569c509299ac1b8c8aab3bfed4f2df25e45a609", size = 7553852, upload-time = "2026-04-16T08:31:21.23Z" },
+    { url = "https://files.pythonhosted.org/packages/9c/d3/eb5820a8b09b9fa2632f52a7a3537e0a58556bcbad5a1f90bda6f7205b56/pulsar_client-3.11.0-cp313-cp313-musllinux_1_2_aarch64.whl", hash = "sha256:ad6dfe31de3ea20f54182d1d82f9492bd8b31c3df416cd8521e5070efce7c91c", size = 8086824, upload-time = "2026-04-16T08:31:25.082Z" },
+    { url = "https://files.pythonhosted.org/packages/8a/4c/ebe33c991b9a9f01882e724bcc47fa096f4bca1cc325d8f2927d054e3caf/pulsar_client-3.11.0-cp313-cp313-musllinux_1_2_x86_64.whl", hash = "sha256:5986d40b100a2026f04411db69d8dc6c7d852b2c1725d7f5e94f1219567b267c", size = 7929355, upload-time = "2026-04-16T08:31:29.386Z" },
+    { url = "https://files.pythonhosted.org/packages/0f/60/3c6765b10cce037a2d0fac39e4a65825668387ef90c069250beb338d654e/pulsar_client-3.11.0-cp313-cp313-win_amd64.whl", hash = "sha256:a45992b8741bccbb5bb1cedd4fbea10fb176845fc2bd32d6c6922daf1913e662", size = 3893081, upload-time = "2026-04-16T08:31:31.794Z" },
+    { url = "https://files.pythonhosted.org/packages/26/24/2b9dad9769bd5eb42f0fc3f16e17aa0b03b480fb72bad1705ee383e6da69/pulsar_client-3.11.0-cp314-cp314-macosx_13_0_universal2.whl", hash = "sha256:8909318ce5041615629d60c835833b7e2ffd432ba00924dd0868f8615492e45e", size = 10600524, upload-time = "2026-04-16T08:31:36.084Z" },
+    { url = "https://files.pythonhosted.org/packages/de/04/e5fe952d04fe9477729e1b9e7282534ac667cd8984a037536ddd21d5e30e/pulsar_client-3.11.0-cp314-cp314-manylinux_2_28_aarch64.whl", hash = "sha256:15542bf646cd9770fd002af4848bf3c18cc95f6a8ceb2587afe6e28d21dbc871", size = 7569724, upload-time = "2026-04-16T08:31:39.927Z" },
+    { url = "https://files.pythonhosted.org/packages/ac/3f/6a66c71c263192a0bd3c5f4af30469ab6a2f8f9e9f4783c7eb4359758086/pulsar_client-3.11.0-cp314-cp314-manylinux_2_28_x86_64.whl", hash = "sha256:d9027896b612cadfe8652128369e3ad279f7d00f4be940bdef82f1130561b323", size = 7554298, upload-time = "2026-04-16T08:31:43.569Z" },
+    { url = "https://files.pythonhosted.org/packages/59/aa/181a694c5a32b69e941ac4871d804ad8eaf76c8ef663599ccd6a2d6b2b39/pulsar_client-3.11.0-cp314-cp314-musllinux_1_2_aarch64.whl", hash = "sha256:042c8c0603eb3f609e8330209ca6d689b69f8f28811d2b38e0bb12606118f03c", size = 8089560, upload-time = "2026-04-16T08:31:47.414Z" },
+    { url = "https://files.pythonhosted.org/packages/9b/d3/449b4b7a271f28136f99718daae171c1b9e44d89b6722cdd8e1d74b98eed/pulsar_client-3.11.0-cp314-cp314-musllinux_1_2_x86_64.whl", hash = "sha256:71974440ed0bff27b17d61783a163d5ae58d626f06d4785672d7151ccabd4469", size = 7930491, upload-time = "2026-04-16T08:31:50.856Z" },
+    { url = "https://files.pythonhosted.org/packages/d1/08/90a91350dc6418fdb8e6fd7431e7cf80196a6e18e2d83afc266e641c5caa/pulsar_client-3.11.0-cp314-cp314-win_amd64.whl", hash = "sha256:93da96f2c7a37a57bbcac60085690659ebfaff185637befc5ff1424a7ed08e03", size = 4012746, upload-time = "2026-04-16T08:31:53.622Z" },
 ]
 
 [package.optional-dependencies]
@@ -1311,7 +1323,7 @@ requires-dist = [
     { name = "lap", specifier = ">=0.5.12" },
     { name = "numpy", specifier = ">=1.24" },
     { name = "opencv-python", specifier = ">=4.8" },
-    { name = "pulsar-client", extras = ["avro"], specifier = "==3.5.0" },
+    { name = "pulsar-client", extras = ["avro"], specifier = "==3.11.0" },
     { name = "python-dotenv", specifier = ">=1.0.0" },
     { name = "torch", specifier = "==2.4.1+cu124", index = "https://download.pytorch.org/whl/cu124" },
     { name = "torchreid", specifier = "==0.2.5" },
