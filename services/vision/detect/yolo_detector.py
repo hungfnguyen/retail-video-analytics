@@ -1,7 +1,5 @@
 # services/vision/detect/yolo_detector.py
 
-from pathlib import Path
-
 import numpy as np
 import torch
 from ultralytics import YOLO
