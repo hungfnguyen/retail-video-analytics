@@ -26,6 +26,8 @@ Thiết kế mới dùng hướng **metadata-first**:
 | [08_IMPLEMENTATION_ROADMAP.md](./08_IMPLEMENTATION_ROADMAP.md) | Roadmap triển khai codebase mới theo milestone |
 | [09_EVALUATION_PLAN.md](./09_EVALUATION_PLAN.md) | Kế hoạch đánh giá chức năng, hiệu năng, chất lượng dữ liệu |
 | [10_S3_INFRASTRUCTURE.md](./10_S3_INFRASTRUCTURE.md) | Thiết kế S3 bucket, folder structure, Iceberg namespace, partitioning, access control |
+| [11_VISION_MULTI_CAMERA_FLOW.md](./11_VISION_MULTI_CAMERA_FLOW.md) | Chi tiết luồng xử lý multi-camera: startup, reader, pipeline, publish, failure handling |
+| [12_DATA_EXTRACTION_DESIGN.md](./12_DATA_EXTRACTION_DESIGN.md) | Thiết kế metadata plane và media plane: sampled frames, alert clips, S3 upload |
 
 ## Kiến trúc tóm tắt
 

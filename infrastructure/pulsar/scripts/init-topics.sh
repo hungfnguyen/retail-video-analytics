@@ -4,6 +4,7 @@ set -euo pipefail
 TENANT="retail"
 NAMESPACE="${TENANT}/metadata"
 TOPIC="persistent://${NAMESPACE}/events"
+MEDIA_TOPIC="persistent://${NAMESPACE}/media-events"
 SCHEMA_PATH="/pulsar/schema/metadata-json-schema.json"
 
 echo "[init] Waiting for Pulsar..."
@@ -33,10 +34,20 @@ done
 /pulsar/bin/pulsar-admin schemas delete "${TOPIC}" \
   >/dev/null 2>&1 || true
 
+/pulsar/bin/pulsar-admin topics delete-partitioned-topic "${MEDIA_TOPIC}" \
+  --force >/dev/null 2>&1 || true
+
+/pulsar/bin/pulsar-admin topics delete "${MEDIA_TOPIC}" \
+  --force >/dev/null 2>&1 || true
+
 # 5. [QUAN TRỌNG] Tạo PARTITIONED topic (Thay đổi ở đây)
 # Flink SQL Connector 1.18 yêu cầu partitioned topic để hoạt động ổn định
 echo "[init] Creating partitioned topic ${TOPIC}..."
 /pulsar/bin/pulsar-admin topics create-partitioned-topic "${TOPIC}" -p 1 \
+  >/dev/null 2>&1 || true
+
+echo "[init] Creating partitioned topic ${MEDIA_TOPIC}..."
+/pulsar/bin/pulsar-admin topics create-partitioned-topic "${MEDIA_TOPIC}" -p 1 \
   >/dev/null 2>&1 || true
 
 # 6. Upload Schema

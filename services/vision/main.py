@@ -1,119 +1,105 @@
-# services/vision/main.py
-
-import uuid
-import cv2
+# services/vision/main.py — CameraManager entry point
+import signal
+import sys
+import time
 import logging
-from datetime import datetime, timezone
+from multiprocessing import Process
 
-from track.tracker_factory import create_tracker
-from utils.visualizer import Visualizer
-from config.settings import settings
-from emit.pulsar_emitter import PulsarEmitter
+from config.settings import load_cameras_config
+from worker import run_worker
 
-
-logging.basicConfig(level=logging.INFO, format="%(asctime)s - %(name)s - %(levelname)s - %(message)s")
+logging.basicConfig(
+    level=logging.INFO,
+    format="%(asctime)s [manager] %(levelname)s %(message)s",
+)
 logger = logging.getLogger(__name__)
+
+_workers: dict[str, Process] = {}
+_running = True
+_global_cfg = {}
+
+
+def _shutdown(signum, frame):
+    global _running
+    logger.info("Received signal %s, shutting down...", signum)
+    _running = False
+
+
+def _start_worker(worker_id: str) -> Process:
+    camera_cfg = _global_cfg["cameras"][worker_id]
+    logger.info("Starting worker: %s (%s)", camera_cfg["camera_id"], camera_cfg["source_uri"])
+    p = Process(target=run_worker, args=(camera_cfg, _global_cfg), name=worker_id)
+    p.start()
+    return p
+
+
+def _restart_worker(worker_id: str, restart_count: dict[str, int]) -> Process | None:
+    camera_cfg = _global_cfg["cameras"][worker_id]
+    restart_count[worker_id] = restart_count.get(worker_id, 0) + 1
+    backoff = min(2 ** (restart_count[worker_id] - 1), 30)
+    logger.warning(
+        "Worker %s died, restarting in %ds (attempt #%d)...",
+        camera_cfg["camera_id"], backoff, restart_count[worker_id],
+    )
+    time.sleep(backoff)
+    return _start_worker(worker_id)
+
+
+def main():
+    global _global_cfg
+
+    # Load config
+    cfg = load_cameras_config()
+    _global_cfg = cfg
+    cameras_list = cfg["cameras"]
+
+    if not cameras_list:
+        logger.error("No cameras configured. Check configs/cameras.yaml or .env")
+        sys.exit(1)
+
+    logger.info("Loaded %d cameras", len(cameras_list))
+    for c in cameras_list:
+        logger.info("  %s: %s (%s) → %s", c["camera_id"], c.get("name", ""), c["source_type"], c["source_uri"])
+    logger.info("Pulsar: %s [%s]", cfg["pulsar_service_url"], cfg["pulsar_topic"])
+    logger.info("Model: %s, Tracker: %s, Queue: %d, Conf: %.2f",
+                cfg["model_name"], cfg["tracker_type"], cfg["frame_queue_size"], cfg["conf_thres"])
+
+    signal.signal(signal.SIGTERM, _shutdown)
+    signal.signal(signal.SIGINT, _shutdown)
+
+    # Start all workers
+    restart_count: dict[str, int] = {}
+    for worker_id, _ in enumerate(cameras_list):
+        _workers[worker_id] = _start_worker(worker_id)
+
+    # Health check loop
+    health_interval = cfg.get("health_check_interval_sec", 10)
+    while _running:
+        time.sleep(health_interval)
+
+        for worker_id, p in list(_workers.items()):
+            if not p.is_alive():
+                if p.exitcode != 0:
+                    logger.error("Worker %s (pid=%d) exit code=%d",
+                                 _workers[worker_id].name, p.pid, p.exitcode)
+                new_p = _restart_worker(worker_id, restart_count)
+                if new_p:
+                    _workers[worker_id] = new_p
+
+    # Graceful shutdown
+    logger.info("Stopping all workers (graceful timeout=%ds)...",
+                cfg.get("worker_graceful_shutdown_sec", 10))
+    for worker_id, p in _workers.items():
+        if p.is_alive():
+            p.terminate()
+    for worker_id, p in _workers.items():
+        p.join(timeout=cfg.get("worker_graceful_shutdown_sec", 10))
+        if p.is_alive():
+            logger.warning("Worker %s did not stop, force killing", worker_id)
+            p.kill()
+
+    logger.info("All workers stopped. Exiting.")
 
 
 if __name__ == "__main__":
-    pipeline_run_id = uuid.uuid4().hex
-
-    source = {
-        "store_id": settings.STORE_ID,
-        "camera_id": settings.CAMERA_ID,
-        "stream_id": settings.STREAM_ID,
-    }
-
-    pulsar_url = settings.PULSAR_SERVICE_URL
-    pulsar_topic = settings.PULSAR_TOPIC
-
-    logger.info("Starting pipeline run: %s", pipeline_run_id)
-    logger.info("Config: Model=%s, Tracker=%s", settings.MODEL_NAME, settings.TRACKER_TYPE)
-    logger.info("Ingestion: Pulsar (%s) topic=%s", pulsar_url, pulsar_topic)
-
-    tracker = None
-    emitter = None
-
-    try:
-        tracker = create_tracker(settings.TRACKER_TYPE, settings.MODEL_NAME, conf_thres=settings.CONF_THRES)
-
-        try:
-            emitter = PulsarEmitter(pulsar_url, pulsar_topic)
-        except Exception as e:
-            logger.error("Cannot connect to Pulsar: %s", e)
-            logger.info("Hint: ensure docker compose is running and the Pulsar port is reachable from host.")
-            raise SystemExit(1)
-
-        visualizer = Visualizer()
-
-        track_stream = tracker.track(settings.VIDEO_PATH, show=False, classes=settings.CLASS_FILTER)
-
-        for idx, record in enumerate(track_stream, start=1):
-            frame = record["frame"]
-            height, width = frame.shape[:2]
-            objects = record["objects"]
-
-            visualizer.draw_tracks(frame, objects)
-
-            detections = []
-            for j, obj in enumerate(objects):
-                x1, y1, x2, y2 = map(float, obj["bbox"])
-                w_box = x2 - x1
-                h_box = y2 - y1
-                cx = x1 + w_box / 2.0
-                cy = y1 + h_box / 2.0
-
-                detections.append(
-                    {
-                        "det_id": f"{idx}-{j}",
-                        "class": obj.get("label", "person"),
-                        "class_id": int(obj.get("cls", 0)),
-                        "conf": float(obj.get("conf", 0.0)),
-                        "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-                        "bbox_norm": {"x": x1 / width, "y": y1 / height, "w": w_box / width, "h": h_box / height},
-                        "centroid": {"x": int(cx), "y": int(cy)},
-                        "centroid_norm": {"x": cx / width, "y": cy / height},
-                        "track_id": None if obj.get("id", -1) < 0 else int(obj["id"]),
-                    }
-                )
-
-            success = emitter.emit_frame(
-                pipeline_run_id=pipeline_run_id,
-                source=source,
-                frame_index=idx,
-                capture_ts_iso=datetime.now(timezone.utc).isoformat(),
-                image_size={"width": width, "height": height},
-                detections=detections,
-                runtime={
-                    "model_name": settings.MODEL_NAME,
-                    "tracker_type": settings.TRACKER_TYPE,
-                },
-            )
-
-            if not success:
-                logger.warning("Failed to emit frame %s", idx)
-
-            cv2.imshow("Retail Analytics", frame)
-            if cv2.waitKey(1) & 0xFF == ord("q"):
-                logger.info("Stop signal received from user")
-                break
-
-    except KeyboardInterrupt:
-        logger.info("Pipeline interrupted by user (Ctrl+C)")
-    except Exception as e:
-        logger.error("Unexpected error in pipeline: %s", e, exc_info=True)
-    finally:
-        logger.info("Cleaning up resources...")
-
-        if emitter is not None:
-            try:
-                emitter.close()
-            except Exception as e:
-                logger.error("Error closing emitter: %s", e)
-
-        try:
-            cv2.destroyAllWindows()
-        except Exception as e:
-            logger.error("Error destroying OpenCV windows: %s", e)
-
-        logger.info("Pipeline stopped")
+    main()

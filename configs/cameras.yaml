@@ -1,0 +1,55 @@
+# Multi-camera configuration
+# 2 cameras: video1.mp4 (main entrance), video2.mp4 (aisle)
+
+cameras:
+  - camera_id: cam_01
+    store_id: store_001
+    name: "Entrance"
+    source_type: video_file
+    source_uri: data/videos/video1.mp4
+    enabled: true
+    fps_target: 25
+
+  - camera_id: cam_02
+    store_id: store_001
+    name: "Aisle"
+    source_type: video_file
+    source_uri: data/videos/video2.mp4
+    enabled: true
+    fps_target: 25
+
+settings:
+  model_name: yolo11n.pt
+  tracker_type: botsort
+  conf_thres: 0.25
+  class_filter: [0]
+  frame_queue_size: 2
+  health_check_interval_sec: 10
+  worker_graceful_shutdown_sec: 10
+  reconnect_delay_max_sec: 30
+
+  # Media plane: sampled JPEGs and optional alert clips to S3/MinIO.
+  media_upload_enabled: true
+  pulsar_media_topic: persistent://retail/metadata/media-events
+  s3_endpoint: ""
+  s3_region: ap-southeast-1
+  s3_bucket: retail-video-analytics-prod
+  s3_access_key: AKIAS3ZAHS447QXUGRYL
+  s3_secret_key: UEBI2g9je2f3WrHY+wBM1+zn9P+pIeqHLN8Sbhyg
+  s3_path_style: false
+
+  frame_sampling_enabled: true
+  frame_sample_interval_sec: 1
+  frame_jpeg_quality: 85
+  frame_upload_workers: 2
+  frame_upload_inflight_limit: 8
+
+  # Clip extraction is implemented but disabled by default because it encodes
+  # every frame into a small pre-buffer. Enable it when testing alert replay.
+  alert_clip_enabled: false
+  alert_density_threshold: 10
+  alert_pre_buffer_sec: 5
+  alert_post_buffer_sec: 5
+  alert_cooldown_sec: 30
+  clip_jpeg_quality: 80
+  clip_upload_workers: 1

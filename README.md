@@ -14,7 +14,8 @@
 
 | Layer | Công nghệ | Mô tả |
 |-------|-----------|-------|
-| **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata (không đẩy khung hình) |
+| **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata |
+| **Media Plane** | OpenCV + S3/MinIO | Upload sampled JPEG 1fps và optional alert MP4 clips |
 | **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
 | **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
 | **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
@@ -43,9 +44,16 @@ infrastructure/
 ```
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
 │   Vision AI     │     │     Pulsar      │     │     Flink       │
-│  YOLO11+BoTSORT │────▶│   (messages)    │────▶│ Bronze→Silver→  │
+│  YOLO11+BoTSORT │────▶│ metadata/events │────▶│ Bronze→Silver→  │
 │   (detect/track)│     │                 │     │     Gold        │
 └─────────────────┘     └─────────────────┘     └────────┬────────┘
+        │
+        │ sampled JPEG / alert clip
+        ▼
+┌─────────────────┐
+│   MinIO / S3    │
+│ frames/, clips/ │
+└─────────────────┘
                                                          │
                                                          ▼
 ┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
@@ -60,7 +68,7 @@ infrastructure/
 
 ### Yêu cầu hệ thống
 - Docker & Docker Compose
-- Python 3.10+ (cho Vision module)
+- Python 3.12+ (cho Vision module)
 - (Tùy chọn) GPU CUDA 12.4 cho YOLO11
 
 ### 1. Clone & Setup
@@ -71,7 +79,7 @@ git clone https://github.com/hungfnguyen/retail-video-analytics.git
 cd retail-video-analytics
 
 # Tạo file .env từ template
-cp configs/.env.example .env
+cp .env.example .env
 # Chỉnh sửa .env với credentials của bạn
 ```
 
@@ -90,22 +98,41 @@ docker ps
 ### 3. Setup Vision Module
 
 ```bash
-# Tạo virtual environment
-python -m venv venv
-source venv/bin/activate  # Linux/macOS
-# Windows Git Bash: source venv/Scripts/activate
+# Cài uv (một lần)
+curl -LsSf https://astral.sh/uv/install.sh | sh
 
-# Cài dependencies
-pip install -r setup.txt
+# Sync dependencies
+uv sync --all-packages
 ```
 
 ### 4. Chạy Vision AI
 
 ```bash
-python services/vision/main.py
+uv run --package rva-vision python services/vision/main.py
 ```
 
 > Vision module tự động stream metadata vào Pulsar topic `persistent://retail/metadata/events`.
+> Khi `media_upload_enabled: true`, Vision cũng upload sampled frames vào `s3://warehouse/frames/...` và publish media artifact events vào `persistent://retail/metadata/media-events`.
+
+### 5. Kiểm tra media upload trên MinIO
+
+```bash
+# List sampled JPEG frames
+docker exec mc mc ls --recursive local/warehouse/frames
+
+# List alert clips nếu đã bật alert_clip_enabled
+docker exec mc mc ls --recursive local/warehouse/clips
+```
+
+Để test video clip upload, bật trong `configs/cameras.yaml`:
+
+```yaml
+settings:
+  alert_clip_enabled: true
+  alert_density_threshold: 1
+```
+
+Sau khi test xong nên đưa `alert_density_threshold` về giá trị thực tế hơn, ví dụ `10`, để tránh tạo quá nhiều clip.
 
 ---
 
@@ -146,6 +173,17 @@ Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/visi
 | `CLASS_FILTER` | `[0]` | Filter class (0=person) |
 | `CAMERA_ID` | `cam_01` | ID camera |
 | `STORE_ID` | `store_01` | ID cửa hàng |
+
+Media upload cấu hình chính trong `configs/cameras.yaml`:
+
+| Key | Mặc định | Mô tả |
+|-----|----------|-------|
+| `media_upload_enabled` | `true` | Bật media plane S3/MinIO |
+| `s3_endpoint` | `http://localhost:9000` | Endpoint MinIO khi Vision chạy trên host |
+| `s3_bucket` | `warehouse` | Bucket local dùng chung với Iceberg demo |
+| `frame_sampling_enabled` | `true` | Upload sampled JPEG |
+| `frame_sample_interval_sec` | `1` | 1 frame/giây/camera |
+| `alert_clip_enabled` | `false` | Bật alert MP4 clip extractor |
 
 ---
 
