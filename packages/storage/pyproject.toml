@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "storage"
+version = "0.1.0"
+description = "Shared storage clients (Redis, PostgreSQL, S3)"
+requires-python = ">=3.12"
+dependencies = ["core"]
+
+[tool.uv.sources]
+core = { workspace = true }

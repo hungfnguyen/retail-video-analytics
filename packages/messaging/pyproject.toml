@@ -1,0 +1,13 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "messaging"
+version = "0.1.0"
+description = "Shared messaging (Pulsar producer/consumer)"
+requires-python = ">=3.12"
+dependencies = ["core"]
+
+[tool.uv.sources]
+core = { workspace = true }

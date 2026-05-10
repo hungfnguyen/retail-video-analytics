@@ -6,8 +6,8 @@ FROM maven:3.9-eclipse-temurin-11 AS builder
 WORKDIR /build
 
 # Copy pom.xml và source code (context là project root)
-COPY flink-jobs/java/pom.xml ./
-COPY flink-jobs/java/src ./src
+COPY services/flink-jobs/java/pom.xml ./
+COPY services/flink-jobs/java/src ./src
 
 # Build JAR (skip tests để nhanh hơn)
 RUN mvn clean package -DskipTests
