@@ -76,12 +76,16 @@ def main():
     health_interval = cfg.get("health_check_interval_sec", 10)
     while _running:
         time.sleep(health_interval)
+        if not _running:          # shutdown signal received during sleep
+            break
 
         for worker_id, p in list(_workers.items()):
             if not p.is_alive():
                 if p.exitcode != 0:
                     logger.error("Worker %s (pid=%d) exit code=%d",
                                  _workers[worker_id].name, p.pid, p.exitcode)
+                if not _running:   # shutting down — don't restart
+                    break
                 new_p = _restart_worker(worker_id, restart_count)
                 if new_p:
                     _workers[worker_id] = new_p
