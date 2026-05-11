@@ -9,6 +9,8 @@ from typing import Any
 import cv2
 import numpy as np
 
+from core.time_utils import ensure_utc
+
 logger = logging.getLogger(__name__)
 
 
@@ -104,7 +106,7 @@ class AlertClipExtractor:
         if self._recording is not None:
             return None
 
-        trigger_ts = _ensure_utc(trigger_ts)
+        trigger_ts = ensure_utc(trigger_ts)
         if self._last_trigger_ts is not None:
             elapsed = (trigger_ts - self._last_trigger_ts).total_seconds()
             if elapsed < self.cooldown_sec:
@@ -244,11 +246,6 @@ class AlertClipExtractor:
                 logger.warning("Unable to remove temp clip file: %s", tmp_path)
 
     def _build_clip_key(self, trigger_ts: datetime, alert_id: str) -> str:
-        ts = _ensure_utc(trigger_ts)
+        ts = ensure_utc(trigger_ts)
         return f"clips/{ts:%Y-%m-%d}/{self.store_id}/{self.camera_id}/{alert_id}.mp4"
 
-
-def _ensure_utc(ts: datetime) -> datetime:
-    if ts.tzinfo is None:
-        return ts.replace(tzinfo=timezone.utc)
-    return ts.astimezone(timezone.utc)
