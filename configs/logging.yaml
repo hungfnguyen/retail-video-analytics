@@ -1,0 +1,75 @@
+# Retail Video Analytics — Centralized Logging Configuration
+#
+# Load this in each service via:
+#   import logging.config, yaml
+#   with open("configs/logging.yaml") as f:
+#       logging.config.dictConfig(yaml.safe_load(f))
+
+version: 1
+disable_existing_loggers: false
+
+formatters:
+  text:
+    format: "%(asctime)s [%(name)s] %(levelname)s %(message)s"
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+
+  json:
+    format: '{"ts": "%(asctime)s", "logger": "%(name)s", "level": "%(levelname)s", "msg": "%(message)s"}'
+    datefmt: "%Y-%m-%dT%H:%M:%S"
+
+handlers:
+  console:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: text
+    stream: ext://sys.stdout
+
+  console_json:
+    class: logging.StreamHandler
+    level: INFO
+    formatter: json
+    stream: ext://sys.stdout
+
+loggers:
+  # Vision service
+  "__main__":
+    level: INFO
+    propagate: true
+  reader:
+    level: INFO
+    propagate: true
+  worker:
+    level: INFO
+    propagate: true
+
+  # Shared packages
+  core:
+    level: INFO
+    propagate: true
+  messaging:
+    level: INFO
+    propagate: true
+  storage:
+    level: INFO
+    propagate: true
+
+  # Third-party — suppress noisy loggers
+  ultralytics:
+    level: WARNING
+    propagate: true
+  matplotlib:
+    level: WARNING
+    propagate: true
+  boto3:
+    level: WARNING
+    propagate: true
+  botocore:
+    level: WARNING
+    propagate: true
+  urllib3:
+    level: WARNING
+    propagate: true
+
+root:
+  level: INFO
+  handlers: [console]
