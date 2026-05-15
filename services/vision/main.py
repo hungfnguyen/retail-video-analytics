@@ -28,7 +28,7 @@ def _shutdown(signum, frame):
 def _start_worker(worker_id: str) -> Process:
     camera_cfg = _global_cfg["cameras"][worker_id]
     logger.info("Starting worker: %s (%s)", camera_cfg["camera_id"], camera_cfg["source_uri"])
-    p = Process(target=run_worker, args=(camera_cfg, _global_cfg), name=worker_id)
+    p = Process(target=run_worker, args=(camera_cfg, _global_cfg), name=camera_cfg["camera_id"])
     p.start()
     return p
 
