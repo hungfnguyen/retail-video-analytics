@@ -57,6 +57,9 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
       
     healthcheck:
@@ -82,6 +85,9 @@ services:
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
     
     networks:
@@ -103,11 +109,16 @@ services:
         condition: service_healthy
       pulsar-broker:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       AWS_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
       AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
     networks:
