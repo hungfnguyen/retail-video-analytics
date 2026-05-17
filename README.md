@@ -3,7 +3,7 @@
 > Realtime pipeline thu thập & xử lý **metadata video** cho chuỗi bán lẻ.
 > Stack: **YOLO11 + BoTSORT → Pulsar → Flink → Iceberg on MinIO → Trino → Grafana**
 
-> Phase 1 refactor note: code runtime hiện được đặt dưới `services/`, nhưng behavior E2E tiểu luận chuyên ngành vẫn được giữ nguyên. Chưa thêm Redis/PostgreSQL/FastAPI/Streamlit trong phase này.
+> Phase 1 refactor note: runtime code is under `services/`, while the original thesis E2E behavior is preserved. FastAPI now has a mock dashboard API skeleton; Redis, PostgreSQL, and Streamlit are not integrated yet.
 
 ![Architecture](docs/images/architecture.png)
 - **RVA - Traffic Patterns**: Visits per hour x day-of-week v… visit duration theo time-of-day (ph?c v? planning ca l?m, khuy?n m?i)
@@ -26,6 +26,7 @@
 
 ```text
 services/
+├── api/             # FastAPI dashboard gateway with mock Live API contract
 ├── vision/          # YOLO11 + tracker + Pulsar producer
 └── flink-jobs/      # Java Flink jobs: Bronze, Silver, Gold Track Summary
 
@@ -148,6 +149,7 @@ Sau khi test xong nên đưa `alert_density_threshold` về giá trị thực t�
 | **MinIO API** | 9000 | http://localhost:9000 |
 | **Iceberg REST** | 8181 | http://localhost:8181 |
 | **Pulsar Broker** | 6650 | pulsar://localhost:6650 |
+| **FastAPI API** | 8000 | http://localhost:8000 |
 
 ---
 
