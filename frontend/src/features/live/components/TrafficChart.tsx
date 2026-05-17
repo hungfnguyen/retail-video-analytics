@@ -15,11 +15,12 @@ type TrafficChartProps = {
 
 export function TrafficChart({ traffic, summary }: TrafficChartProps) {
   return (
-    <section className="panel chart-panel">
-      <div className="panel-header">
-        <h2>Traffic last 60 minutes</h2>
+    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+      <div className="mb-3.5 flex items-center justify-between">
+        <h2 className="m-0 text-[17px] font-bold text-slate-950">Traffic last 60 minutes</h2>
       </div>
-      <div className="chart-box">
+
+      <div className="h-47">
         <ResponsiveContainer height={180} width="100%">
           <LineChart data={traffic}>
             <XAxis dataKey="time" tickLine={false} />
@@ -42,7 +43,8 @@ export function TrafficChart({ traffic, summary }: TrafficChartProps) {
           </LineChart>
         </ResponsiveContainer>
       </div>
-      <div className="traffic-summary">
+
+      <div className="flex gap-4.5 border-t border-slate-200 pt-3 text-[13px] text-slate-500">
         <span>Total in: {summary.total_in.toLocaleString()}</span>
         <span>Total out: {summary.total_out.toLocaleString()}</span>
         <span>Peak: {summary.peak_count}</span>

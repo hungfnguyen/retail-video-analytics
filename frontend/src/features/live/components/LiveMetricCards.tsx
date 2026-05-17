@@ -34,17 +34,22 @@ export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
   ]
 
   return (
-    <section className="metric-grid" aria-label="Live metrics">
+    <section className="grid grid-cols-4 gap-3" aria-label="Live metrics">
       {metrics.map((metric) => {
         const Icon = metric.icon
         return (
-          <article className="metric-card" key={metric.label}>
-            <div className="metric-card-header">
+          <article
+            className="min-h-32 rounded-lg border border-slate-200 bg-white p-4.5 shadow-[0_18px_45px_rgba(15,23,42,0.08)]"
+            key={metric.label}
+          >
+            <div className="flex items-center justify-between text-slate-500">
               <span>{metric.label}</span>
               <Icon size={18} />
             </div>
-            <strong>{metric.value}</strong>
-            <small>{metric.meta}</small>
+
+            <strong className="my-4 block text-[34px] leading-none text-blue-600">{metric.value}</strong>
+
+            <small className="text-slate-500">{metric.meta}</small>
           </article>
         )
       })}

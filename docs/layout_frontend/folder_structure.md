@@ -1,67 +1,49 @@
+# Frontend Folder Structure
+
+The frontend uses a feature-based structure. Each feature owns its page, API client, hooks, local components, and types.
+
+```text
 frontend/src/
-├── app/
-│   ├── App.tsx
-│   ├── routes.tsx
-│   └── providers.tsx
-│
-├── shared/
-│   ├── components/
-│   │   ├── AppShell.tsx
-│   │   ├── Sidebar.tsx
-│   │   ├── TopBar.tsx
-│   │   ├── MetricCard.tsx
-│   │   ├── Panel.tsx
-│   │   ├── StatusBadge.tsx
-│   │   └── DataTable.tsx
-│   ├── lib/
-│   │   ├── format.ts
-│   │   ├── time.ts
-│   │   └── constants.ts
-│   └── styles/
-│       └── globals.css
-│
-├── features/
-│   ├── live/
-│   │   ├── LivePage.tsx
-│   │   ├── components/
-│   │   │   ├── VideoPanel.tsx
-│   │   │   ├── BoundingBoxOverlay.tsx
-│   │   │   ├── HeatmapOverlay.tsx
-│   │   │   ├── LiveMetricCards.tsx
-│   │   │   ├── AlertList.tsx
-│   │   │   ├── TrafficChart.tsx
-│   │   │   ├── ZoneHeatmap.tsx
-│   │   │   └── PipelineHealth.tsx
-│   │   ├── api/
-│   │   │   └── liveApi.ts
-│   │   ├── hooks/
-│   │   │   ├── useLiveStats.ts
-│   │   │   ├── useLiveFrame.ts
-│   │   │   └── useLiveSocket.ts
-│   │   ├── mocks/
-│   │   │   └── liveMock.ts
-│   │   └── types.ts
-│   │
-│   ├── analytics/
-│   │   ├── AnalyticsPage.tsx
-│   │   ├── components/
-│   │   ├── api/
-│   │   ├── hooks/
-│   │   ├── mocks/
-│   │   └── types.ts
-│   │
-│   ├── investigate/
-│   │   ├── InvestigatePage.tsx
-│   │   ├── components/
-│   │   ├── api/
-│   │   ├── hooks/
-│   │   ├── mocks/
-│   │   └── types.ts
-│   │
-│   └── system/
-│       ├── SystemPage.tsx
-│       ├── components/
-│       ├── api/
-│       ├── hooks/
-│       ├── mocks/
-│       └── types.ts
+|-- app/
+|   |-- App.tsx
+|
+|-- shared/
+|   |-- components/
+|   |   |-- AppShell.tsx
+|
+|-- features/
+|   |-- live/
+|   |   |-- LivePage.tsx
+|   |   |-- api/
+|   |   |   |-- liveApi.ts
+|   |   |-- components/
+|   |   |   |-- AlertList.tsx
+|   |   |   |-- LiveMetricCards.tsx
+|   |   |   |-- PipelineHealth.tsx
+|   |   |   |-- TrafficChart.tsx
+|   |   |   |-- VideoPanel.tsx
+|   |   |   |-- ZoneHeatmap.tsx
+|   |   |-- hooks/
+|   |   |   |-- useLiveData.ts
+|   |   |-- types.ts
+|   |
+|   |-- analytics/
+|   |-- investigate/
+|   |-- system/
+|
+|-- main.tsx
+|-- index.css
+```
+
+## Data Flow
+
+The Live feature should read dashboard data through the API layer:
+
+```text
+LivePage.tsx
+-> hooks/useLiveData.ts
+-> api/liveApi.ts
+-> FastAPI /api/v1/live/{camera_id}/dashboard
+```
+
+Frontend mock data is no longer required for the Live page because FastAPI provides the mock dashboard contract during early development.
