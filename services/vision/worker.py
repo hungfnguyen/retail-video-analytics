@@ -1,3 +1,4 @@
+import hashlib
 import uuid
 import logging
 import signal
@@ -172,6 +173,10 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
             frame_index += 1
             capture_ts = datetime.now(timezone.utc)
+            capture_ts_iso = capture_ts.isoformat()
+            event_id = hashlib.sha256(
+                f"{camera_id}|{capture_ts_iso}|{frame_index}".encode()
+            ).hexdigest()[:16]
             height, width = frame.shape[:2]
 
             # Per-frame tracking: Ultralytics persist=True giữ tracker state giữa các lần gọi
@@ -211,7 +216,8 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                 pipeline_run_id=pipeline_run_id,
                 source=source_info,
                 frame_index=frame_index,
-                capture_ts_iso=capture_ts.isoformat(),
+                capture_ts_iso=capture_ts_iso,
+                event_id=event_id,
                 image_size={"width": width, "height": height},
                 detections=detections,
                 runtime={

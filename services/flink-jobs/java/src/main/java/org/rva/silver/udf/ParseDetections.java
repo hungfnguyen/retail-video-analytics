@@ -2,10 +2,14 @@ package org.rva.silver.udf;
 
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
+import org.apache.flink.metrics.Counter;
 import org.apache.flink.table.annotation.DataTypeHint;
 import org.apache.flink.table.annotation.FunctionHint;
+import org.apache.flink.table.functions.FunctionContext;
 import org.apache.flink.table.functions.TableFunction;
 import org.apache.flink.types.Row;
+import org.slf4j.Logger;
+import org.slf4j.LoggerFactory;
 
 import java.time.Instant;
 import java.time.OffsetDateTime;
@@ -24,7 +28,16 @@ import java.time.format.DateTimeParseException;
         "track_id BIGINT>"))
 public class ParseDetections extends TableFunction<Row> {
 
+    private static final Logger LOG = LoggerFactory.getLogger(ParseDetections.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+
+    private transient Counter invalidRecordCounter;
+
+    @Override
+    public void open(FunctionContext context) {
+        invalidRecordCounter = context.getMetricGroup()
+                .counter("detection_parse_invalid_total");
+    }
 
     public void eval(String payload) {
         if (payload == null || payload.isEmpty()) {
@@ -66,8 +79,11 @@ public class ParseDetections extends TableFunction<Row> {
                     collect(out);
                 }
             }
-        } catch (Exception ignore) {
-            // Bỏ qua record lỗi parse để không làm hỏng pipeline
+        } catch (Exception e) {
+            LOG.warn("Failed to parse detection payload ({}), skipping record", e.toString());
+            if (invalidRecordCounter != null) {
+                invalidRecordCounter.inc();
+            }
         }
     }
 

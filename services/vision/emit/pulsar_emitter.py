@@ -128,6 +128,7 @@ class PulsarEmitter:
         source: Dict[str, Any],
         frame_index: int,
         capture_ts_iso: Optional[str],
+        event_id: Optional[str] = None,
         image_size: Dict[str, int],
         detections: List[Dict[str, Any]],
         runtime: Optional[Dict[str, Any]] = None,
@@ -152,6 +153,7 @@ class PulsarEmitter:
         # 1. Tạo bản ghi metadata
         record = {
             "schema_version": "1.0",
+            "event_id": event_id or "",
             "pipeline_run_id": pipeline_run_id,
             "source": source,
             "frame_index": frame_index,

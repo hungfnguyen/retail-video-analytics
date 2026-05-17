@@ -114,6 +114,70 @@ class TestAlertEvent:
         assert alert.current_count > alert.threshold
 
 
+class TestDetectionFrameEventId:
+    def test_event_id_auto_generated_when_missing(self):
+        event = DetectionFrameEvent(
+            pipeline_run_id="run_001",
+            source=Source(store_id="s1", camera_id="c1", stream_id="s1_stream"),
+            frame_index=42,
+            capture_ts="2026-05-11T10:30:00Z",
+            image_size=ImageSize(width=1920, height=1080),
+            detections=[],
+        )
+        assert len(event.event_id) == 16
+        assert all(c in "0123456789abcdef" for c in event.event_id)
+
+    def test_event_id_passed_through_when_provided(self):
+        event = DetectionFrameEvent(
+            pipeline_run_id="run_001",
+            source=Source(store_id="s1", camera_id="c1", stream_id="s1_stream"),
+            frame_index=42,
+            capture_ts="2026-05-11T10:30:00Z",
+            event_id="abcd1234abcd1234",
+            image_size=ImageSize(width=1920, height=1080),
+            detections=[],
+        )
+        assert event.event_id == "abcd1234abcd1234"
+
+    def test_event_id_deterministic_same_inputs(self):
+        kwargs = dict(
+            pipeline_run_id="run_001",
+            source=Source(store_id="s1", camera_id="c1", stream_id="s1_stream"),
+            frame_index=42,
+            capture_ts="2026-05-11T10:30:00Z",
+            image_size=ImageSize(width=1920, height=1080),
+            detections=[],
+        )
+        e1 = DetectionFrameEvent(**kwargs)
+        e2 = DetectionFrameEvent(**kwargs)
+        assert e1.event_id == e2.event_id
+
+    def test_event_id_differs_per_frame_index(self):
+        base = dict(
+            pipeline_run_id="run_001",
+            source=Source(store_id="s1", camera_id="c1", stream_id="s1_stream"),
+            capture_ts="2026-05-11T10:30:00Z",
+            image_size=ImageSize(width=1920, height=1080),
+            detections=[],
+        )
+        e1 = DetectionFrameEvent(frame_index=1, **base)
+        e2 = DetectionFrameEvent(frame_index=2, **base)
+        assert e1.event_id != e2.event_id
+
+    def test_to_pulsar_payload_contains_event_id(self):
+        event = DetectionFrameEvent(
+            pipeline_run_id="run_001",
+            source=Source(store_id="s1", camera_id="c1", stream_id="s1_stream"),
+            frame_index=42,
+            capture_ts="2026-05-11T10:30:00Z",
+            event_id="deadbeef12345678",
+            image_size=ImageSize(width=1920, height=1080),
+            detections=[],
+        )
+        payload = event.to_pulsar_payload()
+        assert b'"event_id":"deadbeef12345678"' in payload
+
+
 class TestTrackLifecycleEvent:
     def test_track_started(self):
         event = TrackLifecycleEvent(

@@ -29,6 +29,7 @@ COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/bronz
 COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/silver-job.jar"
 COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/gold-job.jar"
 COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/gold-jobs.jar"
+COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/realtime-job.jar"
 
 # Copy script tự động submit jobs
 COPY infrastructure/flink/scripts/submit-jobs.sh /opt/flink/bin/submit-jobs.sh

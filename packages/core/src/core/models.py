@@ -2,9 +2,10 @@
 
 from __future__ import annotations
 
+import hashlib
 from typing import Any
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, model_validator
 
 
 class BBox(BaseModel):
@@ -69,10 +70,19 @@ class DetectionFrameEvent(BaseModel):
     source: Source
     frame_index: int
     capture_ts: str
+    event_id: str = Field(default="")
     image_size: ImageSize
     detections: list[DetectionObject]
     runtime: Runtime | None = None
     source_uri: str | None = None
+
+    @model_validator(mode="after")
+    def generate_event_id(self):
+        if self.event_id:
+            return self
+        raw = f"{self.source.camera_id}|{self.capture_ts}|{self.frame_index}"
+        self.event_id = hashlib.sha256(raw.encode("utf-8")).hexdigest()[:16]
+        return self
 
     def to_pulsar_payload(self) -> bytes:
         return self.model_dump_json(by_alias=True).encode("utf-8")

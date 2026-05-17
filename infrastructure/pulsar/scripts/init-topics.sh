@@ -5,6 +5,7 @@ TENANT="retail"
 NAMESPACE="${TENANT}/metadata"
 TOPIC="persistent://${NAMESPACE}/events"
 MEDIA_TOPIC="persistent://${NAMESPACE}/media-events"
+DLQ_TOPIC="persistent://${NAMESPACE}/dlq-events"
 SCHEMA_PATH="/pulsar/schema/metadata-json-schema.json"
 
 echo "[init] Waiting for Pulsar..."
@@ -48,6 +49,16 @@ echo "[init] Creating partitioned topic ${TOPIC}..."
 
 echo "[init] Creating partitioned topic ${MEDIA_TOPIC}..."
 /pulsar/bin/pulsar-admin topics create-partitioned-topic "${MEDIA_TOPIC}" -p 1 \
+  >/dev/null 2>&1 || true
+
+# Delete DLQ topic nếu tồn tại
+/pulsar/bin/pulsar-admin topics delete-partitioned-topic "${DLQ_TOPIC}" \
+  --force >/dev/null 2>&1 || true
+/pulsar/bin/pulsar-admin topics delete "${DLQ_TOPIC}" \
+  --force >/dev/null 2>&1 || true
+
+echo "[init] Creating partitioned topic ${DLQ_TOPIC}..."
+/pulsar/bin/pulsar-admin topics create-partitioned-topic "${DLQ_TOPIC}" -p 1 \
   >/dev/null 2>&1 || true
 
 # 6. Upload Schema

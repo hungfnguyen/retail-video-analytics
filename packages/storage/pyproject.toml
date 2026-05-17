@@ -7,7 +7,7 @@ name = "storage"
 version = "0.1.0"
 description = "Shared storage clients (S3, Redis, PostgreSQL)"
 requires-python = ">=3.12"
-dependencies = ["core", "boto3>=1.34", "botocore>=1.34"]
+dependencies = ["core", "boto3>=1.34", "botocore>=1.34", "redis>=5.0"]
 
 [tool.uv.sources]
 core = { workspace = true }
