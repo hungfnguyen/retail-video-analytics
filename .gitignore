@@ -46,6 +46,21 @@ build/
 dist/
 *.egg-info/
 
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.turbo/
+frontend/.next/
+frontend/.cache/
+frontend/*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
+
 # OS
 .DS_Store
 Thumbs.db
