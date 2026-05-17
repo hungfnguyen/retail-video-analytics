@@ -6,6 +6,8 @@ import pulsar
 from datetime import datetime, timezone
 from typing import Any, Dict, List, Optional
 
+from core.models import DetectionFrameEvent
+
 # Configure structured logging
 logging.basicConfig(
     level=logging.INFO,
@@ -150,42 +152,38 @@ class PulsarEmitter:
         Returns:
             True nếu gửi thành công, False nếu thất bại
         """
-        # 1. Tạo bản ghi metadata
-        record = {
-            "schema_version": "1.0",
-            "event_id": event_id or "",
-            "pipeline_run_id": pipeline_run_id,
-            "source": source,
-            "frame_index": frame_index,
-            "capture_ts": capture_ts_iso or self._now_iso(),
-            "image_size": image_size,
-            "detections": detections,
-        }
-        if runtime:
-            record["runtime"] = runtime
-        if source_uri:
-            record["source_uri"] = source_uri
-        
-        # 2. Serialize và gửi lên Pulsar với retry
         try:
-            json_str = json.dumps(record, ensure_ascii=False)
-            payload = json_str.encode('utf-8')
-            
+            event = DetectionFrameEvent(
+                pipeline_run_id=pipeline_run_id,
+                source=source,
+                frame_index=frame_index,
+                capture_ts=capture_ts_iso or self._now_iso(),
+                event_id=event_id or "",
+                image_size=image_size,
+                detections=detections,
+                runtime=runtime,
+                source_uri=source_uri,
+            )
+            payload = event.to_pulsar_payload()
+
             success = self._send_with_retry(payload, frame_index)
-            
+
             # Log nhẹ để theo dõi tiến trình (mỗi 30 frames)
             if success and frame_index % 30 == 0:
                 logger.info(
-                    f"Successfully sent frame {frame_index}",
+                    "Successfully sent frame %d event_id=%s",
+                    frame_index,
+                    event.event_id,
                     extra={
                         "frame_index": frame_index,
                         "detections_count": len(detections),
-                        "pipeline_run_id": pipeline_run_id
-                    }
+                        "pipeline_run_id": pipeline_run_id,
+                        "event_id": event.event_id,
+                    },
                 )
-            
+
             return success
-            
+
         except Exception as e:
             logger.error(
                 f"Unexpected error while preparing frame {frame_index}: {e}",

@@ -3,7 +3,7 @@ import json
 import yaml
 from pathlib import Path
 from typing import Any, Dict, List
-from dotenv import load_dotenv
+from dotenv import dotenv_values, load_dotenv
 
 # Define base dir (services/vision folder)
 BASE_DIR = Path(__file__).resolve().parent.parent
@@ -11,8 +11,10 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 # Project root: 3 levels up from services/vision/config/
 PROJECT_ROOT = BASE_DIR.parent.parent
 
-# Load .env file from services/vision directory
+# Load .env file from services/vision directory. Root .env is read selectively
+# for S3 credentials so host-side Vision does not inherit Docker-only endpoints.
 load_dotenv(BASE_DIR / ".env")
+ROOT_ENV = dotenv_values(PROJECT_ROOT / ".env")
 
 
 class Settings:
@@ -91,8 +93,8 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "s3_endpoint": _get_optional("s3_endpoint", global_settings),
         "s3_region": _get_optional("s3_region", global_settings) or "us-east-1",
         "s3_bucket": _get_optional("s3_bucket", global_settings) or "warehouse",
-        "s3_access_key": _get_optional("s3_access_key", global_settings),
-        "s3_secret_key": _get_optional("s3_secret_key", global_settings),
+        "s3_access_key": _get_s3_credential("s3_access_key", "MINIO_ROOT_USER", global_settings),
+        "s3_secret_key": _get_s3_credential("s3_secret_key", "MINIO_ROOT_PASSWORD", global_settings),
         "s3_path_style": _get_bool("s3_path_style", global_settings, True),
         "frame_sampling_enabled": _get_bool("frame_sampling_enabled", global_settings, True),
         "frame_sample_interval_sec": _get_float("frame_sample_interval_sec", global_settings, 1.0),
@@ -134,6 +136,20 @@ def _get_optional(key: str, global_settings: Dict[str, Any]) -> Any:
     if env_val is not None and env_val != "":
         return env_val
     return global_settings.get(key)
+
+
+def _get_s3_credential(key: str, fallback_env_key: str, global_settings: Dict[str, Any]) -> Any:
+    env_key = key.upper()
+    for candidate in (
+        os.getenv(env_key),
+        ROOT_ENV.get(env_key),
+        os.getenv(fallback_env_key),
+        ROOT_ENV.get(fallback_env_key),
+        global_settings.get(key),
+    ):
+        if candidate is not None and str(candidate) != "":
+            return candidate
+    return None
 
 
 def _get_bool(key: str, global_settings: Dict[str, Any], default: bool) -> bool:
