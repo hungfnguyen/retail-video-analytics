@@ -1,15 +1,25 @@
 package org.rva.realtime;
 
 import org.apache.flink.api.common.eventtime.SerializableTimestampAssigner;
+import org.apache.flink.connector.base.DeliveryGuarantee;
 import org.apache.flink.api.common.eventtime.WatermarkStrategy;
+import org.apache.flink.api.common.serialization.SimpleStringSchema;
+import org.apache.flink.api.common.state.StateTtlConfig;
+import org.apache.flink.api.common.state.ValueState;
+import org.apache.flink.api.common.state.ValueStateDescriptor;
+import org.apache.flink.api.common.time.Time;
 import org.apache.flink.api.common.typeinfo.Types;
 import org.apache.flink.configuration.Configuration;
+import org.apache.flink.connector.pulsar.sink.PulsarSink;
+import org.apache.flink.connector.pulsar.source.PulsarSource;
+import org.apache.flink.connector.pulsar.source.enumerator.cursor.StartCursor;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.JsonNode;
 import org.apache.flink.shaded.jackson2.com.fasterxml.jackson.databind.ObjectMapper;
 import org.apache.flink.streaming.api.CheckpointingMode;
 import org.apache.flink.streaming.api.datastream.DataStream;
 import org.apache.flink.streaming.api.datastream.SingleOutputStreamOperator;
 import org.apache.flink.streaming.api.environment.StreamExecutionEnvironment;
+import org.apache.flink.streaming.api.functions.KeyedProcessFunction;
 import org.apache.flink.streaming.api.functions.ProcessFunction;
 import org.apache.flink.streaming.api.functions.sink.RichSinkFunction;
 import org.apache.flink.util.Collector;
@@ -22,40 +32,30 @@ import redis.clients.jedis.JedisPoolConfig;
 
 import java.time.Duration;
 import java.time.Instant;
+import java.time.OffsetDateTime;
 import java.time.format.DateTimeParseException;
+import java.util.ArrayList;
 import java.util.HashMap;
+import java.util.LinkedHashMap;
+import java.util.List;
 import java.util.Map;
 
 /**
- * RealtimeMetricsJob — Flink DataStream API for low-latency realtime serving.
+ * RealtimeMetricsJob - Flink DataStream API for low-latency realtime serving.
  *
- * Reads detection events directly from Pulsar (no Iceberg wait), parses
- * JSON, validates, routes invalid events to DLQ, and writes live metrics
- * to Redis: person count, heatmap grid, and active track positions.
- *
- * Architecture:
- *   Pulsar source (raw JSON string)
- *     -> ProcessFunction: parse + validate + assign event_time
- *          -> valid: Redis sink (live_count, heatmap, track:active)
- *          -> invalid: DLQ side-output -> log (future: Pulsar DLQ sink)
+ * Reads detection events directly from Pulsar, validates them, deduplicates by
+ * event_id, writes live state to Redis, and publishes invalid events to DLQ.
  */
 public class RealtimeMetricsJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(RealtimeMetricsJob.class);
 
-    // Side output tag for invalid / unparseable events
     private static final OutputTag<String> DLQ_TAG =
             new OutputTag<>("dlq-events", Types.STRING);
 
-    // Grid dimensions for live heatmap
     private static final int GRID_W = 64;
     private static final int GRID_H = 48;
-
     private static final ObjectMapper MAPPER = new ObjectMapper();
-
-    /* ------------------------------------------------------------------ */
-    /*  Event POJO                                                         */
-    /* ------------------------------------------------------------------ */
 
     static class ParsedEvent {
         String eventId;
@@ -70,12 +70,14 @@ public class RealtimeMetricsJob {
         Long[] trackIds;
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Parse + Validate ProcessFunction (supports side outputs)           */
-    /* ------------------------------------------------------------------ */
-
     static class ParseValidateFunction extends ProcessFunction<String, ParsedEvent>
             implements SerializableTimestampAssigner<ParsedEvent> {
+
+        private final String sourceTopic;
+
+        ParseValidateFunction(String sourceTopic) {
+            this.sourceTopic = sourceTopic;
+        }
 
         @Override
         public void processElement(
@@ -85,8 +87,7 @@ public class RealtimeMetricsJob {
             try {
                 root = MAPPER.readTree(rawJson);
             } catch (Exception e) {
-                LOG.warn("Unparseable JSON payload, routing to DLQ: {}", e.toString());
-                ctx.output(DLQ_TAG, rawJson);
+                ctx.output(DLQ_TAG, buildDlqEnvelope("unparseable_json", rawJson));
                 return;
             }
 
@@ -94,63 +95,68 @@ public class RealtimeMetricsJob {
             String cameraId = root.path("source").path("camera_id").asText("");
             String storeId = root.path("source").path("store_id").asText("");
 
-            // --- validate required fields ---
-            if (eventId.isEmpty() || cameraId.isEmpty()) {
-                LOG.warn("Invalid event (missing event_id or camera_id), routing to DLQ");
-                ctx.output(DLQ_TAG, rawJson);
+            if (eventId.isEmpty()) {
+                ctx.output(DLQ_TAG, buildDlqEnvelope("missing_event_id", rawJson));
+                return;
+            }
+            if (cameraId.isEmpty()) {
+                ctx.output(DLQ_TAG, buildDlqEnvelope("missing_camera_id", rawJson));
+                return;
+            }
+            if (storeId.isEmpty()) {
+                ctx.output(DLQ_TAG, buildDlqEnvelope("missing_store_id", rawJson));
                 return;
             }
 
-            // --- parse capture_ts ---
             String captureTsStr = root.path("capture_ts").asText(null);
             long captureMs;
             try {
-                captureMs = Instant.parse(captureTsStr).toEpochMilli();
-            } catch (DateTimeParseException | NullPointerException e) {
-                LOG.warn("Unparseable capture_ts '{}', routing to DLQ", captureTsStr);
-                ctx.output(DLQ_TAG, rawJson);
+                captureMs = parseCaptureMs(captureTsStr);
+            } catch (Exception e) {
+                ctx.output(DLQ_TAG, buildDlqEnvelope("invalid_capture_ts", rawJson));
                 return;
             }
 
-            // --- parse image_size ---
             int imgW = root.path("image_size").path("width").asInt(0);
             int imgH = root.path("image_size").path("height").asInt(0);
+            if (imgW <= 0 || imgH <= 0) {
+                ctx.output(DLQ_TAG, buildDlqEnvelope("invalid_image_size", rawJson));
+                return;
+            }
 
-            // --- parse detections ---
             JsonNode detections = root.path("detections");
             int count = 0;
-            int[] gridXs = new int[0];
-            int[] gridYs = new int[0];
-            Long[] trackIds = new Long[0];
+            List<Integer> gridXList = new ArrayList<>();
+            List<Integer> gridYList = new ArrayList<>();
+            List<Long> trackIdList = new ArrayList<>();
 
             if (detections != null && detections.isArray()) {
-                int n = detections.size();
-                gridXs = new int[n];
-                gridYs = new int[n];
-                trackIds = new Long[n];
-                for (int i = 0; i < n; i++) {
-                    JsonNode det = detections.get(i);
-                    if (det == null) continue;
+                for (JsonNode det : detections) {
+                    if (det == null || det.isNull()) {
+                        continue;
+                    }
 
                     double conf = det.path("conf").asDouble(0.0);
-                    if (conf < 0.4) continue;
+                    if (conf < 0.4) {
+                        continue;
+                    }
 
-                    count++;
-
-                    // compute grid cell from centroid_norm
                     JsonNode cn = det.path("centroid_norm");
                     double nx = cn.path("x").asDouble(0.0);
                     double ny = cn.path("y").asDouble(0.0);
                     int gx = clamp((int) (nx * GRID_W), 0, GRID_W - 1);
                     int gy = clamp((int) (ny * GRID_H), 0, GRID_H - 1);
-                    gridXs[i] = gx;
-                    gridYs[i] = gy;
 
-                    // track_id
+                    Long trackId = null;
                     JsonNode tid = det.get("track_id");
                     if (tid != null && !tid.isNull() && tid.isNumber()) {
-                        trackIds[i] = tid.asLong();
+                        trackId = tid.asLong();
                     }
+
+                    count++;
+                    gridXList.add(gx);
+                    gridYList.add(gy);
+                    trackIdList.add(trackId);
                 }
             }
 
@@ -162,9 +168,9 @@ public class RealtimeMetricsJob {
             evt.imgW = imgW;
             evt.imgH = imgH;
             evt.personCount = count;
-            evt.gridXs = gridXs;
-            evt.gridYs = gridYs;
-            evt.trackIds = trackIds;
+            evt.gridXs = gridXList.stream().mapToInt(Integer::intValue).toArray();
+            evt.gridYs = gridYList.stream().mapToInt(Integer::intValue).toArray();
+            evt.trackIds = trackIdList.toArray(new Long[0]);
 
             out.collect(evt);
         }
@@ -174,14 +180,67 @@ public class RealtimeMetricsJob {
             return evt.captureMs;
         }
 
+        private String buildDlqEnvelope(String reason, String rawJson) {
+            Map<String, Object> envelope = new LinkedHashMap<>();
+            envelope.put("schema_version", "1.0");
+            envelope.put("event_type", "invalid_detection_event");
+            envelope.put("reason", reason);
+            envelope.put("source_topic", sourceTopic);
+            envelope.put("failed_at", Instant.now().toString());
+            envelope.put("raw_payload", rawJson);
+            try {
+                return MAPPER.writeValueAsString(envelope);
+            } catch (Exception e) {
+                return "{\"schema_version\":\"1.0\",\"event_type\":\"invalid_detection_event\",\"reason\":\"dlq_envelope_encode_failed\"}";
+            }
+        }
+
+        private static long parseCaptureMs(String ts) {
+            if (ts == null || ts.isBlank()) {
+                throw new IllegalArgumentException("capture_ts is missing");
+            }
+            try {
+                return Instant.parse(ts).toEpochMilli();
+            } catch (DateTimeParseException ignore) {
+            }
+            return OffsetDateTime.parse(ts).toInstant().toEpochMilli();
+        }
+
         private static int clamp(int val, int min, int max) {
             return Math.max(min, Math.min(max, val));
         }
     }
 
-    /* ------------------------------------------------------------------ */
-    /*  Redis Sink — writes live count, heatmap, active tracks            */
-    /* ------------------------------------------------------------------ */
+    static class DeduplicateByEventIdFunction
+            extends KeyedProcessFunction<String, ParsedEvent, ParsedEvent> {
+
+        private transient ValueState<Boolean> seenState;
+
+        @Override
+        public void open(Configuration parameters) {
+            StateTtlConfig ttlConfig = StateTtlConfig
+                    .newBuilder(Time.minutes(10))
+                    .setUpdateType(StateTtlConfig.UpdateType.OnCreateAndWrite)
+                    .setStateVisibility(StateTtlConfig.StateVisibility.NeverReturnExpired)
+                    .build();
+
+            ValueStateDescriptor<Boolean> descriptor =
+                    new ValueStateDescriptor<>("seen-event-id", Boolean.class);
+            descriptor.enableTimeToLive(ttlConfig);
+            seenState = getRuntimeContext().getState(descriptor);
+        }
+
+        @Override
+        public void processElement(
+                ParsedEvent evt, Context ctx, Collector<ParsedEvent> out) throws Exception {
+            if (Boolean.TRUE.equals(seenState.value())) {
+                LOG.debug("Skipping duplicate event_id={}", evt.eventId);
+                return;
+            }
+            seenState.update(true);
+            out.collect(evt);
+        }
+    }
 
     static class RealtimeRedisSink extends RichSinkFunction<ParsedEvent> {
 
@@ -214,29 +273,30 @@ public class RealtimeMetricsJob {
         @Override
         public void invoke(ParsedEvent evt, Context context) {
             String cameraId = evt.cameraId;
-            if (cameraId == null || cameraId.isEmpty()) return;
+            if (cameraId == null || cameraId.isEmpty()) {
+                return;
+            }
 
             try (Jedis jedis = pool.getResource()) {
-                // 1. Live person count
                 jedis.setex("stats:count:" + cameraId, COUNT_EXPIRE_SEC,
                         String.valueOf(evt.personCount));
 
-                // 2. Live heatmap — ZINCRBY for each detection grid cell
                 String heatKey = "heatmap:live:" + cameraId;
                 for (int i = 0; i < evt.gridXs.length; i++) {
-                    if (evt.gridXs[i] >= 0 && evt.gridYs[i] >= 0) {
-                        jedis.zincrby(heatKey, 1.0,
-                                evt.gridXs[i] + "," + evt.gridYs[i]);
-                    }
+                    jedis.zincrby(heatKey, 1.0,
+                            evt.gridXs[i] + "," + evt.gridYs[i]);
                 }
                 jedis.expire(heatKey, HEATMAP_EXPIRE_SEC);
 
-                // 3. Active tracks — HSET position per track_id
                 String ts = Instant.ofEpochMilli(evt.captureMs).toString();
                 for (int i = 0; i < evt.trackIds.length; i++) {
-                    if (evt.trackIds[i] == null) continue;
+                    if (evt.trackIds[i] == null) {
+                        continue;
+                    }
                     String trackKey = "track:active:" + cameraId + ":" + evt.trackIds[i];
                     Map<String, String> fields = new HashMap<>();
+                    fields.put("event_id", evt.eventId);
+                    fields.put("store_id", evt.storeId);
                     fields.put("last_seen", ts);
                     fields.put("grid_x", String.valueOf(evt.gridXs[i]));
                     fields.put("grid_y", String.valueOf(evt.gridYs[i]));
@@ -254,56 +314,26 @@ public class RealtimeMetricsJob {
                 pool.close();
             }
         }
-
-        private static String getenv(String k, String def) {
-            String v = System.getenv(k);
-            return (v == null || v.isEmpty()) ? def : v;
-        }
     }
-
-    /* ------------------------------------------------------------------ */
-    /*  DLQ Sink — log invalid events for observability                    */
-    /* ------------------------------------------------------------------ */
-
-    static class DlqLogSink extends RichSinkFunction<String> {
-        private static final Logger DLQ_LOG = LoggerFactory.getLogger("rva.dlq");
-
-        @Override
-        public void invoke(String rawJson, Context context) {
-            DLQ_LOG.warn("DLQ event: {}", rawJson.length() > 500
-                    ? rawJson.substring(0, 500) + "..."
-                    : rawJson);
-        }
-    }
-
-    /* ------------------------------------------------------------------ */
-    /*  Main entry                                                         */
-    /* ------------------------------------------------------------------ */
 
     public static void main(String[] args) throws Exception {
-        // --- read configuration from env ---
         String pulsarServiceUrl = getenv("PULSAR_SERVICE_URL", "pulsar://pulsar-broker:6650");
         String pulsarAdminUrl = getenv("PULSAR_ADMIN_URL", "http://pulsar-broker:8080");
         String pulsarTopic = getenv("PULSAR_TOPIC", "persistent://retail/metadata/events");
+        String dlqTopic = getenv("PULSAR_DLQ_TOPIC", "persistent://retail/metadata/dlq-events");
 
-        // --- Flink environment ---
         StreamExecutionEnvironment env = StreamExecutionEnvironment.getExecutionEnvironment();
         env.enableCheckpointing(10_000L, CheckpointingMode.EXACTLY_ONCE);
         env.getCheckpointConfig().setMinPauseBetweenCheckpoints(5_000L);
 
-        // --- Pulsar source ---
-        org.apache.flink.connector.pulsar.source.PulsarSource<String> pulsarSource =
-                org.apache.flink.connector.pulsar.source.PulsarSource.builder()
-                        .setServiceUrl(pulsarServiceUrl)
-                        .setAdminUrl(pulsarAdminUrl)
-                        .setStartCursor(
-                                org.apache.flink.connector.pulsar.source.enumerator.cursor
-                                        .StartCursor.latest())
-                        .setTopics(pulsarTopic)
-                        .setDeserializationSchema(
-                                new org.apache.flink.api.common.serialization.SimpleStringSchema())
-                        .setSubscriptionName("flink-realtime-sub")
-                        .build();
+        PulsarSource<String> pulsarSource = PulsarSource.builder()
+                .setServiceUrl(pulsarServiceUrl)
+                .setAdminUrl(pulsarAdminUrl)
+                .setStartCursor(StartCursor.latest())
+                .setTopics(pulsarTopic)
+                .setDeserializationSchema(new SimpleStringSchema())
+                .setSubscriptionName("flink-realtime-sub")
+                .build();
 
         DataStream<String> rawStream = env.fromSource(
                 pulsarSource,
@@ -311,33 +341,40 @@ public class RealtimeMetricsJob {
                 "pulsar-source"
         );
 
-        // --- Parse + Validate + Assign Watermarks ---
-        ParseValidateFunction parser = new ParseValidateFunction();
+        ParseValidateFunction parser = new ParseValidateFunction(pulsarTopic);
 
         WatermarkStrategy<ParsedEvent> watermarkStrategy = WatermarkStrategy
                 .<ParsedEvent>forBoundedOutOfOrderness(Duration.ofSeconds(5))
                 .withTimestampAssigner(parser)
                 .withIdleness(Duration.ofSeconds(30));
 
-        SingleOutputStreamOperator<ParsedEvent> mainStream = rawStream
+        SingleOutputStreamOperator<ParsedEvent> parsedStream = rawStream
                 .process(parser)
+                .name("parse-validate")
                 .assignTimestampsAndWatermarks(watermarkStrategy)
-                .name("parse-validate");
+                .name("assign-event-time");
 
-        // --- Side output: DLQ events ---
-        DataStream<String> dlqStream = mainStream.getSideOutput(DLQ_TAG);
+        DataStream<String> dlqStream = parsedStream.getSideOutput(DLQ_TAG);
 
-        // --- Redis sink (valid events) ---
-        mainStream
+        parsedStream
+                .keyBy(evt -> evt.eventId)
+                .process(new DeduplicateByEventIdFunction())
+                .name("dedup-event-id")
                 .addSink(new RealtimeRedisSink())
                 .name("redis-sink");
 
-        // --- DLQ sink ---
-        dlqStream
-                .addSink(new DlqLogSink())
-                .name("dlq-sink");
+        PulsarSink<String> dlqSink = PulsarSink.builder()
+                .setServiceUrl(pulsarServiceUrl)
+                .setAdminUrl(pulsarAdminUrl)
+                .setTopics(dlqTopic)
+                .setSerializationSchema(new SimpleStringSchema())
+                .setDeliveryGuarantee(DeliveryGuarantee.AT_LEAST_ONCE)
+                .build();
 
-        // --- Execute ---
+        dlqStream
+                .sinkTo(dlqSink)
+                .name("dlq-pulsar-sink");
+
         env.execute("RealtimeMetricsJob");
     }
 
