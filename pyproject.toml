@@ -9,4 +9,4 @@ dependencies = []
 members = ["services/vision", "packages/*"]
 
 [dependency-groups]
-dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.6"]
+dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.15.13"]
