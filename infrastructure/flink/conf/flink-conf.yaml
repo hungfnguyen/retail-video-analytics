@@ -31,11 +31,13 @@ state.backend.type: filesystem
 state.checkpoints.dir: file:///opt/flink/state/checkpoints
 state.savepoints.dir: file:///opt/flink/state/savepoints
 
-# Cấu hình kết nối MinIO cho Flink System (Checkpointing)
-s3.endpoint: http://minio:9000
-s3.path.style.access: true
-s3.access-key: minioadmin
-s3.secret-key: minioadmin123
+# Cấu hình S3 cho Flink System (Checkpointing)
+# AWS S3 mode: endpoint is auto-resolved by AWS SDK
+# MinIO local mode: uncomment below
+# s3.endpoint: http://minio:9000
+# s3.path.style.access: true
+# s3.access-key: minioadmin
+# s3.secret-key: minioadmin123
 
 # -- Execution Checkpointing --
 # Bắt buộc bật để Iceberg Sink có thể commit data
