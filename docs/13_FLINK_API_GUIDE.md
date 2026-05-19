@@ -196,12 +196,16 @@ env.enableCheckpointing(10_000L, CheckpointingMode.EXACTLY_ONCE);
 SingleOutputStreamOperator<ParsedEvent> mainStream = rawStream.process(parser);
 DataStream<String> dlqStream = mainStream.getSideOutput(DLQ_TAG);
 
-mainStream.addSink(new RealtimeRedisSink());
-dlqStream.addSink(new DlqLogSink());
+mainStream
+    .keyBy(evt -> evt.eventId)
+    .process(new DeduplicateByEventIdFunction())
+    .addSink(new RealtimeRedisSink());
+
+dlqStream.sinkTo(dlqPulsarSink);
 ```
 
 ### Ưu điểm
-- Side output: route invalid/late events ra nhánh riêng
+- Side output: route invalid/late events ra DLQ Pulsar topic
 - Custom sink: Redis, WebSocket, HTTP — bất kỳ thứ gì
 - Keyed state + timer: dedup, window, pattern matching chi tiết
 - Watermark: kiểm soát event time chính xác
@@ -271,4 +275,4 @@ Cần latency <10s?
 | UDTF flatten JSON | [ParseDetections.java](../services/flink-jobs/java/src/main/java/org/rva/silver/udf/ParseDetections.java) |
 | Iceberg streaming read | [SilverJob.java](../services/flink-jobs/java/src/main/java/org/rva/silver/SilverJob.java) |
 | Iceberg upsert | [GoldTrackSummaryJob.java](../services/flink-jobs/java/src/main/java/org/rva/gold/GoldTrackSummaryJob.java) |
-| DataStream + ProcessFunction + Redis sink | [RealtimeMetricsJob.java](../services/flink-jobs/java/src/main/java/org/rva/realtime/RealtimeMetricsJob.java) |
+| DataStream + ProcessFunction + keyed-state dedup + Redis/DLQ sinks | [RealtimeMetricsJob.java](../services/flink-jobs/java/src/main/java/org/rva/realtime/RealtimeMetricsJob.java) |

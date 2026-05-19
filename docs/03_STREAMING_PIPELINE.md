@@ -102,31 +102,29 @@ Validation được thực hiện ở 2 tầng:
 ### Lakehouse path (ParseDetections UDTF)
 - Parse JSON, extract fields, normalize class_name, clamp bbox
 - Filter: confidence >= 0.4, required fields non-null
-- Dedup: ROW_NUMBER() PARTITION BY (store_id, camera_id, frame_index, det_id)
-- Parse errors: logged với Flink metric counter `detection_parse_invalid_total`
-- Bad records giữ nguyên trong bronze_raw để audit
+- Propagate `event_id`, create `detection_id`, dedup with ROW_NUMBER by event/detection key
+- Parse errors are skipped in Silver while raw records remain in `bronze_raw` for audit
 
 ### Realtime path (ParseValidateFunction)
-- Parse JSON, validate event_id + camera_id + capture_ts
-- Invalid events: side output → DLQ Pulsar topic `persistent://retail/metadata/dlq-events`
+- Parse JSON, validate `event_id`, `store_id`, `camera_id`, `capture_ts`, `image_size`
+- Invalid events: side output -> DLQ Pulsar topic `persistent://retail/metadata/dlq-events`
+- Duplicate `event_id`: dropped by Flink keyed state with 10-minute TTL
 - Valid events: Redis live_count, heatmap, active_tracks
 
 ### DLQ
 - Topic: `persistent://retail/metadata/dlq-events` (partitioned, 1 partition)
 - Được tạo trong `init-topics.sh`
 - RealtimeMetricsJob route invalid events vào DLQ qua side-output
-- Log cảnh báo và Flink metric để observability
+- DLQ topic dùng để kiểm tra invalid event và phục vụ observability
 
 ## 6. Deduplication với event_id
 
 ### Sinh event_id
 
-`event_id` được sinh deterministically trong Vision worker:
+`event_id` được sinh deterministically trong `core.models.DetectionFrameEvent` khi Vision emitter serialize event:
 
 ```python
-event_id = hashlib.sha256(
-    f"{camera_id}|{capture_ts_iso}|{frame_index}".encode()
-).hexdigest()[:16]
+event_id = sha256(f"{camera_id}|{capture_ts}|{frame_index}").hexdigest()[:16]
 ```
 
 - 16 ký tự hex (64-bit uniqueness), đủ cho thesis scope
@@ -137,14 +135,14 @@ event_id = hashlib.sha256(
 
 | Path | Cơ chế | Key |
 |---|---|---|
-| Lakehouse (Silver) | `ROW_NUMBER() OVER (PARTITION BY store_id, camera_id, frame_index, COALESCE(det_id, track_id) ORDER BY conf DESC)` WHERE rn=1 | Detection-level |
-| Realtime (Redis) | Redis SET/HSET/ZADD tự nhiên idempotent (last-write-wins) | Key-level |
+| Lakehouse (Silver) | `ROW_NUMBER()` partitioned by `event_id` + detection key | Detection-level |
+| Realtime (Redis) | Flink keyed state dedup before Redis write | `event_id` |
 
 | Thuộc tính | Giá trị |
 |---|---|
 | Key | `event_id` |
-| State type | Flink keyed state hoặc RocksDB state |
-| TTL | 10 đến 30 phút |
+| State type | Flink keyed state |
+| TTL | 10 phút |
 | Duplicate action | Drop và tăng metric |
 
 Lý do cần dedup:
@@ -293,7 +291,7 @@ Lakehouse commit vào Iceberg thường gắn với checkpoint. Vì vậy histor
 |---|---|---|
 | Iceberg | Exactly-once với Flink checkpoint nếu cấu hình đúng | Phù hợp lakehouse path |
 | PostgreSQL | Có thể idempotent với unique key | Không mặc định exactly-once |
-| Redis | At-least-once | Dùng SET/TTL/idempotent key để giảm sai lệch |
+| Redis | At-least-once | Dedup bằng Flink state trước khi ghi Redis; vẫn không phải exactly-once tuyệt đối |
 | Prometheus metrics | At-least-once hoặc best-effort | Dùng để quan sát, không làm source of truth |
 
 Kết luận cho báo cáo: hệ thống đạt exactly-once cho analytical storage, còn realtime serving chấp nhận at-least-once có kiểm soát.
