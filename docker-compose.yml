@@ -12,8 +12,9 @@ services:
       - ./infrastructure/pulsar/scripts:/pulsar/scripts
       - ./infrastructure/pulsar/schema:/pulsar/schema
       - pulsar_data:/pulsar/data
+      - ./logs/pulsar:/pulsar/logs
     environment:
-      PULSAR_MEM: "-Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"
+      PULSAR_MEM: "-Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/admin/v2/brokers/health"]
       interval: 10s
@@ -52,6 +53,7 @@ services:
       - ./infrastructure/flink/conf:/opt/flink/conf
       - flink_state:/opt/flink/state
       - ./services/flink-jobs/sql:/opt/flink/usrlib/sql
+      - ./logs/flink:/opt/flink/log
     environment:
       AWS_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
@@ -241,6 +243,7 @@ services:
     volumes:
       - ./infrastructure/trino/etc:/etc/trino
       - trino_data:/data/trino
+      - ./logs/trino:/data/trino/var/log
     environment:
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -275,6 +278,7 @@ services:
         - ./infrastructure/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
         - ./infrastructure/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
         - grafana_data:/var/lib/grafana
+        - ./logs/grafana:/var/log/grafana
       depends_on:
         - trino
       restart: unless-stopped

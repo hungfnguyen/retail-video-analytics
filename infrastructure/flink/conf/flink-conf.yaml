@@ -6,11 +6,11 @@
 jobmanager.rpc.address: flink-jobmanager
 jobmanager.rpc.port: 6123
 jobmanager.bind-host: 0.0.0.0
-jobmanager.memory.process.size: 1600m
+jobmanager.memory.process.size: 800m
 
 taskmanager.bind-host: 0.0.0.0
-taskmanager.memory.process.size: 3200m
-taskmanager.numberOfTaskSlots: 4
+taskmanager.memory.process.size: 1200m
+taskmanager.numberOfTaskSlots: 2
 
 # -- REST Interface (Web UI) --
 rest.address: flink-jobmanager
@@ -51,9 +51,3 @@ env.java.opts: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.bas
 env.java.opts.jobmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
 env.java.opts.taskmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
 
-# -- Resource Overrides --
-taskmanager.memory.process.size: 8192m
-taskmanager.numberOfTaskSlots: 8
-parallelism.default: 1
-
-query.server.port: 6125
