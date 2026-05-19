@@ -6,10 +6,10 @@ SCHEMA_VERSION = "1.0"
 # Topic naming
 TOPIC_DETECTION_FRAMES = "persistent://retail/metadata/events"
 TOPIC_MEDIA_EVENTS = "persistent://retail/metadata/media-events"
+TOPIC_DLQ = "persistent://retail/metadata/dlq-events"
 TOPIC_TRACK_LIFECYCLE = "persistent://retail/ops/track-lifecycle-v1"
 TOPIC_ALERTS = "persistent://retail/ops/alerts-v1"
 TOPIC_SYSTEM_METRICS = "persistent://retail/ops/system-metrics-v1"
-TOPIC_DLQ = "persistent://retail/metadata/dlq-events"
 
 # Detection
 DEFAULT_CLASS_FILTER = [0]  # person only

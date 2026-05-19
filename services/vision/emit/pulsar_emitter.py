@@ -82,20 +82,26 @@ class PulsarEmitter:
         payload: bytes,
         frame_index: int,
         topic: str,
+        *,
+        partition_key: Optional[str] = None,
     ) -> bool:
         """
         Gửi message với exponential backoff retry.
-        
+
         Args:
             payload: Dữ liệu JSON đã encode
             frame_index: Frame index để logging
-            
+            partition_key: Key để Pulsar route vào đúng partition (camera_id)
+
         Returns:
             True nếu gửi thành công, False nếu thất bại sau tất cả retries
         """
         for attempt in range(self.max_retries):
             try:
-                producer.send(payload)
+                if partition_key:
+                    producer.send(payload, partition_key=partition_key)
+                else:
+                    producer.send(payload)
                 return True
             except Exception as e:
                 backoff_time = self.initial_backoff * (2 ** attempt)
@@ -120,8 +126,8 @@ class PulsarEmitter:
         
         return False
 
-    def _send_with_retry(self, payload: bytes, frame_index: int) -> bool:
-        return self._send_payload_with_retry(self.producer, payload, frame_index, self.topic)
+    def _send_with_retry(self, payload: bytes, frame_index: int, *, partition_key: Optional[str] = None) -> bool:
+        return self._send_payload_with_retry(self.producer, payload, frame_index, self.topic, partition_key=partition_key)
 
     def emit_frame(
         self,
@@ -166,7 +172,10 @@ class PulsarEmitter:
             )
             payload = event.to_pulsar_payload()
 
-            success = self._send_with_retry(payload, frame_index)
+            # partition_key = camera_id → mỗi camera luôn vào cùng 1 partition, giữ ordering
+            partition_key = source.get("camera_id") if isinstance(source, dict) else getattr(source, "camera_id", None)
+
+            success = self._send_with_retry(payload, frame_index, partition_key=partition_key)
 
             # Log nhẹ để theo dõi tiến trình (mỗi 30 frames)
             if success and frame_index % 30 == 0:
