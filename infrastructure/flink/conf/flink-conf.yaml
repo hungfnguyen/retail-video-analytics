@@ -9,8 +9,8 @@ jobmanager.bind-host: 0.0.0.0
 jobmanager.memory.process.size: 800m
 
 taskmanager.bind-host: 0.0.0.0
-taskmanager.memory.process.size: 1200m
-taskmanager.numberOfTaskSlots: 2
+taskmanager.memory.process.size: 1600m
+taskmanager.numberOfTaskSlots: 8
 
 # -- REST Interface (Web UI) --
 rest.address: flink-jobmanager
