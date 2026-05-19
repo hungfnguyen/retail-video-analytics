@@ -1,4 +1,4 @@
-.PHONY: help lint test test-cov run-vision docker-up docker-down docker-logs clean
+.PHONY: help lint test test-cov run-vision docker-up docker-down docker-dev-up docker-dev-down docker-logs clean
 
 # Default target
 help:
@@ -9,7 +9,8 @@ help:
 	@echo "  make test          Run all tests"
 	@echo "  make test-cov      Run tests with coverage report"
 	@echo "  make run-vision    Start multi-camera vision pipeline"
-	@echo "  make docker-up     Start full infrastructure (Pulsar, Flink, MinIO, ...)"
+	@echo "  make docker-up     Start full infrastructure (AWS S3)"
+	@echo "  make docker-dev-up Start infrastructure with MinIO local (no AWS)"
 	@echo "  make docker-down   Stop all infrastructure"
 	@echo "  make docker-logs   Tail docker compose logs"
 	@echo "  make sync          Install all workspace dependencies"
@@ -35,6 +36,12 @@ run-vision:
 
 docker-up:
 	docker compose up -d
+
+docker-dev-up:
+	docker compose -f docker-compose.dev.yml up -d
+
+docker-dev-down:
+	docker compose -f docker-compose.dev.yml down
 
 docker-down:
 	docker compose down
