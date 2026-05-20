@@ -1,12 +1,16 @@
-﻿# Retail Video Analytics (Lakehouse, Realtime)
+# Retail Video Analytics — Realtime + Lakehouse
 
-> Realtime pipeline thu thập & xử lý **metadata video** cho chuỗi bán lẻ.
-> Stack: **YOLO11 + BoTSORT → Pulsar → Flink → Iceberg on MinIO → Trino → Grafana**
+> Đồ án tốt nghiệp Data Engineering: hệ thống realtime pipeline thu thập & xử lý metadata video cho chuỗi bán lẻ.
+> Stack: **YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/MinIO → Trino → Grafana**
 
-> Phase 1 refactor note: runtime code is under `services/`, while the original thesis E2E behavior is preserved. FastAPI now has a mock dashboard API skeleton; Redis, PostgreSQL, and Streamlit are not integrated yet.
+---
 
-![Architecture](docs/images/architecture.png)
-- **RVA - Traffic Patterns**: Visits per hour x day-of-week v… visit duration theo time-of-day (ph?c v? planning ca l?m, khuy?n m?i)
+## Yêu cầu hệ thống
+
+- Docker & Docker Compose
+- Python 3.12+ (vision module)
+- Java 11+ & Maven 3.9+ (chỉ cần khi build lại Flink jobs)
+- GPU CUDA 12.4 (tùy chọn, YOLO11 chạy được trên CPU)
 
 ---
 
@@ -26,7 +30,6 @@
 
 ```text
 services/
-├── api/             # FastAPI dashboard gateway with mock Live API contract
 ├── vision/          # YOLO11 + tracker + Pulsar producer
 └── flink-jobs/      # Java Flink jobs: Bronze, Silver, Gold Track Summary
 
@@ -40,100 +43,156 @@ infrastructure/
 
 ---
 
-## 🏗️ Kiến trúc
+## Kiến trúc
 
 ```
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│   Vision AI     │     │     Pulsar      │     │     Flink       │
-│  YOLO11+BoTSORT │────▶│ metadata/events │────▶│ Bronze→Silver→  │
-│   (detect/track)│     │                 │     │     Gold        │
-└─────────────────┘     └─────────────────┘     └────────┬────────┘
-        │
-        │ sampled JPEG / alert clip
-        ▼
-┌─────────────────┐
-│   MinIO / S3    │
-│ frames/, clips/ │
-└─────────────────┘
-                                                         │
-                                                         ▼
-┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
-│    Grafana      │◀────│     Trino       │◀────│    Iceberg      │
-│  (dashboards)   │     │   (SQL query)   │     │    (MinIO)      │
-└─────────────────┘     └─────────────────┘     └─────────────────┘
+Vision (YOLO11 + BoTSORT)
+  │
+  ├── metadata JSON → Pulsar (persistent://retail/metadata/events)
+  │                         │
+  │           ┌─────────────┴──────────────┐
+  │           │                            │
+  │    [Lakehouse Path]              [Realtime Path]
+  │    Table API, ckpt 60s          DataStream API, ckpt 10s
+  │    latency 2-3 min              latency <5s
+  │           │                            │
+  │    Bronze → Iceberg              Redis live_count
+  │    Silver → Iceberg              Redis heatmap (ZINCRBY)
+  │    Gold   → Iceberg              Redis active tracks (HSET)
+  │           │                      DLQ → Pulsar dlq-events
+  │    Trino → Grafana                     │
+  │    (historical)                  FastAPI → Streamlit
+  │                                       (chưa implement)
+  │
+  └── sampled JPEG / alert MP4 → MinIO (S3)
 ```
 
 ---
 
-## ⚙️ Yêu cầu & Cài đặt
+## Cổng dịch vụ
 
-### Yêu cầu hệ thống
-- Docker & Docker Compose
-- Python 3.12+ (cho Vision module)
-- (Tùy chọn) GPU CUDA 12.4 cho YOLO11
+| Service | Port | URL | Credentials |
+|---------|------|-----|-------------|
+| Flink UI | 8081 | http://localhost:8081 | — |
+| Grafana | 3000 | http://localhost:3000 | admin / admin |
+| Trino | 8083 | http://localhost:8083 | — |
+| Pulsar Admin | 8084 | http://localhost:8084 | — |
+| MinIO Console | 9001 | http://localhost:9001 | minioadmin / minioadmin123 |
+| MinIO API | 9000 | http://localhost:9000 | — |
+| Iceberg REST | 8181 | http://localhost:8181 | — |
+| Pulsar Broker | 6650 | pulsar://localhost:6650 | — |
+| Redis | 6379 | redis://localhost:6379 | — |
 
-### 1. Clone & Setup
+---
 
-```bash
-# Clone repository
-git clone https://github.com/hungfnguyen/retail-video-analytics.git
-cd retail-video-analytics
+## Verify hệ thống — từng layer
 
-# Tạo file .env từ template
-cp .env.example .env
-# Chỉnh sửa .env với credentials của bạn
-```
-
-### 2. Khởi chạy Infrastructure
-
-```bash
-# Start toàn bộ stack (chờ 1-2 phút)
-docker compose up -d --build
-
-# Kiểm tra services
-docker ps
-```
-
-> 💡 **Tự động hóa**: Service `flink-job-submitter` sẽ tự động submit 3 Flink jobs hiện tại (Bronze, Silver, Gold Track Summary) khi stack khởi động xong.
-
-### 3. Setup Vision Module
+### Infrastructure health
 
 ```bash
-# Cài uv (một lần)
-curl -LsSf https://astral.sh/uv/install.sh | sh
+# Tất cả services phải healthy / running
+docker compose ps
 
-# Sync dependencies
-uv sync --all-packages
+# Log của 1 service cụ thể
+docker compose logs flink-jobmanager
+docker compose logs redis
 ```
 
-### 4. Chạy Vision AI
+### Pulsar — topics & messages
 
 ```bash
-uv run --package rva-vision python services/vision/main.py
+# Kiểm tra topics đã tạo
+docker exec pulsar-broker bin/pulsar-admin topics list retail/metadata
+
+# Xem stats topic chính
+docker exec pulsar-broker bin/pulsar-admin topics stats \
+  persistent://retail/metadata/events
+
+# Consume vài message để verify event_id
+docker exec pulsar-broker bin/pulsar-client consume \
+  persistent://retail/metadata/events \
+  -s verify-sub -n 3
+
+# DLQ stats
+docker exec pulsar-broker bin/pulsar-admin topics stats \
+  persistent://retail/metadata/dlq-events
 ```
 
-> Vision module tự động stream metadata vào Pulsar topic `persistent://retail/metadata/events`.
-> Khi `media_upload_enabled: true`, Vision cũng upload sampled frames vào `s3://warehouse/frames/...` và publish media artifact events vào `persistent://retail/metadata/media-events`.
+### Flink — 4 jobs running
 
-### 5. Kiểm tra media upload trên MinIO
+```bash
+# Số jobs đang chạy (expected: 4)
+curl -s http://localhost:8081/jobs/overview | python3 -m json.tool | grep state
+
+# Hoặc kiểm tra trong browser: http://localhost:8081
+```
+
+### Redis — realtime state
+
+```bash
+# Live person count (cập nhật mỗi frame, TTL 5s)
+docker exec redis redis-cli GET stats:count:cam_01
+
+# Heatmap top cells (TTL 60s)
+docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
+
+# Active tracks (TTL 30s)
+docker exec redis redis-cli KEYS "track:active:cam_01:*"
+
+# Tất cả Redis keys
+docker exec redis redis-cli KEYS "*"
+```
+
+### Iceberg — Bronze / Silver / Gold
+
+```bash
+# Query Bronze count
+docker exec trino trino --execute \
+  "SELECT COUNT(*) AS total FROM lakehouse.rva.bronze_raw"
+
+# Query Silver count  
+docker exec trino trino --execute \
+  "SELECT camera_id, COUNT(*) AS detections FROM lakehouse.rva.silver_detections GROUP BY camera_id"
+
+# Query Gold track summary
+docker exec trino trino --execute \
+  "SELECT track_id, duration_sec, frames FROM lakehouse.rva.gold_track_summary LIMIT 10"
+
+# Kiểm tra event_id trong Bronze
+docker exec trino trino --execute \
+  "SELECT event_id, camera_id, frame_index FROM lakehouse.rva.bronze_raw LIMIT 5"
+```
+
+### MinIO — sampled frames & clips
 
 ```bash
 # List sampled JPEG frames
 docker exec mc mc ls --recursive local/warehouse/frames
 
-# List alert clips nếu đã bật alert_clip_enabled
+# List alert clips
 docker exec mc mc ls --recursive local/warehouse/clips
+
+# Lấy signed URL cho 1 file (thay KEY bằng path thực)
+docker exec mc mc share download local/warehouse/frames/2026-05-17/cam_01/...
 ```
 
-Để test video clip upload, bật trong `configs/cameras.yaml`:
+### DLQ — invalid events
 
-```yaml
-settings:
-  alert_clip_enabled: true
-  alert_density_threshold: 1
+```bash
+# Xem stats DLQ topic
+docker exec pulsar-broker bin/pulsar-admin topics stats \
+  persistent://retail/metadata/dlq-events
+
+# Consume DLQ messages
+docker exec pulsar-broker bin/pulsar-client consume \
+  persistent://retail/metadata/dlq-events \
+  -s dlq-verify-sub -n 3
+
+# Inject 1 event lỗi để test DLQ
+docker exec pulsar-broker bin/pulsar-client produce \
+  persistent://retail/metadata/events \
+  --messages '{"invalid": true, "missing_event_id": true}'
 ```
-
-Sau khi test xong nên đưa `alert_density_threshold` về giá trị thực tế hơn, ví dụ `10`, để tránh tạo quá nhiều clip.
 
 ---
 
@@ -169,73 +228,90 @@ Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/visi
 
 | Biến | Mặc định | Mô tả |
 |------|----------|-------|
-| `MODEL_NAME` | `yolo11l.pt` | Model YOLO (n/s/m/l/x) |
-| `TRACKER_TYPE` | `botsort` | Tracker: `botsort` hoặc `bytetrack` |
-| `CONF_THRES` | `0.25` | Ngưỡng confidence |
-| `CLASS_FILTER` | `[0]` | Filter class (0=person) |
-| `CAMERA_ID` | `cam_01` | ID camera |
-| `STORE_ID` | `store_01` | ID cửa hàng |
-
-Media upload cấu hình chính trong `configs/cameras.yaml`:
-
-| Key | Mặc định | Mô tả |
-|-----|----------|-------|
-| `media_upload_enabled` | `true` | Bật media plane S3/MinIO |
-| `s3_endpoint` | `http://localhost:9000` | Endpoint MinIO khi Vision chạy trên host |
-| `s3_bucket` | `warehouse` | Bucket local dùng chung với Iceberg demo |
-| `frame_sampling_enabled` | `true` | Upload sampled JPEG |
-| `frame_sample_interval_sec` | `1` | 1 frame/giây/camera |
-| `alert_clip_enabled` | `false` | Bật alert MP4 clip extractor |
+| `S3_ENDPOINT` | `http://localhost:9000` | MinIO endpoint (Vision trên host) |
+| `S3_ACCESS_KEY` | `minioadmin` | Access key |
+| `S3_SECRET_KEY` | `minioadmin123` | Secret key |
+| `S3_BUCKET` | `warehouse` | Bucket |
+| `S3_REGION` | `us-east-1` | Region |
+| `CAMERA_ID` | `cam_01` | Camera ID (single-cam mode) |
+| `STORE_ID` | `store_01` | Store ID (single-cam mode) |
+| `MODEL_NAME` | `yolo11l.pt` | YOLO model |
+| `TRACKER_TYPE` | `botsort` | `botsort` hoặc `bytetrack` |
+| `CONF_THRES` | `0.25` | Confidence threshold |
 
 ---
 
-## 📚 Tài liệu
+## Cấu trúc thư mục
 
-- 📄 **Documentation index**: [`docs/README.md`](docs/README.md)
-- 📄 **S3 Infrastructure design**: [`docs/10_S3_INFRASTRUCTURE.md`](docs/10_S3_INFRASTRUCTURE.md)
-- 📄 **Phase 1 refactor note**: [`docs/note/REFACTOR_STRATEGY_PHASED_MIGRATION.md`](docs/note/REFACTOR_STRATEGY_PHASED_MIGRATION.md)
+```
+retail-video-analytics/
+├── configs/              # cameras.yaml, logging.yaml
+├── data/videos/          # video1.mp4, video2.mp4
+├── docs/                 # 14 tài liệu kiến trúc
+├── infrastructure/       # Docker config: Pulsar, Flink, MinIO, Trino, Grafana
+├── packages/             # Shared Python packages
+│   ├── core/             # Pydantic models, constants, settings, time utils
+│   ├── messaging/        # Pulsar producer/consumer wrappers
+│   └── storage/          # S3 client, Redis client
+├── services/
+│   ├── vision/           # YOLO detect → track → emit (Python)
+│   └── flink-jobs/       # Flink Java jobs (Bronze, Silver, Gold, Realtime)
+├── tests/                # unit/, integration/, e2e/
+├── docker-compose.yml
+├── Makefile
+└── pyproject.toml
+```
 
 ---
 
-## 🛠️ Troubleshooting
+## Troubleshooting
 
-### Kiểm tra Flink jobs
+### Không thấy data trong Trino
+Flink checkpoint mặc định 60s → chờ ít nhất 90 giây sau khi chạy Vision.
 
+### Flink job FAILED
 ```bash
-# Xem số lượng jobs đang chạy (expected: 3)
-curl -s http://localhost:8081/jobs/overview | jq '.jobs | length'
+# Xem log Flink
+docker compose logs flink-jobmanager | tail -50
+docker compose logs flink-taskmanager | tail -50
 
-# Hoặc mở Flink UI: http://localhost:8081
+# Xem exception trong Flink UI → job → exceptions
 ```
 
-### Data không xuất hiện trong Trino
-
-Flink checkpoint mặc định 60s, chờ 60-90 giây sau khi chạy vision.
-
+### Redis không có data
 ```bash
-# Query kiểm tra Bronze
-docker exec trino trino --execute \
-  "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
+# Kiểm tra RealtimeMetricsJob đang RUNNING trong Flink UI
+# Kiểm tra Redis container đang chạy
+docker compose exec redis redis-cli ping
 ```
 
-### Grafana báo thiếu time field
-
-- Đảm bảo truy vấn Timeseries trả về cột `time` kiểu TIMESTAMP (dùng `ts_hour`/`ts_minute`, tránh `HOUR(ts_hour)` hoặc chỉ `DATE(ts_hour)`).
-
-### Reset toàn bộ
-
+### Reset do schema thay đổi (thêm cột event_id)
 ```bash
-docker compose down -v
+docker compose down -v    # Xóa cả volumes (Iceberg data)
 docker compose up -d --build
 ```
 
+### Port conflict
+Sửa port mapping trong `docker-compose.yml`:
+- Pulsar admin: `8084:8080` (8080 thường bị chiếm)
+- Trino: `8083:8080` (8080 thường bị chiếm)
+- Flink UI: `8081:8081`
+
 ---
 
-## 👥 Contributors
+## Tài liệu
+
+- [Kiến trúc đích](docs/01_TARGET_ARCHITECTURE.md)
+- [Data flow & contracts](docs/02_DATA_FLOW_AND_CONTRACTS.md)
+- [Streaming pipeline — dual-path](docs/03_STREAMING_PIPELINE.md)
+- [Lakehouse design (Bronze/Silver/Gold)](docs/04_LAKEHOUSE_DESIGN.md)
+- [Flink API Guide — DataStream vs Table API](docs/13_FLINK_API_GUIDE.md)
+- [Vision multi-camera flow](docs/11_VISION_MULTI_CAMERA_FLOW.md)
+- [Implementation roadmap (M0-M8)](docs/08_IMPLEMENTATION_ROADMAP.md)
+
+---
+
+## Contributors
 
 - [Nguyễn Tấn Hùng](https://github.com/hungfnguyen)
 - [Nguyễn Công Đôn](https://github.com/CongDon1207)
-
----
-
-**📝 Last Updated:** May 6, 2026

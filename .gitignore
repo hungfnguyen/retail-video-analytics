@@ -78,3 +78,7 @@ HANDOFF.md
 
 # Java/Target (nếu lỡ dính)
 **/target/
+
+.metals
+
+.antigravitycli

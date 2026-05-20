@@ -138,8 +138,8 @@ s3://retail-video-analytics/clips/2026-05-07/store_001/cam_01/alert-cam_01-20260
 S3_ENDPOINT=https://s3.ap-southeast-1.amazonaws.com
 S3_REGION=ap-southeast-1
 S3_BUCKET=retail-video-analytics
-S3_ACCESS_KEY=AKIAIOSFODNN7EXAMPLE
-S3_SECRET_KEY=wJalrXUtnFEMI/K7MDENG/bPxRfiCYEXAMPLEKEY
+S3_ACCESS_KEY=<your-access-key>
+S3_SECRET_KEY=<your-secret-key>
 
 # Iceberg warehouse
 ICEBERG_WAREHOUSE=s3://retail-video-analytics/lakehouse

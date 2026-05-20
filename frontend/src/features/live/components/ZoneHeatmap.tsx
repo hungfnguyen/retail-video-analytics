@@ -10,7 +10,7 @@ const cols = [1, 2, 3, 4, 5, 6, 7]
 
 function getValue(cells: ZoneHeatmapCell[], row: string, col: number) {
   return cells.find((cell) => cell.zone_row === row && cell.zone_col === col)
-    ?.value ?? 24
+    ?.value ?? 0
 }
 
 export function ZoneHeatmap({ cells }: ZoneHeatmapProps) {
