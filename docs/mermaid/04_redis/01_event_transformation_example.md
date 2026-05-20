@@ -24,6 +24,8 @@ sequenceDiagram
     participant Pulsar as Apache Pulsar
     participant Flink as Flink Job (Java)
     participant Redis as Redis State Store
+    participant API as FastAPI BFF (Python)
+    participant UI as React UI
 
     Cam->>Vision: Frame 1500 (Pixel matrix: 1920x1080)
     Note over Vision: 1. YOLO detect & BoTSORT track<br/>2. Chuẩn hoá BBox & tính Centroid<br/>3. Sinh event_id bằng SHA256
@@ -32,7 +34,11 @@ sequenceDiagram
     Pulsar->>Flink: Pull JSON stream
     Note over Flink: 1. Lọc nhiễu (confidence >= 0.4)<br/>2. Chống trùng lặp (Dedup)<br/>3. Tính toán Grid Heatmap (gx, gy)
     Flink->>Redis: Gửi các tập lệnh ghi (Jedis Commands)
-    Note over Redis: 1. Cập nhật String Live Count (stats:count)<br/>2. Tích luỹ ZSET Heatmap (ZINCRBY)<br/>3. Lưu/Cập nhật Hash Active Track (HSET + EXPIRE)
+    Note over Redis: 1. Cập nhật String Live Count (stats:count)<br/>2. Tích luỹ ZSET Heatmap (ZINCRBY)<br/>3. Lưu/Cập nhật Hash Active Track (HSET + EXPIRE)<br/>4. Lưu String Live Frame Snapshot (SETEX)
+    UI->>API: GET /api/v1/live/cam_01/dashboard (1s Polling)
+    API->>Redis: GET / SCAN / ZREVRANGE
+    Redis-->>API: Trả về live data thô
+    API-->>UI: Trả về LiveDashboardData JSON (đã normalize toạ độ)
 ```
 
 ---
@@ -153,15 +159,41 @@ Flink gửi các lệnh Jedis TCP tới Redis. Trạng thái trong Redis biến 
 #### Lệnh 3: Lưu vết hành trình khách hàng đang hoạt động (Active Track)
 *   **Lệnh gửi đi**:
     ```redis
-    HSET track:active:cam_01:42 last_seen "2026-05-20T17:01:00.000Z" grid_x "35" grid_y "36" store_id "store_001" event_id "58426736655b6ee8"
+    HSET track:active:cam_01:42 \
+      last_seen "2026-05-20T17:01:00.000Z" \
+      grid_x "35" \
+      grid_y "36" \
+      bbox_x "0.50" \
+      bbox_y "0.50" \
+      bbox_w "0.10" \
+      bbox_h "0.50" \
+      confidence "0.85" \
+      store_id "store_001" \
+      event_id "58426736655b6ee8"
     EXPIRE track:active:cam_01:42 30
     ```
 *   **Dữ liệu lưu tại Redis**:
     *   Key: `track:active:cam_01:42` (Type: Hash)
     *   Fields:
-        *   `last_seen`: `"2026-05-20T17:01:00.000Z"` (giúp xác định thời điểm cuối cùng khách còn đứng trước camera).
+        *   `last_seen`: `"2026-05-20T17:01:00.000Z"`
         *   `grid_x`: `"35"`
-        *   `grid_y`: `"36"` (giúp xác định vị trí hiện tại của khách).
+        *   `grid_y`: `"36"`
+        *   `bbox_x`: `"0.50"`
+        *   `bbox_y`: `"0.50"`
+        *   `bbox_w`: `"0.10"`
+        *   `bbox_h`: `"0.50"`
+        *   `confidence`: `"0.85"`
         *   `store_id`: `"store_001"`
-        *   `event_id`: `"58426736655b6ee8"` (dùng để đối chiếu/join thông tin nếu cần).
-    *   Thời gian tồn tại (TTL): 30 giây (nếu khách di chuyển ra ngoài vùng khuất của camera quá 30 giây, key này tự động bị hủy).
+        *   `event_id`: `"58426736655b6ee8"`
+    *   Thời gian tồn tại (TTL): 30 giây.
+
+#### Lệnh 4: Lưu thông tin snapshot khung hình (Live Frame Snapshot)
+*   **Lệnh gửi đi**:
+    ```redis
+    SETEX live:frame:cam_01 10 "{\"schema_version\":\"1.0\",\"event_id\":\"58426736655b6ee8\",\"camera_id\":\"cam_01\",\"store_id\":\"store_001\",\"frame_index\":1500,\"capture_ts\":\"2026-05-20T17:01:00.000Z\",\"image_size\":{\"width\":1920,\"height\":1080},\"detections\":[{\"track_id\":42,\"label\":\"person\",\"confidence\":0.85,\"bbox_norm\":{\"x\":0.50,\"y\":0.50,\"w\":0.10,\"h\":0.50},\"centroid_norm\":{\"x\":0.55,\"y\":0.75},\"grid_x\":35,\"grid_y\":36}]}"
+    ```
+*   **Dữ liệu lưu tại Redis**:
+    *   Key: `live:frame:cam_01` (Type: String)
+    *   Value: Chuỗi JSON snapshot đầy đủ toạ độ của frame.
+    *   Thời gian tồn tại (TTL): 10 giây.
+
