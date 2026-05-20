@@ -31,23 +31,30 @@ flowchart TD
         H -->|1. SETEX stats:count:cam_id count| I[(String: Live Count)]
         H -->|2. ZINCRBY heatmap:live:cam_id 1 gx,gy| J[(ZSET: Live Heatmap)]
         H -->|3. HSET track:active:cam_id:track_id metadata| K[(Hash: Active Tracks)]
+        H -->|4. SETEX live:frame:cam_id snapshot| M[(String: Live Frame Snapshot)]
     end
 
-    subgraph Client ["5. Dashboard UI (Streamlit/Web)"]
-        L[UI Polls Redis] -->|GET / ZREVRANGE / HGETALL| I & J & K
+    subgraph API ["5. FastAPI BFF (Python Backend)"]
+        N[Endpoint: /api/v1/live/camera_id/dashboard] -->|Query Redis| I & J & K & M
+    end
+
+    subgraph Client ["6. React Dashboard UI"]
+        O[React Hooks: useLiveData] -->|HTTP GET Polling 1s| N
     end
 
     classDef edgeStyle fill:#e1f5fe,stroke:#0288d1,stroke-width:2px;
     classDef msgStyle fill:#efebe9,stroke:#5d4037,stroke-width:2px;
     classDef procStyle fill:#e8f5e9,stroke:#2e7d32,stroke-width:2px;
     classDef serveStyle fill:#ffebee,stroke:#c62828,stroke-width:2px;
+    classDef apiStyle fill:#f3e5f5,stroke:#8e24aa,stroke-width:2px;
     classDef clientStyle fill:#fff8e1,stroke:#f57f17,stroke-width:2px;
 
     class A,B,C edgeStyle;
     class D,D1,D2 msgStyle;
     class E,F,G,H procStyle;
-    class I,J,K serveStyle;
-    class L clientStyle;
+    class I,J,K,M serveStyle;
+    class N apiStyle;
+    class O clientStyle;
 ```
 
 ---
@@ -88,7 +95,8 @@ flowchart TD
 *   **Dữ liệu có được tính toán tại Redis không? CÓ!**
     *   **Live Heatmap (ZSET)**: Khi Flink gọi lệnh `ZINCRBY heatmap:live:{camera_id} 1 "gx,gy"`, Redis thực hiện phép cộng dồn tăng điểm số (score) cho toạ độ ô lưới đó trong bộ nhớ RAM. Redis liên tục duy trì sắp xếp thứ tự các ô lưới có điểm số cao nhất.
     *   **Live Counts (String)**: Flink đếm số người trong frame đó và ghi đè giá trị bằng `SETEX` kèm TTL 5 giây. Phép tính "đếm" (COUNT) thực chất đã được Flink thực hiện trước bằng hàm Java Stream, Redis chỉ lưu trữ trạng thái cuối cùng.
-    *   **Active Tracks (Hash)**: Lưu trữ và cập nhật trạng thái chi tiết của từng track ID. Tính toán ngầm ở đây chính là cơ chế **quản lý vòng đời khách hàng** dựa trên **TTL 30 giây**. Khi khách hàng rời khỏi cửa hàng, Flink không còn gửi thông tin cập nhật của track đó nữa, sau 30 giây Redis sẽ tự động tính toán xoá bỏ Key này để dọn dẹp bộ nhớ.
+    *   **Live Frame Snapshot (String)**: Ghi nhận snapshot của frame hiện tại `live:frame:{camera_id}` lưu trữ dưới dạng JSON string với TTL 10 giây chứa đầy đủ danh sách detections gồm các toạ độ `bbox_norm` và `centroid_norm` thô từ YOLO để BFF (FastAPI) phục vụ trực tiếp cho React UI vẽ Bounding Box thật.
+    *   **Active Tracks (Hash)**: Lưu trữ và cập nhật trạng thái chi tiết của từng track ID. Flink ghi các toạ độ lưới cùng với toạ độ Bounding Box thật (`bbox_x`, `bbox_y`, `bbox_w`, `bbox_h`) và độ tin cậy `confidence` vào Hash `track:active:{camera_id}:{track_id}` với TTL 30 giây. Khi khách hàng rời khỏi cửa hàng, Flink không còn gửi thông tin cập nhật của track đó nữa, sau 30 giây Redis sẽ tự động xoá bỏ Key này để dọn dẹp bộ nhớ.
 
 ---
 
@@ -99,5 +107,5 @@ flowchart TD
 | **Lọc và làm sạch** | Loại bỏ phát hiện nhiễu (confidence < 0.4), loại trùng lặp dữ liệu (`event_id` dedup) | Không làm (chỉ nhận dữ liệu đã sạch từ Flink) |
 | **Tính toán toạ độ** | Ánh xạ toạ độ thập phân sang chỉ số ô lưới $64 \times 48$ | Không làm (chỉ nhận chuỗi `"gx,gy"`) |
 | **Tính toán tích lũy (Aggregation)** | Không làm (Flink chuyển luồng realtime không lưu vết lịch sử tích luồng để đảm bảo độ trễ thấp) | **Có làm** (Cộng dồn tần suất di chuyển bằng Sorted Set `ZINCRBY`) |
-| **Quản lý vòng đời dữ liệu** | Gắn nhãn thời gian và watermark để đảm bảo đúng thứ tự sự kiện | **Có làm** (Xoá bỏ các track không hoạt động quá 30s và live count quá 5s bằng cơ chế TTL) |
+| **Quản lý vòng đời dữ liệu** | Gắn nhãn thời gian và watermark để đảm bảo đúng thứ tự sự kiện | **Có làm** (Xoá bỏ các track không hoạt động quá 30s, live frame snapshot quá 10s và live count quá 5s bằng cơ chế TTL) |
 | **Độ trễ truy vấn** | Độ trễ xử lý dòng $\approx 10-50$ mili giây | Tốc độ đáp ứng truy vấn đọc/ghi $\approx 1$ mili giây (in-memory) |
