@@ -19,7 +19,7 @@ cameras:
     fps_target: 25
 
 settings:
-  model_name: yolo11n.pt
+  model_name: yolo11l.pt
   tracker_type: botsort
   conf_thres: 0.25
   class_filter: [0]

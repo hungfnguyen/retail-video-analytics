@@ -14,26 +14,31 @@
 
 ---
 
-## Quick Start — Chạy toàn bộ hệ thống
+## 📦 Thành phần chính
 
-```bash
-# 1. Clone & setup
-git clone https://github.com/hungfnguyen/retail-video-analytics.git
-cd retail-video-analytics
-cp .env.example .env
+| Layer | Công nghệ | Mô tả |
+|-------|-----------|-------|
+| **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata |
+| **Media Plane** | OpenCV + S3/MinIO | Upload sampled JPEG 1fps và optional alert MP4 clips |
+| **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
+| **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
+| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
+| **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
+| **Visualization** | Grafana 11.3 | Dashboards near-real-time |
 
-# 2. Cài uv (Python package manager)
-curl -LsSf https://astral.sh/uv/install.sh | sh
-uv sync --all-packages
+## 📁 Runtime Layout
 
-# 3. Khởi động toàn bộ infrastructure (Pulsar, Flink, Redis, MinIO, Iceberg, Trino, Grafana)
-docker compose up -d --build
+```text
+services/
+├── vision/          # YOLO11 + tracker + Pulsar producer
+└── flink-jobs/      # Java Flink jobs: Bronze, Silver, Gold Track Summary
 
-# 4. Đợi services healthy (~90 giây)
-docker compose ps
-
-# 5. Chạy Vision module (2 camera video file → detect → track → publish Pulsar)
-uv run --package rva-vision python services/vision/main.py
+infrastructure/
+├── pulsar/
+├── flink/
+├── minio/
+├── trino/
+└── grafana/
 ```
 
 ---
@@ -191,93 +196,35 @@ docker exec pulsar-broker bin/pulsar-client produce \
 
 ---
 
-## Lệnh hữu ích
+## 🌐 Cổng dịch vụ
 
-### Development
-
-```bash
-make lint          # Ruff linter + formatter check
-make format        # Ruff auto-fix
-make test          # Chạy toàn bộ tests (51 tests)
-make test-cov      # Tests với coverage report
-make sync          # Cài đặt toàn bộ workspace dependencies
-make clean         # Xóa __pycache__ và build artifacts
-make help          # Hiển thị tất cả targets
-```
-
-### Docker
-
-```bash
-make docker-up     # docker compose up -d
-make docker-down   # docker compose down
-make docker-logs   # docker compose logs -f (tail tất cả services)
-```
-
-### Vision
-
-```bash
-# Chạy vision pipeline (multi-camera)
-make run-vision
-
-# Hoặc chạy trực tiếp
-uv run --package rva-vision python services/vision/main.py
-```
-
-### Flink Java — build & submit thủ công
-
-```bash
-# Build tất cả Flink jobs (JAR)
-cd services/flink-jobs/java && mvn clean package -DskipTests && cd ../../..
-
-# Submit 1 job thủ công (thay class và jar path)
-docker exec flink-jobmanager /opt/flink/bin/flink run -d \
-  -c org.rva.realtime.RealtimeMetricsJob \
-  /opt/flink/usrlib/realtime-job.jar
-
-# Cancel 1 job (thay JOB_ID)
-docker exec flink-jobmanager /opt/flink/bin/flink cancel JOB_ID
-
-# Xem danh sách jobs kèm trạng thái
-curl -s http://localhost:8081/jobs/overview | python3 -m json.tool
-```
-
-### Reset toàn bộ
-
-```bash
-# Xóa tất cả containers, volumes, data
-docker compose down -v
-
-# Rebuild & restart
-docker compose up -d --build
-```
+| Service | Port | URL |
+|---------|------|-----|
+| **Flink UI** | 8081 | http://localhost:8081 |
+| **Grafana** | 3000 | http://localhost:3000 (admin/admin) |
+| **Trino** | 8083 | http://localhost:8083 |
+| **Pulsar Admin** | 8084 | http://localhost:8084 |
+| **MinIO Console** | 9001 | http://localhost:9001 |
+| **MinIO API** | 9000 | http://localhost:9000 |
+| **Iceberg REST** | 8181 | http://localhost:8181 |
+| **Pulsar Broker** | 6650 | pulsar://localhost:6650 |
+| **FastAPI API** | 8000 | http://localhost:8000 |
 
 ---
 
-## Cấu hình Vision
+## 📊 Grafana Dashboards
 
-### File chính: `configs/cameras.yaml`
+Sau khi login Grafana (http://localhost:3000):
 
-```yaml
-cameras:
-  - camera_id: cam_01
-    store_id: store_001
-    source_type: video_file
-    source_uri: data/videos/video1.mp4
+- **RVA - People Overview**: Detections/unique people theo phút và camera
+- **RVA - Zone Dwell & Heatmap**: Visits và dwell time theo zone
+- **RVA - Track Summary**: Track với duration, movement và confidence
 
-settings:
-  model_name: yolo11l.pt
-  tracker_type: botsort
-  conf_thres: 0.25
-  class_filter: [0]          # 0 = person
-  media_upload_enabled: true
-  frame_sampling_enabled: true
-  alert_clip_enabled: false
-  alert_density_threshold: 10
-  s3_bucket: warehouse
-  # S3 credentials lấy từ ENV, không hardcode trong file này
-```
+---
 
-### Biến môi trường (`.env` hoặc `services/vision/.env`)
+## 🔧 Vision Module Config
+
+Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/vision/.env`:
 
 | Biến | Mặc định | Mô tả |
 |------|----------|-------|
