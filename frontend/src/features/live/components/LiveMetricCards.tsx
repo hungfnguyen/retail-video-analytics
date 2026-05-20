@@ -5,30 +5,49 @@ type LiveMetricCardsProps = {
   stats: LiveStats
 }
 
+function formatUpdatedAt(value: string) {
+  if (!value) {
+    return 'No live frame'
+  }
+
+  const updatedAt = new Date(value)
+  if (Number.isNaN(updatedAt.getTime())) {
+    return 'Updated from Redis'
+  }
+
+  return `Updated ${updatedAt.toLocaleTimeString([], {
+    hour: '2-digit',
+    minute: '2-digit',
+    second: '2-digit',
+  })}`
+}
+
 export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
+  const freshnessLabel = stats.status === 'stable' ? 'Fresh frame' : 'Stale or missing frame'
+
   const metrics = [
     {
       label: 'Current count',
       value: stats.current_count,
-      meta: `+${stats.count_change_percent}% vs previous 5 minutes`,
+      meta: formatUpdatedAt(stats.updated_at),
       icon: Users,
     },
     {
       label: 'Active tracks',
       value: stats.active_tracks,
-      meta: `+${stats.tracks_change_percent}% vs previous 5 minutes`,
+      meta: 'Redis active track keys',
       icon: Footprints,
     },
     {
       label: 'FPS',
-      value: stats.fps.toFixed(1),
-      meta: 'Stable',
+      value: stats.fps > 0 ? stats.fps.toFixed(1) : 'N/A',
+      meta: stats.fps > 0 ? 'Measured upstream' : 'Not measured yet',
       icon: Activity,
     },
     {
       label: 'Latency',
       value: `${stats.latency_ms} ms`,
-      meta: 'Stable',
+      meta: freshnessLabel,
       icon: Clock,
     },
   ]

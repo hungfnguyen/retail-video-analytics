@@ -62,12 +62,20 @@ public class RealtimeMetricsJob {
         String cameraId;
         String storeId;
         long captureMs;
+        long frameIndex;
         int imgW;
         int imgH;
         int personCount;
         int[] gridXs;
         int[] gridYs;
         Long[] trackIds;
+        double[] bboxXs;
+        double[] bboxYs;
+        double[] bboxWs;
+        double[] bboxHs;
+        double[] centroidXs;
+        double[] centroidYs;
+        double[] confidences;
     }
 
     static class ParseValidateFunction extends ProcessFunction<String, ParsedEvent>
@@ -123,16 +131,29 @@ public class RealtimeMetricsJob {
                 ctx.output(DLQ_TAG, buildDlqEnvelope("invalid_image_size", rawJson));
                 return;
             }
+            long frameIndex = root.path("frame_index").asLong(0L);
 
             JsonNode detections = root.path("detections");
             int count = 0;
             List<Integer> gridXList = new ArrayList<>();
             List<Integer> gridYList = new ArrayList<>();
             List<Long> trackIdList = new ArrayList<>();
+            List<Double> bboxXList = new ArrayList<>();
+            List<Double> bboxYList = new ArrayList<>();
+            List<Double> bboxWList = new ArrayList<>();
+            List<Double> bboxHList = new ArrayList<>();
+            List<Double> centroidXList = new ArrayList<>();
+            List<Double> centroidYList = new ArrayList<>();
+            List<Double> confidenceList = new ArrayList<>();
 
             if (detections != null && detections.isArray()) {
                 for (JsonNode det : detections) {
                     if (det == null || det.isNull()) {
+                        continue;
+                    }
+
+                    int classId = det.path("class_id").asInt(-1);
+                    if (classId != 0) {
                         continue;
                     }
 
@@ -142,10 +163,19 @@ public class RealtimeMetricsJob {
                     }
 
                     JsonNode cn = det.path("centroid_norm");
-                    double nx = cn.path("x").asDouble(0.0);
-                    double ny = cn.path("y").asDouble(0.0);
+                    double nx = clampDouble(cn.path("x").asDouble(0.0), 0.0, 1.0);
+                    double ny = clampDouble(cn.path("y").asDouble(0.0), 0.0, 1.0);
                     int gx = clamp((int) (nx * GRID_W), 0, GRID_W - 1);
                     int gy = clamp((int) (ny * GRID_H), 0, GRID_H - 1);
+
+                    JsonNode bn = det.path("bbox_norm");
+                    double bx = clampDouble(bn.path("x").asDouble(0.0), 0.0, 1.0);
+                    double by = clampDouble(bn.path("y").asDouble(0.0), 0.0, 1.0);
+                    double bw = clampDouble(bn.path("w").asDouble(0.0), 0.0, 1.0);
+                    double bh = clampDouble(bn.path("h").asDouble(0.0), 0.0, 1.0);
+                    if (bw <= 0.0 || bh <= 0.0) {
+                        continue;
+                    }
 
                     Long trackId = null;
                     JsonNode tid = det.get("track_id");
@@ -157,6 +187,13 @@ public class RealtimeMetricsJob {
                     gridXList.add(gx);
                     gridYList.add(gy);
                     trackIdList.add(trackId);
+                    bboxXList.add(bx);
+                    bboxYList.add(by);
+                    bboxWList.add(bw);
+                    bboxHList.add(bh);
+                    centroidXList.add(nx);
+                    centroidYList.add(ny);
+                    confidenceList.add(conf);
                 }
             }
 
@@ -165,12 +202,20 @@ public class RealtimeMetricsJob {
             evt.cameraId = cameraId;
             evt.storeId = storeId;
             evt.captureMs = captureMs;
+            evt.frameIndex = frameIndex;
             evt.imgW = imgW;
             evt.imgH = imgH;
             evt.personCount = count;
             evt.gridXs = gridXList.stream().mapToInt(Integer::intValue).toArray();
             evt.gridYs = gridYList.stream().mapToInt(Integer::intValue).toArray();
             evt.trackIds = trackIdList.toArray(new Long[0]);
+            evt.bboxXs = toDoubleArray(bboxXList);
+            evt.bboxYs = toDoubleArray(bboxYList);
+            evt.bboxWs = toDoubleArray(bboxWList);
+            evt.bboxHs = toDoubleArray(bboxHList);
+            evt.centroidXs = toDoubleArray(centroidXList);
+            evt.centroidYs = toDoubleArray(centroidYList);
+            evt.confidences = toDoubleArray(confidenceList);
 
             out.collect(evt);
         }
@@ -209,6 +254,18 @@ public class RealtimeMetricsJob {
         private static int clamp(int val, int min, int max) {
             return Math.max(min, Math.min(max, val));
         }
+
+        private static double clampDouble(double val, double min, double max) {
+            return Math.max(min, Math.min(max, val));
+        }
+
+        private static double[] toDoubleArray(List<Double> values) {
+            double[] arr = new double[values.size()];
+            for (int i = 0; i < values.size(); i++) {
+                arr[i] = values.get(i);
+            }
+            return arr;
+        }
     }
 
     static class DeduplicateByEventIdFunction
@@ -246,6 +303,7 @@ public class RealtimeMetricsJob {
 
         private static final int HEATMAP_EXPIRE_SEC = 60;
         private static final int COUNT_EXPIRE_SEC = 5;
+        private static final int FRAME_EXPIRE_SEC = 10;
         private static final int TRACK_EXPIRE_SEC = 30;
 
         private transient JedisPool pool;
@@ -281,6 +339,10 @@ public class RealtimeMetricsJob {
                 jedis.setex("stats:count:" + cameraId, COUNT_EXPIRE_SEC,
                         String.valueOf(evt.personCount));
 
+                String ts = Instant.ofEpochMilli(evt.captureMs).toString();
+                jedis.setex("live:frame:" + cameraId, FRAME_EXPIRE_SEC,
+                        buildLiveFrameSnapshot(evt, ts));
+
                 String heatKey = "heatmap:live:" + cameraId;
                 for (int i = 0; i < evt.gridXs.length; i++) {
                     jedis.zincrby(heatKey, 1.0,
@@ -288,7 +350,6 @@ public class RealtimeMetricsJob {
                 }
                 jedis.expire(heatKey, HEATMAP_EXPIRE_SEC);
 
-                String ts = Instant.ofEpochMilli(evt.captureMs).toString();
                 for (int i = 0; i < evt.trackIds.length; i++) {
                     if (evt.trackIds[i] == null) {
                         continue;
@@ -300,6 +361,11 @@ public class RealtimeMetricsJob {
                     fields.put("last_seen", ts);
                     fields.put("grid_x", String.valueOf(evt.gridXs[i]));
                     fields.put("grid_y", String.valueOf(evt.gridYs[i]));
+                    fields.put("bbox_x", String.valueOf(evt.bboxXs[i]));
+                    fields.put("bbox_y", String.valueOf(evt.bboxYs[i]));
+                    fields.put("bbox_w", String.valueOf(evt.bboxWs[i]));
+                    fields.put("bbox_h", String.valueOf(evt.bboxHs[i]));
+                    fields.put("confidence", String.valueOf(evt.confidences[i]));
                     jedis.hset(trackKey, fields);
                     jedis.expire(trackKey, TRACK_EXPIRE_SEC);
                 }
@@ -313,6 +379,47 @@ public class RealtimeMetricsJob {
             if (pool != null) {
                 pool.close();
             }
+        }
+
+        private String buildLiveFrameSnapshot(ParsedEvent evt, String captureTs) throws Exception {
+            Map<String, Object> frame = new LinkedHashMap<>();
+            frame.put("schema_version", "1.0");
+            frame.put("event_id", evt.eventId);
+            frame.put("camera_id", evt.cameraId);
+            frame.put("store_id", evt.storeId);
+            frame.put("frame_index", evt.frameIndex);
+            frame.put("capture_ts", captureTs);
+
+            Map<String, Object> imageSize = new LinkedHashMap<>();
+            imageSize.put("width", evt.imgW);
+            imageSize.put("height", evt.imgH);
+            frame.put("image_size", imageSize);
+
+            List<Map<String, Object>> detections = new ArrayList<>();
+            for (int i = 0; i < evt.gridXs.length; i++) {
+                Map<String, Object> det = new LinkedHashMap<>();
+                det.put("track_id", evt.trackIds[i]);
+                det.put("label", "person");
+                det.put("confidence", evt.confidences[i]);
+
+                Map<String, Object> bboxNorm = new LinkedHashMap<>();
+                bboxNorm.put("x", evt.bboxXs[i]);
+                bboxNorm.put("y", evt.bboxYs[i]);
+                bboxNorm.put("w", evt.bboxWs[i]);
+                bboxNorm.put("h", evt.bboxHs[i]);
+                det.put("bbox_norm", bboxNorm);
+
+                Map<String, Object> centroidNorm = new LinkedHashMap<>();
+                centroidNorm.put("x", evt.centroidXs[i]);
+                centroidNorm.put("y", evt.centroidYs[i]);
+                det.put("centroid_norm", centroidNorm);
+
+                det.put("grid_x", evt.gridXs[i]);
+                det.put("grid_y", evt.gridYs[i]);
+                detections.add(det);
+            }
+            frame.put("detections", detections);
+            return MAPPER.writeValueAsString(frame);
         }
     }
 
