@@ -364,7 +364,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "frame_id": frame_id,
             "capture_ts": capture_ts,
-            "image_url": str((frame or {}).get("image_url") or ""),
+            "image_url": f"/media/live/{camera_id}/stream" if frame is not None else "",
             "image_size": {
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),

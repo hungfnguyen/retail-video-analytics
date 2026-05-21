@@ -28,6 +28,13 @@ settings:
   worker_graceful_shutdown_sec: 10
   reconnect_delay_max_sec: 30
 
+  # Live media plane for dashboard video. Vision writes annotated latest JPEGs
+  # here; FastAPI serves them as MJPEG through /media/live/{camera_id}/stream.
+  live_media_enabled: true
+  live_media_dir: runtime/live_frames
+  live_media_fps: 10
+  live_media_jpeg_quality: 80
+
   # Media plane: sampled JPEGs and optional alert clips to S3/MinIO.
   media_upload_enabled: true
   pulsar_media_topic: persistent://retail/metadata/media-events

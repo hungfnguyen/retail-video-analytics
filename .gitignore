@@ -39,6 +39,7 @@ detections_output.ndjson
 # Logs & Temp
 *.log
 logs/
+runtime/
 tmp/
 temp/
 

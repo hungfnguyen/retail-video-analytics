@@ -9,12 +9,14 @@ description = "Retail Video Analytics - Dashboard API Service"
 requires-python = ">=3.12"
 dependencies = [
     "core",
+    "storage",
     "fastapi>=0.115",
     "uvicorn[standard]>=0.32",
 ]
 
 [tool.uv.sources]
 core = { workspace = true }
+storage = { workspace = true }
 
 [tool.hatch.build.targets.wheel]
 packages = ["src/rva_api"]

@@ -75,6 +75,7 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.stats.current_count == 1
     assert data.stats.active_tracks == 1
     assert data.frame.frame_id == 1500
+    assert data.frame.image_url == "/media/live/cam_01/stream"
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0
