@@ -189,6 +189,15 @@ def _redis_int(client: Any, key: str, default: int = 0) -> int:
         ) from exc
 
 
+def _redis_float(client: Any, key: str, default: float = 0.0) -> float:
+    try:
+        return _safe_float(client.get(key), default)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Cannot read realtime FPS from Redis"
+        ) from exc
+
+
 def _active_track_count(client: Any, camera_id: str) -> int:
     try:
         return sum(1 for _ in client.scan_iter(match=f"track:active:{camera_id}:*"))
@@ -338,6 +347,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     )
 
     current_count = _redis_int(client, f"stats:count:{camera_id}", default=0)
+    fps = _redis_float(client, f"stats:fps:{camera_id}", default=0.0)
     active_tracks = _active_track_count(client, camera_id)
     heatmap_cells = _read_heatmap(client, camera_id)
     detections = _detections_from_frame(frame)
@@ -369,7 +379,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),
             },
-            "fps": 0.0,
+            "fps": fps,
             "latency_ms": latency_ms or 0,
             "detections": detections,
             "heatmap_points": _heatmap_points(heatmap_cells),
@@ -378,7 +388,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "current_count": current_count,
             "active_tracks": active_tracks,
-            "fps": 0.0,
+            "fps": fps,
             "latency_ms": latency_ms or 0,
             "count_change_percent": 0,
             "tracks_change_percent": 0,

@@ -34,6 +34,7 @@ class FakeRedis:
         self.values = {
             "live:frame:cam_01": json.dumps(frame),
             "stats:count:cam_01": "1",
+            "stats:fps:cam_01": "24.8",
         }
         self.track_keys = ["track:active:cam_01:42"]
         self.heatmap = [("35,36", 4.0), ("10,12", 2.0)]
@@ -74,7 +75,9 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.selected_camera_id == "cam_01"
     assert data.stats.current_count == 1
     assert data.stats.active_tracks == 1
+    assert data.stats.fps == 24.8
     assert data.frame.frame_id == 1500
+    assert data.frame.fps == 24.8
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0
