@@ -54,6 +54,7 @@ class LiveFrame(BaseModel):
     media_fps: float
     media_latency_ms: int
     metadata_latency_ms: int
+    metadata_status: Literal["fresh", "lagging", "stale", "missing"]
     media_status: Literal["online", "warning", "missing"]
     processing_fps: float
     inference_ms: int
@@ -70,12 +71,14 @@ class LiveFrame(BaseModel):
 class LiveStats(BaseModel):
     camera_id: str
     current_count: int
+    count_source: Literal["camera_realtime", "redis", "live_frame_fallback", "missing"]
     active_tracks: int
     fps: float
     latency_ms: int
     media_fps: float
     media_latency_ms: int
     metadata_latency_ms: int
+    metadata_status: Literal["fresh", "lagging", "stale", "missing"]
     count_change_percent: int
     tracks_change_percent: int
     status: Literal["stable", "warning", "critical"]

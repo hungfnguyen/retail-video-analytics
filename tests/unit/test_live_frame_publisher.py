@@ -31,7 +31,7 @@ LiveFramePublisherConfig = live_frame_publisher.LiveFramePublisherConfig
 def test_live_frame_publisher_writes_observability_metadata(tmp_path):
     publisher = LiveFramePublisher(
         "cam_01",
-        LiveFramePublisherConfig(output_dir=tmp_path, fps=1000.0, jpeg_quality=70),
+        LiveFramePublisherConfig(output_dir=tmp_path, fps=1_000_000.0, jpeg_quality=70),
     )
     frame = np.zeros((24, 32, 3), dtype=np.uint8)
 

@@ -1,4 +1,4 @@
-import { useEffect, useState } from 'react'
+import { useCallback, useEffect, useState } from 'react'
 import { getLiveDashboardData } from '../api/liveApi'
 import type { LiveDashboardData } from '../types'
 
@@ -10,6 +10,7 @@ type LiveDataState = {
 }
 
 export function useLiveData() {
+  const [cameraId, setCameraId] = useState('cam_01')
   const [state, setState] = useState<LiveDataState>({
     data: null,
     error: null,
@@ -20,7 +21,7 @@ export function useLiveData() {
 
     async function fetchData() {
       try {
-        const data = await getLiveDashboardData()
+        const data = await getLiveDashboardData(cameraId)
         if (isMounted) {
           setState({ data, error: null })
         }
@@ -40,7 +41,11 @@ export function useLiveData() {
       isMounted = false
       window.clearInterval(intervalId)
     }
+  }, [cameraId])
+
+  const switchCamera = useCallback((id: string) => {
+    setCameraId(id)
   }, [])
 
-  return state
+  return { ...state, cameraId, switchCamera }
 }

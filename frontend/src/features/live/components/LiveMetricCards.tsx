@@ -22,14 +22,46 @@ function formatUpdatedAt(value: string) {
   })}`
 }
 
+function formatCountSource(source: LiveStats['count_source']) {
+  if (source === 'camera_realtime') {
+    return 'Camera realtime'
+  }
+
+  if (source === 'redis') {
+    return 'Redis count'
+  }
+
+  if (source === 'live_frame_fallback') {
+    return 'Frame fallback'
+  }
+
+  return 'Count missing'
+}
+
+function formatMetadataStatus(status: LiveStats['metadata_status']) {
+  if (status === 'fresh') {
+    return 'Fresh metadata'
+  }
+
+  if (status === 'lagging') {
+    return 'Lagging metadata'
+  }
+
+  if (status === 'stale') {
+    return 'Stale metadata'
+  }
+
+  return 'Missing metadata'
+}
+
 export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
-  const freshnessLabel = stats.status === 'stable' ? 'Fresh metadata' : 'Stale or missing metadata'
+  const freshnessLabel = formatMetadataStatus(stats.metadata_status)
 
   const metrics = [
     {
       label: 'Current count',
       value: stats.current_count,
-      meta: formatUpdatedAt(stats.updated_at),
+      meta: formatCountSource(stats.count_source) + ' | ' + formatUpdatedAt(stats.updated_at),
       icon: Users,
     },
     {

@@ -45,6 +45,7 @@ export type LiveFrame = {
   media_fps: number
   media_latency_ms: number
   metadata_latency_ms: number
+  metadata_status: 'fresh' | 'lagging' | 'stale' | 'missing'
   media_status: 'online' | 'warning' | 'missing'
   processing_fps: number
   inference_ms: number
@@ -61,12 +62,14 @@ export type LiveFrame = {
 export type LiveStats = {
   camera_id: string
   current_count: number
+  count_source: 'camera_realtime' | 'redis' | 'live_frame_fallback' | 'missing'
   active_tracks: number
   fps: number
   latency_ms: number
   media_fps: number
   media_latency_ms: number
   metadata_latency_ms: number
+  metadata_status: 'fresh' | 'lagging' | 'stale' | 'missing'
   count_change_percent: number
   tracks_change_percent: number
   status: 'stable' | 'warning' | 'critical'

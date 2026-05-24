@@ -92,6 +92,7 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
 
     assert data.selected_camera_id == "cam_01"
     assert data.stats.current_count == 1
+    assert data.stats.count_source == "redis"
     assert data.stats.active_tracks == 1
     assert data.frame.frame_id == 1500
     assert data.frame.image_url == "/media/live/cam_01/stream"
@@ -99,8 +100,10 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.media_latency_ms < 1_000
     assert data.frame.media_status == "online"
     assert data.frame.metadata_latency_ms < 1_000
+    assert data.frame.metadata_status == "fresh"
     assert data.stats.media_fps == 12.5
     assert data.stats.metadata_latency_ms < 1_000
+    assert data.stats.metadata_status == "fresh"
     assert data.frame.processing_fps == 2.4
     assert data.frame.inference_ms == 380
     assert data.frame.postprocess_ms == 4
@@ -149,3 +152,83 @@ def test_media_metadata_missing_is_safe(monkeypatch, tmp_path):
     assert metadata == {}
     assert live._media_latency_ms(metadata) is None
     assert live._media_status(metadata, None) == "missing"
+
+
+def test_live_dashboard_falls_back_to_live_frame_count(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.values.pop("stats:count:cam_01")
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(live, "_load_camera_config", lambda: [])
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 8.0,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_01")
+
+    assert data.stats.current_count == 1
+    assert data.stats.count_source == "live_frame_fallback"
+    assert data.stats.status == "stable"
+    assert data.traffic_summary.current_total == 1
+
+
+def test_live_dashboard_prefers_camera_realtime_count_when_media_is_online(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.values["stats:count:cam_01"] = "99"
+    media_capture_ts = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(live, "_load_camera_config", lambda: [])
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "frame_index": 1600,
+            "capture_ts": media_capture_ts,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 12.0,
+            "tracked_objects_count": 3,
+            "detections_count": 4,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_01")
+
+    assert data.stats.current_count == 3
+    assert data.stats.count_source == "camera_realtime"
+    assert data.stats.updated_at == media_capture_ts
+    assert data.frame.frame_id == 1600
+    assert data.frame.capture_ts == media_capture_ts
+    assert data.traffic_summary.current_total == 3
+
+
+def test_live_dashboard_marks_count_missing_when_frame_is_stale(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.values.pop("stats:count:cam_01")
+    frame = json.loads(fake_redis.values["live:frame:cam_01"])
+    frame["capture_ts"] = datetime(2020, 1, 1, tzinfo=timezone.utc).isoformat()
+    fake_redis.values["live:frame:cam_01"] = json.dumps(frame)
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(live, "_load_camera_config", lambda: [])
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 8.0,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_01")
+
+    assert data.stats.current_count == 0
+    assert data.stats.count_source == "missing"
+    assert data.stats.metadata_status == "stale"
+    assert data.stats.status == "warning"
+    assert data.pipeline_health[1].status == "warning"

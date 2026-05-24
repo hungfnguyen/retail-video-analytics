@@ -22,6 +22,8 @@ ZONE_COLS = 7
 HEATMAP_TOP_N = 80
 STALE_FRAME_MS = 10_000
 MEDIA_STALE_MS = 3_000
+METADATA_FRESH_MS = 1_500
+METADATA_STALE_MS = 5_000
 
 _redis_client: Any | None = None
 
@@ -186,6 +188,16 @@ def _media_status(metadata: dict[str, Any], media_latency_ms: int | None) -> str
     return "online"
 
 
+def _metadata_status(frame: dict[str, Any] | None, latency_ms: int | None) -> str:
+    if frame is None or latency_ms is None:
+        return "missing"
+    if latency_ms <= METADATA_FRESH_MS:
+        return "fresh"
+    if latency_ms <= METADATA_STALE_MS:
+        return "lagging"
+    return "stale"
+
+
 def _parse_capture_ts(frame: dict[str, Any] | None) -> datetime | None:
     if frame is None:
         return None
@@ -224,13 +236,54 @@ def _safe_float(raw: Any, default: float = 0.0) -> float:
         return default
 
 
-def _redis_int(client: Any, key: str, default: int = 0) -> int:
+
+def _redis_get(client: Any, key: str, error_detail: str) -> Any:
     try:
-        return _safe_int(client.get(key), default)
+        return client.get(key)
     except Exception as exc:
-        raise HTTPException(
-            status_code=503, detail="Cannot read realtime count from Redis"
-        ) from exc
+        raise HTTPException(status_code=503, detail=error_detail) from exc
+
+
+def _is_fresh_latency(latency_ms: int | None) -> bool:
+    return latency_ms is not None and latency_ms <= STALE_FRAME_MS
+
+
+def _media_current_count(
+    media_metadata: dict[str, Any], media_status: str
+) -> int | None:
+    if media_status != "online":
+        return None
+
+    for key in ("tracked_objects_count", "detections_count"):
+        if key in media_metadata:
+            return max(0, _safe_int(media_metadata.get(key)))
+    return None
+
+
+def _resolve_current_count(
+    client: Any,
+    camera_id: str,
+    detections: list[dict[str, Any]],
+    metadata_latency_ms: int | None,
+    media_metadata: dict[str, Any],
+    media_status: str,
+) -> tuple[int, str]:
+    media_count = _media_current_count(media_metadata, media_status)
+    if media_count is not None:
+        return media_count, "camera_realtime"
+
+    raw_count = _redis_get(
+        client,
+        f"stats:count:{camera_id}",
+        "Cannot read realtime count from Redis",
+    )
+    if raw_count is not None:
+        return _safe_int(raw_count), "redis"
+
+    if _is_fresh_latency(metadata_latency_ms):
+        return len(detections), "live_frame_fallback"
+
+    return 0, "missing"
 
 
 def _active_track_count(client: Any, camera_id: str) -> int:
@@ -379,6 +432,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     media_latency_ms = _media_latency_ms(media_metadata)
     media_fps = _safe_float(media_metadata.get("publish_fps"))
     media_status = _media_status(media_metadata, media_latency_ms)
+    metadata_status = _metadata_status(frame, latency_ms)
     processing_fps = _safe_float(media_metadata.get("processing_fps"))
     inference_ms = _safe_int(media_metadata.get("inference_ms"))
     postprocess_ms = _safe_int(media_metadata.get("postprocess_ms"))
@@ -387,16 +441,16 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     jpeg_size_bytes = _safe_int(media_metadata.get("jpeg_size_bytes"))
     reader_queue_size = _safe_int(media_metadata.get("reader_queue_size"))
     reader_drop_count = _safe_int(media_metadata.get("reader_drop_count"))
-    status = (
-        "stable"
-        if frame is not None and latency_ms is not None and latency_ms <= STALE_FRAME_MS
-        else "warning"
-    )
+    status = "stable" if metadata_status in {"fresh", "lagging"} else "warning"
 
-    current_count = _redis_int(client, f"stats:count:{camera_id}", default=0)
     active_tracks = _active_track_count(client, camera_id)
     heatmap_cells = _read_heatmap(client, camera_id)
     detections = _detections_from_frame(frame)
+    current_count, count_source = _resolve_current_count(
+        client, camera_id, detections, latency_ms, media_metadata, media_status
+    )
+    if count_source == "missing":
+        status = "warning"
     cameras = _load_camera_config()
     if cameras and camera_id not in {
         str(camera.get("camera_id")) for camera in cameras
@@ -406,6 +460,15 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
 
     frame_id = _safe_int((frame or {}).get("frame_index"), 0)
     capture_ts = str((frame or {}).get("capture_ts") or "")
+    media_capture_ts = str(media_metadata.get("capture_ts") or "")
+    media_frame_id = _safe_int(media_metadata.get("frame_index"), 0)
+    display_frame_id = (
+        media_frame_id if media_status == "online" and media_frame_id > 0 else frame_id
+    )
+    display_capture_ts = (
+        media_capture_ts if media_status == "online" and media_capture_ts else capture_ts
+    )
+    count_updated_at = display_capture_ts if count_source == "camera_realtime" else capture_ts
     image_size = (
         (frame or {}).get("image_size")
         if isinstance((frame or {}).get("image_size"), dict)
@@ -418,9 +481,13 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         "selected_camera_id": camera_id,
         "frame": {
             "camera_id": camera_id,
-            "frame_id": frame_id,
-            "capture_ts": capture_ts,
-            "image_url": f"/media/live/{camera_id}/stream" if frame is not None else "",
+            "frame_id": display_frame_id,
+            "capture_ts": display_capture_ts,
+            "image_url": (
+                f"/media/live/{camera_id}/stream"
+                if frame is not None or media_status != "missing"
+                else ""
+            ),
             "image_size": {
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),
@@ -430,6 +497,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "media_fps": media_fps,
             "media_latency_ms": media_latency_ms or 0,
             "metadata_latency_ms": latency_ms or 0,
+            "metadata_status": metadata_status,
             "media_status": media_status,
             "processing_fps": processing_fps,
             "inference_ms": inference_ms,
@@ -445,16 +513,18 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         "stats": {
             "camera_id": camera_id,
             "current_count": current_count,
+            "count_source": count_source,
             "active_tracks": active_tracks,
             "fps": media_fps,
             "latency_ms": latency_ms or 0,
             "media_fps": media_fps,
             "media_latency_ms": media_latency_ms or 0,
             "metadata_latency_ms": latency_ms or 0,
+            "metadata_status": metadata_status,
             "count_change_percent": 0,
             "tracks_change_percent": 0,
             "status": status,
-            "updated_at": capture_ts or now.isoformat(),
+            "updated_at": count_updated_at or now.isoformat(),
         },
         "alerts": [],
         "traffic": _empty_traffic(),
