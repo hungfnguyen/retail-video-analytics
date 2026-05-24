@@ -10,6 +10,7 @@ from emit.pulsar_emitter import PulsarEmitter
 from emit.s3_client import S3ClientConfig, create_s3_client
 from emit.frame_sampler import FrameSampler
 from emit.clip_extractor import AlertClipExtractor
+from emit.live_frame_writer import LiveFrameWriter
 from reader import VideoFileReader
 
 logger = logging.getLogger(__name__)
@@ -17,7 +18,6 @@ logger = logging.getLogger(__name__)
 # Global để signal handler tiếp cận được
 _emitter: PulsarEmitter | None = None
 _reader: VideoFileReader | None = None
-
 
 def _shutdown(signum, frame):
     """Signal handler: set running=False để cleanup."""
@@ -31,16 +31,15 @@ def _publish_completed_media_events(
     frame_sampler: FrameSampler | None,
     clip_extractor: AlertClipExtractor | None,
 ) -> None:
-    if not emitter:
-        return
-
     if frame_sampler:
         for result in frame_sampler.drain_completed():
-            emitter.emit_media_event(asdict(result), frame_index=result.frame_index)
+            if emitter:
+                emitter.emit_media_event(asdict(result), frame_index=result.frame_index)
 
     if clip_extractor:
         for result in clip_extractor.drain_completed():
-            emitter.emit_media_event(asdict(result), frame_index=result.trigger_frame_index)
+            if emitter:
+                emitter.emit_media_event(asdict(result), frame_index=result.trigger_frame_index)
 
 
 def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
@@ -110,6 +109,11 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
     frame_sampler: FrameSampler | None = None
     clip_extractor: AlertClipExtractor | None = None
+    live_frame_writer = LiveFrameWriter(
+        global_cfg.get("live_frame_output_dir", "data/live_frames"),
+        jpeg_quality=global_cfg.get("live_frame_jpeg_quality", 80),
+        max_fps=global_cfg.get("live_frame_fps", 8),
+    )
     if global_cfg.get("media_upload_enabled"):
         s3_client = create_s3_client(
             S3ClientConfig(
@@ -174,6 +178,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
             capture_ts = datetime.now(timezone.utc)
             capture_ts_iso = capture_ts.isoformat()
             height, width = frame.shape[:2]
+            live_frame_writer.write(camera_id, frame)
 
             # Per-frame tracking: Ultralytics persist=True giữ tracker state giữa các lần gọi
             results = tracker.model.track(

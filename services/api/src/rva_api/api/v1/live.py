@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.settings import load_yaml_config
+from rva_api.api.v1.media import live_frame_latency_ms, live_frame_stream_url
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
 
@@ -63,7 +64,6 @@ def _load_camera_config() -> list[dict[str, Any]]:
         for camera in cameras
         if isinstance(camera, dict) and camera.get("enabled", True)
     ]
-
 
 def _camera_status(frame: dict[str, Any] | None, latency_ms: int | None) -> str:
     if frame is None:
@@ -339,7 +339,9 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         ) from exc
 
     redis_latency_ms = max(0, int((time.perf_counter() - start) * 1000))
-    latency_ms = _latency_ms(frame, now)
+    metadata_latency_ms = _latency_ms(frame, now)
+    stream_latency_ms = live_frame_latency_ms(camera_id, now)
+    latency_ms = stream_latency_ms if stream_latency_ms is not None else metadata_latency_ms
     status = (
         "stable"
         if frame is not None and latency_ms is not None and latency_ms <= STALE_FRAME_MS
@@ -374,7 +376,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "frame_id": frame_id,
             "capture_ts": capture_ts,
-            "image_url": str((frame or {}).get("image_url") or ""),
+            "image_url": str((frame or {}).get("image_url") or live_frame_stream_url(camera_id)),
             "image_size": {
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),
