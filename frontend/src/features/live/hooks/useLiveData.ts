@@ -9,7 +9,7 @@ type LiveDataState = {
   error: string | null
 }
 
-export function useLiveData() {
+export function useLiveData(cameraId = 'cam_01') {
   const [state, setState] = useState<LiveDataState>({
     data: null,
     error: null,
@@ -20,7 +20,7 @@ export function useLiveData() {
 
     async function fetchData() {
       try {
-        const data = await getLiveDashboardData()
+        const data = await getLiveDashboardData(cameraId)
         if (isMounted) {
           setState({ data, error: null })
         }
@@ -40,7 +40,7 @@ export function useLiveData() {
       isMounted = false
       window.clearInterval(intervalId)
     }
-  }, [])
+  }, [cameraId])
 
   return state
 }

@@ -1,18 +1,21 @@
 import type { ReactNode } from 'react'
-import { BarChart3, Camera, Search, Settings } from 'lucide-react'
+import { BarChart3, Camera, Settings } from 'lucide-react'
+
+export type AppPage = 'live' | 'analytics' | 'system'
 
 type AppShellProps = {
+  activePage: AppPage
   children: ReactNode
+  onPageChange: (page: AppPage) => void
 }
 
 const navItems = [
-  { label: 'Live', icon: Camera, active: true },
-  { label: 'Analytics', icon: BarChart3, active: false },
-  { label: 'Investigate', icon: Search, active: false },
-  { label: 'System', icon: Settings, active: false },
+  { id: 'live' as const, label: 'Live', icon: Camera },
+  { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
+  { id: 'system' as const, label: 'System', icon: Settings },
 ]
 
-export function AppShell({ children }: AppShellProps) {
+export function AppShell({ activePage, children, onPageChange }: AppShellProps) {
   return (
     <div className="grid min-h-screen grid-cols-[248px_1fr] bg-slate-100 text-slate-950">
 
@@ -32,14 +35,17 @@ export function AppShell({ children }: AppShellProps) {
         <nav className="grid gap-2">
           {navItems.map((item) => {
             const Icon = item.icon
+            const isActive = item.id === activePage
+
             return (
               <button
                 className={
-                  item.active
+                  isActive
                     ? 'flex items-center gap-3 rounded-lg bg-blue-600 px-3.5 py-3 text-left font-semibold text-white shadow-[0_12px_26px_rgba(37,99,235,0.35)]'
                     : 'flex items-center gap-3 rounded-lg bg-transparent px-3.5 py-3 text-left font-semibold text-slate-300 transition hover:bg-slate-800 hover:text-white'
                 }
                 key={item.label}
+                onClick={() => onPageChange(item.id)}
                 type="button"
               >
                 <Icon size={18} />
