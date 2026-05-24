@@ -10,6 +10,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.settings import load_yaml_config
+from rva_api.api.v1.health import pipeline_health
 from rva_api.api.v1.media import live_frame_latency_ms, live_frame_stream_url
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
@@ -300,29 +301,6 @@ def _empty_traffic() -> list[dict[str, int | str]]:
     return []
 
 
-def _pipeline_health(
-    now: datetime, redis_latency_ms: int, frame_status: str
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "service": "redis",
-            "display_name": "Redis",
-            "role": "Realtime State",
-            "status": "ok",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": redis_latency_ms,
-        },
-        {
-            "service": "fastapi",
-            "display_name": "FastAPI",
-            "role": "Serving API",
-            "status": "ok" if frame_status == "stable" else "warning",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": 0,
-        },
-    ]
-
-
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
 def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     client = _get_redis_client()
@@ -407,6 +385,6 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "peak_time": now.strftime("%H:%M"),
         },
         "zone_heatmap": _zone_heatmap(heatmap_cells),
-        "pipeline_health": _pipeline_health(now, redis_latency_ms, status),
+        "pipeline_health": pipeline_health(now, redis_latency_ms, status),
     }
     return LiveDashboardData.model_validate(data)
