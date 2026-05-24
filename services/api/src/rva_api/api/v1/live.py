@@ -10,6 +10,8 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 
 from core.settings import load_yaml_config
+from rva_api.api.v1.health import pipeline_health
+from rva_api.api.v1.media import live_frame_latency_ms, live_frame_stream_url
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
 
@@ -63,7 +65,6 @@ def _load_camera_config() -> list[dict[str, Any]]:
         for camera in cameras
         if isinstance(camera, dict) and camera.get("enabled", True)
     ]
-
 
 def _camera_status(frame: dict[str, Any] | None, latency_ms: int | None) -> str:
     if frame is None:
@@ -189,6 +190,15 @@ def _redis_int(client: Any, key: str, default: int = 0) -> int:
         ) from exc
 
 
+def _redis_float(client: Any, key: str, default: float = 0.0) -> float:
+    try:
+        return _safe_float(client.get(key), default)
+    except Exception as exc:
+        raise HTTPException(
+            status_code=503, detail="Cannot read realtime FPS from Redis"
+        ) from exc
+
+
 def _active_track_count(client: Any, camera_id: str) -> int:
     try:
         return sum(1 for _ in client.scan_iter(match=f"track:active:{camera_id}:*"))
@@ -291,29 +301,6 @@ def _empty_traffic() -> list[dict[str, int | str]]:
     return []
 
 
-def _pipeline_health(
-    now: datetime, redis_latency_ms: int, frame_status: str
-) -> list[dict[str, Any]]:
-    return [
-        {
-            "service": "redis",
-            "display_name": "Redis",
-            "role": "Realtime State",
-            "status": "ok",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": redis_latency_ms,
-        },
-        {
-            "service": "fastapi",
-            "display_name": "FastAPI",
-            "role": "Serving API",
-            "status": "ok" if frame_status == "stable" else "warning",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": 0,
-        },
-    ]
-
-
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
 def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     client = _get_redis_client()
@@ -330,7 +317,9 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         ) from exc
 
     redis_latency_ms = max(0, int((time.perf_counter() - start) * 1000))
-    latency_ms = _latency_ms(frame, now)
+    metadata_latency_ms = _latency_ms(frame, now)
+    stream_latency_ms = live_frame_latency_ms(camera_id, now)
+    latency_ms = stream_latency_ms if stream_latency_ms is not None else metadata_latency_ms
     status = (
         "stable"
         if frame is not None and latency_ms is not None and latency_ms <= STALE_FRAME_MS
@@ -338,6 +327,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     )
 
     current_count = _redis_int(client, f"stats:count:{camera_id}", default=0)
+    fps = _redis_float(client, f"stats:fps:{camera_id}", default=0.0)
     active_tracks = _active_track_count(client, camera_id)
     heatmap_cells = _read_heatmap(client, camera_id)
     detections = _detections_from_frame(frame)
@@ -364,12 +354,12 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "frame_id": frame_id,
             "capture_ts": capture_ts,
-            "image_url": str((frame or {}).get("image_url") or ""),
+            "image_url": str((frame or {}).get("image_url") or live_frame_stream_url(camera_id)),
             "image_size": {
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),
             },
-            "fps": 0.0,
+            "fps": fps,
             "latency_ms": latency_ms or 0,
             "detections": detections,
             "heatmap_points": _heatmap_points(heatmap_cells),
@@ -378,7 +368,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "current_count": current_count,
             "active_tracks": active_tracks,
-            "fps": 0.0,
+            "fps": fps,
             "latency_ms": latency_ms or 0,
             "count_change_percent": 0,
             "tracks_change_percent": 0,
@@ -395,6 +385,6 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "peak_time": now.strftime("%H:%M"),
         },
         "zone_heatmap": _zone_heatmap(heatmap_cells),
-        "pipeline_health": _pipeline_health(now, redis_latency_ms, status),
+        "pipeline_health": pipeline_health(now, redis_latency_ms, status),
     }
     return LiveDashboardData.model_validate(data)

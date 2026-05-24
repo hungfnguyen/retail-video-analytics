@@ -149,3 +149,7 @@ uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
 cd frontend
 npm run dev
 ```
+
+
+docker compose -f docker-compose.dev.yml up -d
+docker compose -f docker-compose.dev.yml down -v

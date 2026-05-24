@@ -1,15 +1,20 @@
-import { ChevronDown } from 'lucide-react'
+import { useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
 import { AlertList } from './components/AlertList'
 import { LiveMetricCards } from './components/LiveMetricCards'
-import { PipelineHealth } from './components/PipelineHealth'
-import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
 import { ZoneHeatmap } from './components/ZoneHeatmap'
 import { useLiveData } from './hooks/useLiveData'
+import type { AppPage } from '../../shared/components/AppShell'
 
-export function LivePage() {
-  const { data, error } = useLiveData()
+type LivePageProps = {
+  activePage: AppPage
+  onPageChange: (page: AppPage) => void
+}
+
+export function LivePage({ activePage, onPageChange }: LivePageProps) {
+  const [selectedCameraId, setSelectedCameraId] = useState('cam_01')
+  const { data, error } = useLiveData(selectedCameraId)
 
 
   if (error) {
@@ -25,27 +30,23 @@ export function LivePage() {
   )
 
   return (
-    <AppShell>
+    <AppShell activePage={activePage} onPageChange={onPageChange}>
       {/* Page header */}
       <header className="mb-5 flex items-center justify-between">
         <h1 className="m-0 text-[26px] font-bold leading-tight text-slate-950">Live Store Monitor</h1>
 
         <div className="flex items-center gap-3">
-          <button
-            className="flex min-w-55 items-center justify-between gap-8 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-slate-950 shadow-sm"
-            type="button"
+          <select
+            className="min-w-55 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 font-semibold text-slate-950 shadow-sm"
+            onChange={(event) => setSelectedCameraId(event.target.value)}
+            value={selectedCamera?.camera_id ?? selectedCameraId}
           >
-            {data.store.name}
-            <ChevronDown size={16} />
-          </button>
-
-          <button
-            className="flex min-w-55 items-center justify-between gap-8 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-slate-950 shadow-sm"
-            type="button"
-          >
-            {selectedCamera?.name ?? data.selected_camera_id}
-            <ChevronDown size={16} />
-          </button>
+            {data.cameras.map((camera) => (
+              <option key={camera.camera_id} value={camera.camera_id}>
+                {camera.name}
+              </option>
+            ))}
+          </select>
 
           <span className="rounded-lg border border-emerald-200 bg-emerald-50 px-4.5 py-2.5 font-bold text-emerald-700">
             Running
@@ -53,24 +54,20 @@ export function LivePage() {
         </div>
       </header>
 
+      <LiveMetricCards stats={data.stats} />
+
       {/* Primary live monitoring area */}
-      <div className="grid grid-cols-[minmax(600px,1.2fr)_minmax(430px,0.8fr)] gap-5">
+      <div className="mt-5 grid grid-cols-[minmax(680px,1.45fr)_minmax(360px,0.55fr)] gap-5">
         <VideoPanel frame={data.frame} />
 
         <div className="grid gap-4.5">
-          <LiveMetricCards stats={data.stats} />
           <AlertList alerts={data.alerts} />
         </div>
       </div>
 
-      {/* Supporting live analytics */}
-      <div className="mt-5 grid grid-cols-[1.15fr_1fr_1fr] gap-5">
-        <TrafficChart
-          summary={data.traffic_summary}
-          traffic={data.traffic}
-        />
+      {/* Realtime spatial state */}
+      <div className="mt-5 grid grid-cols-[minmax(0,1fr)] gap-5">
         <ZoneHeatmap cells={data.zone_heatmap} />
-        <PipelineHealth services={data.pipeline_health} />
       </div>
     </AppShell>
   )

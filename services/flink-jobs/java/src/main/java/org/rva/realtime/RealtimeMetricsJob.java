@@ -303,6 +303,8 @@ public class RealtimeMetricsJob {
 
         private static final int HEATMAP_EXPIRE_SEC = 60;
         private static final int COUNT_EXPIRE_SEC = 5;
+        private static final int FPS_EXPIRE_SEC = 10;
+        private static final int FPS_BUCKET_EXPIRE_SEC = 3;
         private static final int FRAME_EXPIRE_SEC = 10;
         private static final int TRACK_EXPIRE_SEC = 30;
 
@@ -338,6 +340,7 @@ public class RealtimeMetricsJob {
             try (Jedis jedis = pool.getResource()) {
                 jedis.setex("stats:count:" + cameraId, COUNT_EXPIRE_SEC,
                         String.valueOf(evt.personCount));
+                updateServingFps(jedis, cameraId);
 
                 String ts = Instant.ofEpochMilli(evt.captureMs).toString();
                 jedis.setex("live:frame:" + cameraId, FRAME_EXPIRE_SEC,
@@ -371,6 +374,22 @@ public class RealtimeMetricsJob {
                 }
             } catch (Exception e) {
                 LOG.warn("Redis write failed for camera {}: {}", cameraId, e.toString());
+            }
+        }
+
+        private void updateServingFps(Jedis jedis, String cameraId) {
+            long epochSecond = System.currentTimeMillis() / 1_000L;
+            String currentBucketKey = "stats:fps:bucket:" + cameraId + ":" + epochSecond;
+            long currentCount = jedis.incr(currentBucketKey);
+            if (currentCount == 1L) {
+                jedis.expire(currentBucketKey, FPS_BUCKET_EXPIRE_SEC);
+            }
+            jedis.setex("stats:fps:" + cameraId, FPS_EXPIRE_SEC, String.valueOf(currentCount));
+
+            String previousBucketKey = "stats:fps:bucket:" + cameraId + ":" + (epochSecond - 1);
+            String previousFrameCount = jedis.get(previousBucketKey);
+            if (previousFrameCount != null) {
+                jedis.setex("stats:fps:" + cameraId, FPS_EXPIRE_SEC, previousFrameCount);
             }
         }
 
