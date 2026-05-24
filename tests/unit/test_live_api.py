@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 import json
+import time
 from datetime import datetime, timezone
 
 import pytest
@@ -68,6 +69,24 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
             }
         ],
     )
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 12.5,
+            "processing_fps": 2.4,
+            "inference_ms": 380,
+            "postprocess_ms": 4,
+            "draw_ms": 3,
+            "jpeg_size_bytes": 123456,
+            "encode_ms": 6,
+            "publish_interval_ms": 80,
+            "reader_queue_size": 1,
+            "reader_drop_count": 7,
+        },
+    )
 
     data = live.get_live_dashboard("cam_01")
 
@@ -76,6 +95,20 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.stats.active_tracks == 1
     assert data.frame.frame_id == 1500
     assert data.frame.image_url == "/media/live/cam_01/stream"
+    assert data.frame.media_fps == 12.5
+    assert data.frame.media_latency_ms < 1_000
+    assert data.frame.media_status == "online"
+    assert data.frame.metadata_latency_ms < 1_000
+    assert data.stats.media_fps == 12.5
+    assert data.stats.metadata_latency_ms < 1_000
+    assert data.frame.processing_fps == 2.4
+    assert data.frame.inference_ms == 380
+    assert data.frame.postprocess_ms == 4
+    assert data.frame.draw_ms == 3
+    assert data.frame.encode_ms == 6
+    assert data.frame.jpeg_size_bytes == 123456
+    assert data.frame.reader_queue_size == 1
+    assert data.frame.reader_drop_count == 7
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0
@@ -92,3 +125,27 @@ def test_get_redis_client_raises_503_when_unavailable(monkeypatch):
         live._get_redis_client()
 
     assert exc_info.value.status_code == 503
+
+
+def test_read_media_metadata_from_configured_dir(monkeypatch, tmp_path):
+    metadata_path = tmp_path / "cam_01.json"
+    metadata_path.write_text(
+        json.dumps({"updated_at_epoch_ms": int(time.time() * 1000), "publish_fps": 9.5}),
+        encoding="utf-8",
+    )
+    monkeypatch.setenv("RVA_LIVE_MEDIA_DIR", str(tmp_path))
+
+    metadata = live._read_media_metadata("cam_01")
+
+    assert metadata["publish_fps"] == 9.5
+    assert live._media_status(metadata, live._media_latency_ms(metadata)) == "online"
+
+
+def test_media_metadata_missing_is_safe(monkeypatch, tmp_path):
+    monkeypatch.setenv("RVA_LIVE_MEDIA_DIR", str(tmp_path))
+
+    metadata = live._read_media_metadata("cam_01")
+
+    assert metadata == {}
+    assert live._media_latency_ms(metadata) is None
+    assert live._media_status(metadata, None) == "missing"

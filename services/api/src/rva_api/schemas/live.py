@@ -51,6 +51,18 @@ class LiveFrame(BaseModel):
     image_size: ImageSize
     fps: float
     latency_ms: int
+    media_fps: float
+    media_latency_ms: int
+    metadata_latency_ms: int
+    media_status: Literal["online", "warning", "missing"]
+    processing_fps: float
+    inference_ms: int
+    postprocess_ms: int
+    draw_ms: int
+    encode_ms: int
+    jpeg_size_bytes: int
+    reader_queue_size: int
+    reader_drop_count: int
     detections: list[Detection]
     heatmap_points: list[HeatmapPoint]
 
@@ -61,6 +73,9 @@ class LiveStats(BaseModel):
     active_tracks: int
     fps: float
     latency_ms: int
+    media_fps: float
+    media_latency_ms: int
+    metadata_latency_ms: int
     count_change_percent: int
     tracks_change_percent: int
     status: Literal["stable", "warning", "critical"]

@@ -23,7 +23,7 @@ function formatUpdatedAt(value: string) {
 }
 
 export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
-  const freshnessLabel = stats.status === 'stable' ? 'Fresh frame' : 'Stale or missing frame'
+  const freshnessLabel = stats.status === 'stable' ? 'Fresh metadata' : 'Stale or missing metadata'
 
   const metrics = [
     {
@@ -39,14 +39,14 @@ export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
       icon: Footprints,
     },
     {
-      label: 'FPS',
-      value: stats.fps > 0 ? stats.fps.toFixed(1) : 'N/A',
-      meta: stats.fps > 0 ? 'Measured upstream' : 'Not measured yet',
+      label: 'Media FPS',
+      value: stats.media_fps > 0 ? stats.media_fps.toFixed(1) : 'N/A',
+      meta: stats.media_fps > 0 ? 'Published video frames' : 'Not measured yet',
       icon: Activity,
     },
     {
-      label: 'Latency',
-      value: `${stats.latency_ms} ms`,
+      label: 'Metadata lag',
+      value: `${stats.metadata_latency_ms} ms`,
       meta: freshnessLabel,
       icon: Clock,
     },

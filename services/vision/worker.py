@@ -1,6 +1,7 @@
 import uuid
 import logging
 import signal
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -174,6 +175,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
     # 4. Pipeline loop — per-frame tracking via model.track(persist=True)
     frame_index = 0
+    last_processed_monotonic = 0.0
     try:
         while _reader._running:
             try:
@@ -181,12 +183,26 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
             except Exception:
                 continue  # timeout, check _running and retry
 
+            loop_started = time.perf_counter()
+            processed_interval_ms = (
+                max(0, int((loop_started - last_processed_monotonic) * 1000))
+                if last_processed_monotonic > 0
+                else 0
+            )
+            processing_fps = (
+                round(1000.0 / processed_interval_ms, 2)
+                if processed_interval_ms > 0
+                else 0.0
+            )
+            last_processed_monotonic = loop_started
+
             frame_index += 1
             capture_ts = datetime.now(timezone.utc)
             capture_ts_iso = capture_ts.isoformat()
             height, width = frame.shape[:2]
 
             # Per-frame tracking: Ultralytics persist=True giữ tracker state giữa các lần gọi
+            inference_started = time.perf_counter()
             results = tracker.model.track(
                 source=frame,
                 persist=True,
@@ -196,7 +212,9 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                 tracker=tracker.tracker_yaml,
                 verbose=False,
             )
+            inference_ms = max(0, int((time.perf_counter() - inference_started) * 1000))
 
+            postprocess_started = time.perf_counter()
             detections = []
             tracked_objects = []
             for r in results:
@@ -229,17 +247,30 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                             else int(obj["id"]),
                         }
                     )
+            postprocess_ms = max(0, int((time.perf_counter() - postprocess_started) * 1000))
 
             if live_frame_publisher and visualizer:
                 try:
+                    draw_started = time.perf_counter()
                     annotated_frame = visualizer.draw_tracks(
                         frame.copy(), tracked_objects
                     )
+                    draw_ms = max(0, int((time.perf_counter() - draw_started) * 1000))
                     live_frame_publisher.publish(
                         annotated_frame,
                         frame_index=frame_index,
                         capture_ts=capture_ts,
                         detections_count=len(detections),
+                        extra_metrics={
+                            "processing_fps": processing_fps,
+                            "processed_interval_ms": processed_interval_ms,
+                            "inference_ms": inference_ms,
+                            "postprocess_ms": postprocess_ms,
+                            "draw_ms": draw_ms,
+                            "reader_queue_size": _reader.queue.qsize() if _reader else 0,
+                            "reader_drop_count": _reader.drop_count if _reader else 0,
+                            "tracked_objects_count": len(tracked_objects),
+                        },
                     )
                 except Exception:
                     logger.exception(

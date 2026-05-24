@@ -16,6 +16,8 @@ uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
 ```text
 GET /health
 GET /api/v1/live/{camera_id}/dashboard
+GET /media/live/{camera_id}/stream
+POST /media/live/{camera_id}/webrtc/offer
 ```
 
 Example:
@@ -28,7 +30,7 @@ http://localhost:8000/api/v1/live/cam_01/dashboard
 
 - FastAPI application shell
 - CORS for the local Vite frontend
-- Live dashboard mock contract
+- Live dashboard Redis serving contract
+- MJPEG live video fallback
+- WebRTC live video offer endpoint for the dashboard media plane
 - Pydantic response models matching the frontend Live feature types
-
-Real Redis, Trino, S3, and Prometheus integrations should be added behind the same API contract later.

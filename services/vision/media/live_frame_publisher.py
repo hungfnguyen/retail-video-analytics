@@ -49,33 +49,51 @@ class LiveFramePublisher:
         frame_index: int,
         capture_ts: datetime,
         detections_count: int,
+        extra_metrics: dict[str, Any] | None = None,
     ) -> bool:
         now = time.monotonic()
         if now - self._last_publish_monotonic < self.min_interval_sec:
             return False
 
+        encode_started = time.perf_counter()
         ok, encoded = cv2.imencode(
             ".jpg",
             frame,
             [int(cv2.IMWRITE_JPEG_QUALITY), self.jpeg_quality],
         )
+        encode_ms = max(0, int((time.perf_counter() - encode_started) * 1000))
         if not ok:
             logger.warning("Could not encode live frame for camera %s", self.camera_id)
             return False
 
-        self._atomic_write_bytes(self.frame_path, encoded.tobytes())
+        publish_interval_ms = (
+            max(0, int((now - self._last_publish_monotonic) * 1000))
+            if self._last_publish_monotonic > 0
+            else 0
+        )
+        publish_fps = (
+            round(1000.0 / publish_interval_ms, 2)
+            if publish_interval_ms > 0
+            else 0.0
+        )
+        payload = encoded.tobytes()
+        self._atomic_write_bytes(self.frame_path, payload)
+        metadata = {
+            "camera_id": self.camera_id,
+            "frame_index": frame_index,
+            "capture_ts": capture_ts.isoformat(),
+            "detections_count": detections_count,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": publish_fps,
+            "jpeg_size_bytes": len(payload),
+            "encode_ms": encode_ms,
+            "publish_interval_ms": publish_interval_ms,
+        }
+        if extra_metrics:
+            metadata.update(extra_metrics)
         self._atomic_write_text(
             self.metadata_path,
-            json.dumps(
-                {
-                    "camera_id": self.camera_id,
-                    "frame_index": frame_index,
-                    "capture_ts": capture_ts.isoformat(),
-                    "detections_count": detections_count,
-                    "updated_at_epoch_ms": int(time.time() * 1000),
-                },
-                separators=(",", ":"),
-            ),
+            json.dumps(metadata, separators=(",", ":")),
         )
         self._last_publish_monotonic = now
         return True

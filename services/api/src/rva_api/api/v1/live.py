@@ -21,6 +21,7 @@ ZONE_ROWS = ["A1", "A2", "B1", "B2", "C1", "C2"]
 ZONE_COLS = 7
 HEATMAP_TOP_N = 80
 STALE_FRAME_MS = 10_000
+MEDIA_STALE_MS = 3_000
 
 _redis_client: Any | None = None
 
@@ -140,6 +141,49 @@ def _parse_live_frame(raw: str | None) -> dict[str, Any] | None:
             status_code=502, detail="Invalid live frame payload in Redis"
         )
     return frame
+
+
+def _default_media_dir() -> Path:
+    for parent in Path(__file__).resolve().parents:
+        if (parent / "configs" / "cameras.yaml").exists():
+            return parent / "runtime" / "live_frames"
+    return Path("runtime/live_frames")
+
+
+def _media_dir() -> Path:
+    configured = os.getenv("RVA_LIVE_MEDIA_DIR") or os.getenv("LIVE_MEDIA_DIR")
+    return Path(configured) if configured else _default_media_dir()
+
+
+def _read_media_metadata(camera_id: str) -> dict[str, Any]:
+    metadata_path = _media_dir() / f"{camera_id}.json"
+    try:
+        raw = metadata_path.read_text(encoding="utf-8")
+    except (FileNotFoundError, OSError):
+        return {}
+
+    try:
+        metadata = json.loads(raw)
+    except json.JSONDecodeError:
+        return {}
+    return metadata if isinstance(metadata, dict) else {}
+
+
+def _media_latency_ms(metadata: dict[str, Any]) -> int | None:
+    updated_at = metadata.get("updated_at_epoch_ms")
+    try:
+        updated_at_ms = int(updated_at)
+    except (TypeError, ValueError):
+        return None
+    return max(0, int(time.time() * 1000) - updated_at_ms)
+
+
+def _media_status(metadata: dict[str, Any], media_latency_ms: int | None) -> str:
+    if not metadata:
+        return "missing"
+    if media_latency_ms is None or media_latency_ms > MEDIA_STALE_MS:
+        return "warning"
+    return "online"
 
 
 def _parse_capture_ts(frame: dict[str, Any] | None) -> datetime | None:
@@ -331,6 +375,18 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
 
     redis_latency_ms = max(0, int((time.perf_counter() - start) * 1000))
     latency_ms = _latency_ms(frame, now)
+    media_metadata = _read_media_metadata(camera_id)
+    media_latency_ms = _media_latency_ms(media_metadata)
+    media_fps = _safe_float(media_metadata.get("publish_fps"))
+    media_status = _media_status(media_metadata, media_latency_ms)
+    processing_fps = _safe_float(media_metadata.get("processing_fps"))
+    inference_ms = _safe_int(media_metadata.get("inference_ms"))
+    postprocess_ms = _safe_int(media_metadata.get("postprocess_ms"))
+    draw_ms = _safe_int(media_metadata.get("draw_ms"))
+    encode_ms = _safe_int(media_metadata.get("encode_ms"))
+    jpeg_size_bytes = _safe_int(media_metadata.get("jpeg_size_bytes"))
+    reader_queue_size = _safe_int(media_metadata.get("reader_queue_size"))
+    reader_drop_count = _safe_int(media_metadata.get("reader_drop_count"))
     status = (
         "stable"
         if frame is not None and latency_ms is not None and latency_ms <= STALE_FRAME_MS
@@ -369,8 +425,20 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
                 "width": _safe_int(image_size.get("width"), 0),
                 "height": _safe_int(image_size.get("height"), 0),
             },
-            "fps": 0.0,
+            "fps": media_fps,
             "latency_ms": latency_ms or 0,
+            "media_fps": media_fps,
+            "media_latency_ms": media_latency_ms or 0,
+            "metadata_latency_ms": latency_ms or 0,
+            "media_status": media_status,
+            "processing_fps": processing_fps,
+            "inference_ms": inference_ms,
+            "postprocess_ms": postprocess_ms,
+            "draw_ms": draw_ms,
+            "encode_ms": encode_ms,
+            "jpeg_size_bytes": jpeg_size_bytes,
+            "reader_queue_size": reader_queue_size,
+            "reader_drop_count": reader_drop_count,
             "detections": detections,
             "heatmap_points": _heatmap_points(heatmap_cells),
         },
@@ -378,8 +446,11 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "camera_id": camera_id,
             "current_count": current_count,
             "active_tracks": active_tracks,
-            "fps": 0.0,
+            "fps": media_fps,
             "latency_ms": latency_ms or 0,
+            "media_fps": media_fps,
+            "media_latency_ms": media_latency_ms or 0,
+            "metadata_latency_ms": latency_ms or 0,
             "count_change_percent": 0,
             "tracks_change_percent": 0,
             "status": status,

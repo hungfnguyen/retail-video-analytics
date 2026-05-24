@@ -42,6 +42,18 @@ export type LiveFrame = {
   }
   fps: number
   latency_ms: number
+  media_fps: number
+  media_latency_ms: number
+  metadata_latency_ms: number
+  media_status: 'online' | 'warning' | 'missing'
+  processing_fps: number
+  inference_ms: number
+  postprocess_ms: number
+  draw_ms: number
+  encode_ms: number
+  jpeg_size_bytes: number
+  reader_queue_size: number
+  reader_drop_count: number
   detections: Detection[]
   heatmap_points: HeatmapPoint[]
 }
@@ -52,6 +64,9 @@ export type LiveStats = {
   active_tracks: number
   fps: number
   latency_ms: number
+  media_fps: number
+  media_latency_ms: number
+  metadata_latency_ms: number
   count_change_percent: number
   tracks_change_percent: number
   status: 'stable' | 'warning' | 'critical'
