@@ -1,6 +1,7 @@
 import uuid
 import logging
 import signal
+import time
 from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict
@@ -10,7 +11,9 @@ from emit.pulsar_emitter import PulsarEmitter
 from emit.s3_client import S3ClientConfig, create_s3_client
 from emit.frame_sampler import FrameSampler
 from emit.clip_extractor import AlertClipExtractor
+from media.live_frame_publisher import LiveFramePublisher, create_live_frame_publisher
 from reader import VideoFileReader
+from utils.visualizer import Visualizer
 
 logger = logging.getLogger(__name__)
 
@@ -40,7 +43,9 @@ def _publish_completed_media_events(
 
     if clip_extractor:
         for result in clip_extractor.drain_completed():
-            emitter.emit_media_event(asdict(result), frame_index=result.trigger_frame_index)
+            emitter.emit_media_event(
+                asdict(result), frame_index=result.trigger_frame_index
+            )
 
 
 def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
@@ -80,7 +85,9 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
         _emitter = PulsarEmitter(
             global_cfg["pulsar_service_url"],
             global_cfg["pulsar_topic"],
-            media_topic=global_cfg.get("pulsar_media_topic") if global_cfg.get("media_upload_enabled") else None,
+            media_topic=global_cfg.get("pulsar_media_topic")
+            if global_cfg.get("media_upload_enabled")
+            else None,
         )
     except Exception as e:
         logger.error("Cannot connect to Pulsar: %s", e)
@@ -107,6 +114,11 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
         "stream_id": f"{camera_id}_stream",
     }
     class_filter = global_cfg.get("class_filter", [0])
+    live_frame_publisher: LiveFramePublisher | None = create_live_frame_publisher(
+        camera_id,
+        global_cfg,
+    )
+    visualizer = Visualizer() if live_frame_publisher else None
 
     frame_sampler: FrameSampler | None = None
     clip_extractor: AlertClipExtractor | None = None
@@ -163,6 +175,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
     # 4. Pipeline loop — per-frame tracking via model.track(persist=True)
     frame_index = 0
+    last_processed_monotonic = 0.0
     try:
         while _reader._running:
             try:
@@ -170,11 +183,26 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
             except Exception:
                 continue  # timeout, check _running and retry
 
+            loop_started = time.perf_counter()
+            processed_interval_ms = (
+                max(0, int((loop_started - last_processed_monotonic) * 1000))
+                if last_processed_monotonic > 0
+                else 0
+            )
+            processing_fps = (
+                round(1000.0 / processed_interval_ms, 2)
+                if processed_interval_ms > 0
+                else 0.0
+            )
+            last_processed_monotonic = loop_started
+
             frame_index += 1
             capture_ts = datetime.now(timezone.utc)
+            capture_ts_iso = capture_ts.isoformat()
             height, width = frame.shape[:2]
 
             # Per-frame tracking: Ultralytics persist=True giữ tracker state giữa các lần gọi
+            inference_started = time.perf_counter()
             results = tracker.model.track(
                 source=frame,
                 persist=True,
@@ -184,10 +212,14 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                 tracker=tracker.tracker_yaml,
                 verbose=False,
             )
+            inference_ms = max(0, int((time.perf_counter() - inference_started) * 1000))
 
+            postprocess_started = time.perf_counter()
             detections = []
+            tracked_objects = []
             for r in results:
                 objects = tracker._extract_objects(r)
+                tracked_objects.extend(objects)
                 for j, obj in enumerate(objects):
                     x1, y1, x2, y2 = map(float, obj["bbox"])
                     w_box = x2 - x1
@@ -195,23 +227,61 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                     cx = x1 + w_box / 2.0
                     cy = y1 + h_box / 2.0
 
-                    detections.append({
-                        "det_id": f"{frame_index}-{j}",
-                        "class": obj.get("label", "person"),
-                        "class_id": int(obj.get("cls", 0)),
-                        "conf": float(obj.get("conf", 0.0)),
-                        "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-                        "bbox_norm": {"x": x1 / width, "y": y1 / height, "w": w_box / width, "h": h_box / height},
-                        "centroid": {"x": int(cx), "y": int(cy)},
-                        "centroid_norm": {"x": cx / width, "y": cy / height},
-                        "track_id": None if obj.get("id", -1) < 0 else int(obj["id"]),
-                    })
+                    detections.append(
+                        {
+                            "det_id": f"{frame_index}-{j}",
+                            "class": obj.get("label", "person"),
+                            "class_id": int(obj.get("cls", 0)),
+                            "conf": float(obj.get("conf", 0.0)),
+                            "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+                            "bbox_norm": {
+                                "x": x1 / width,
+                                "y": y1 / height,
+                                "w": w_box / width,
+                                "h": h_box / height,
+                            },
+                            "centroid": {"x": int(cx), "y": int(cy)},
+                            "centroid_norm": {"x": cx / width, "y": cy / height},
+                            "track_id": None
+                            if obj.get("id", -1) < 0
+                            else int(obj["id"]),
+                        }
+                    )
+            postprocess_ms = max(0, int((time.perf_counter() - postprocess_started) * 1000))
+
+            if live_frame_publisher and visualizer:
+                try:
+                    draw_started = time.perf_counter()
+                    annotated_frame = visualizer.draw_tracks(
+                        frame.copy(), tracked_objects
+                    )
+                    draw_ms = max(0, int((time.perf_counter() - draw_started) * 1000))
+                    live_frame_publisher.publish(
+                        annotated_frame,
+                        frame_index=frame_index,
+                        capture_ts=capture_ts,
+                        detections_count=len(detections),
+                        extra_metrics={
+                            "processing_fps": processing_fps,
+                            "processed_interval_ms": processed_interval_ms,
+                            "inference_ms": inference_ms,
+                            "postprocess_ms": postprocess_ms,
+                            "draw_ms": draw_ms,
+                            "reader_queue_size": _reader.queue.qsize() if _reader else 0,
+                            "reader_drop_count": _reader.drop_count if _reader else 0,
+                            "tracked_objects_count": len(tracked_objects),
+                        },
+                    )
+                except Exception:
+                    logger.exception(
+                        "Live media publish failed for frame %d", frame_index
+                    )
 
             _emitter.emit_frame(
                 pipeline_run_id=pipeline_run_id,
                 source=source_info,
                 frame_index=frame_index,
-                capture_ts_iso=capture_ts.isoformat(),
+                capture_ts_iso=capture_ts_iso,
                 image_size={"width": width, "height": height},
                 detections=detections,
                 runtime={
@@ -253,10 +323,14 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
             try:
                 if frame_sampler:
                     for result in frame_sampler.shutdown():
-                        _emitter.emit_media_event(asdict(result), frame_index=result.frame_index)
+                        _emitter.emit_media_event(
+                            asdict(result), frame_index=result.frame_index
+                        )
                 if clip_extractor:
                     for result in clip_extractor.shutdown():
-                        _emitter.emit_media_event(asdict(result), frame_index=result.trigger_frame_index)
+                        _emitter.emit_media_event(
+                            asdict(result), frame_index=result.trigger_frame_index
+                        )
                 _emitter.close()
             except Exception:
                 pass

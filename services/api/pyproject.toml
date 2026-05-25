@@ -1,0 +1,25 @@
+[build-system]
+requires = ["hatchling"]
+build-backend = "hatchling.build"
+
+[project]
+name = "rva-api"
+version = "0.1.0"
+description = "Retail Video Analytics - Dashboard API Service"
+requires-python = ">=3.12"
+dependencies = [
+    "core",
+    "storage",
+    "aiortc>=1.9",
+    "fastapi>=0.115",
+    "numpy>=1.24",
+    "pillow>=10",
+    "uvicorn[standard]>=0.32",
+]
+
+[tool.uv.sources]
+core = { workspace = true }
+storage = { workspace = true }
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/rva_api"]

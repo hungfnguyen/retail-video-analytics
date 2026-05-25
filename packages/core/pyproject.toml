@@ -7,4 +7,7 @@ name = "core"
 version = "0.1.0"
 description = "Shared models, settings, constants"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = [
+    "pydantic>=2",
+    "pyyaml>=6",
+]

@@ -52,7 +52,7 @@ Quy tắc:
 | `persistent://retail/ops/track-lifecycle-v1` | Track start/end/sample nếu publish qua broker | `store_id:camera_id:track_id` |
 | `persistent://retail/ops/alerts-v1` | Alert events | `store_id:camera_id` |
 | `persistent://retail/ops/system-metrics-v1` | FPS, lag, worker health | `service_id` |
-| `persistent://retail/dlq/invalid-events-v1` | Event lỗi schema hoặc quality rule | `source_topic` |
+| `persistent://retail/metadata/dlq-events` | Event lỗi schema hoặc quality rule | `source_topic` |
 
 Trong MVP có thể chỉ dùng topic detection frame và để Flink sinh ra alert/metrics.
 

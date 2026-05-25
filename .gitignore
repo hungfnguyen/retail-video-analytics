@@ -16,6 +16,7 @@ __pycache__/
 *$py.class
 .mypy_cache/
 .pytest_cache/
+.uv-cache/
 coverage.xml
 .coverage*
 
@@ -38,6 +39,7 @@ detections_output.ndjson
 # Logs & Temp
 *.log
 logs/
+runtime/
 tmp/
 temp/
 
@@ -45,6 +47,21 @@ temp/
 build/
 dist/
 *.egg-info/
+
+# Node / Frontend
+node_modules/
+frontend/node_modules/
+frontend/dist/
+frontend/dist-ssr/
+frontend/.vite/
+frontend/.turbo/
+frontend/.next/
+frontend/.cache/
+frontend/*.local
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+pnpm-debug.log*
 
 # OS
 .DS_Store
@@ -62,3 +79,7 @@ HANDOFF.md
 
 # Java/Target (nếu lỡ dính)
 **/target/
+
+.metals
+
+.antigravitycli

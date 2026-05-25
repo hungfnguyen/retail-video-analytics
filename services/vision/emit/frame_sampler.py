@@ -6,6 +6,8 @@ from typing import Any
 
 import cv2
 
+from core.time_utils import ensure_utc
+
 logger = logging.getLogger(__name__)
 
 
@@ -136,7 +138,7 @@ class FrameSampler:
         return (capture_ts - self._last_sample_ts).total_seconds() >= self.interval_sec
 
     def _build_key(self, ts: datetime, frame_index: int) -> str:
-        ts = _ensure_utc(ts)
+        ts = ensure_utc(ts)
         return (
             f"frames/{ts:%Y-%m-%d}/{self.store_id}/{self.camera_id}/"
             f"{ts:%H}h/{ts:%H%M%S}_{frame_index:09d}.jpg"
@@ -166,7 +168,7 @@ class FrameSampler:
             pipeline_run_id=pipeline_run_id,
             source=source,
             frame_index=frame_index,
-            capture_ts=_ensure_utc(capture_ts).isoformat(),
+            capture_ts=ensure_utc(capture_ts).isoformat(),
             upload_ts=upload_ts.isoformat(),
             image_size=image_size,
             bucket=self.bucket,
@@ -178,7 +180,3 @@ class FrameSampler:
         )
 
 
-def _ensure_utc(ts: datetime) -> datetime:
-    if ts.tzinfo is None:
-        return ts.replace(tzinfo=timezone.utc)
-    return ts.astimezone(timezone.utc)

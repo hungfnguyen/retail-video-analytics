@@ -3,10 +3,15 @@ name = "retail-video-analytics"
 version = "0.1.0"
 description = "Retail Video Analytics - Monorepo"
 requires-python = ">=3.12"
-dependencies = []
+dependencies = ["core", "messaging", "storage"]
+
+[tool.uv.sources]
+core = { workspace = true }
+messaging = { workspace = true }
+storage = { workspace = true }
 
 [tool.uv.workspace]
-members = ["services/vision", "packages/*"]
+members = ["services/vision", "services/api", "packages/*"]
 
 [dependency-groups]
 dev = ["pytest>=8", "pytest-cov>=5", "ruff>=0.15.13"]

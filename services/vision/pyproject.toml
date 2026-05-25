@@ -8,6 +8,9 @@ version = "0.1.0"
 description = "Retail Video Analytics - Vision AI Service"
 requires-python = ">=3.12"
 dependencies = [
+    "core",
+    "messaging",
+    "storage",
     "opencv-python>=4.8",
     "numpy>=1.24",
     "torch==2.4.1+cu124",
@@ -23,6 +26,9 @@ dependencies = [
 ]
 
 [tool.uv.sources]
+core = { workspace = true }
+messaging = { workspace = true }
+storage = { workspace = true }
 torch = { index = "pytorch-cu124" }
 torchvision = { index = "pytorch-cu124" }
 

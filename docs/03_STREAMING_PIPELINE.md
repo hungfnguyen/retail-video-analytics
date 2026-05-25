@@ -9,47 +9,66 @@ Streaming pipeline xử lý detection events từ Pulsar để tạo hai nhóm o
 
 Thiết kế dùng Apache Flink vì cần event time, watermark, stateful processing, window aggregation và checkpointing.
 
-## 2. Topology tổng thể
+## 2. Topology tổng thể (đã triển khai — Dual-path)
 
-```text
-Pulsar detection-frames-v1
-    |
-    v
-Flink source
-    |
-    v
-Parse + schema validation
-    |
-    +--> invalid events -> DLQ
-    |
-    v
-Assign event time + watermark
-    |
-    v
-Deduplicate by event_id
-    |
-    +-----------------------------+
-    |                             |
-    v                             v
-Realtime branch              Lakehouse branch
-    |                             |
-    +--> live count -> Redis      +--> Bronze Iceberg
-    +--> heatmap -> Redis         +--> Silver detections
-    +--> alerts -> Redis/Postgres +--> Gold aggregates
-    +--> metrics -> Prometheus
+```
+                         Vision Service
+                              │
+                              ▼
+                    Pulsar (detection-events)
+                    event_id: SHA256[:16]
+                              │
+              ┌───────────────┴───────────────┐
+              │                               │
+     [Lakehouse Path]                  [Realtime Path]
+     Table API, checkpoint 60s        DataStream API, checkpoint 10s
+     Latency: 2-3 min                 Latency: <5s
+              │                               │
+    BronzeIngestJob                   RealtimeMetricsJob
+    Pulsar → Iceberg bronze_raw       Pulsar → parse→validate→Redis
+              │                               │
+    SilverJob (streaming read)        ├─ live_count (SET EX 5)
+    bronze_raw → UDTF → silver        ├─ heatmap:live (ZINCRBY EX 60)
+              │                       ├─ track:active (HSET EX 30)
+    GoldTrackSummaryJob               └─ invalid → DLQ Pulsar topic
+    silver → gold_track_summary               │
+    (upsert by track_id)                      │
+              │                               │
+    Trino → Grafana                   FastAPI → Streamlit
+    (historical analytics)            (live dashboard)
 ```
 
-## 3. Flink jobs đề xuất
+**Quyết định kiến trúc quan trọng**: Lakehouse path dùng Table API (SQL) vì Iceberg integration native, schema evolution và exactly-once sinks. Realtime path dùng DataStream API vì cần side-output DLQ, custom Redis sink, và latency thấp không phụ thuộc Iceberg commit cycle.
 
-| Job | Input | Output | Vai trò |
-|---|---|---|---|
-| `DetectionIngestJob` | Pulsar detection frames | Bronze Iceberg, DLQ | Validate, dedup, lưu raw structured event |
-| `RealtimeMetricsJob` | Pulsar detection frames | Redis, PostgreSQL alerts | Live count, heatmap, active tracks, alert |
-| `SilverCurationJob` | Bronze hoặc Pulsar | Silver Iceberg | Flatten detections, clean bbox, filter confidence |
-| `GoldAggregationJob` | Silver Iceberg stream/table | Gold Iceberg | Minute/hour/day aggregate |
-| `SystemMetricsJob` | Logs/metrics topic | Prometheus/PostgreSQL | Service health và pipeline health |
+## 3. Flink jobs đã triển khai
 
-MVP có thể gộp `DetectionIngestJob`, `RealtimeMetricsJob` và `SilverCurationJob` trong ít job hơn. Khi viết báo cáo, nên trình bày logical jobs rõ ràng dù triển khai ban đầu gộp.
+| Job | API | Input | Output | Checkpoint | Vai trò |
+|---|---|---|---|---|---|
+| `BronzeIngestJob` | Table API/SQL | Pulsar (raw JSON) | Iceberg `bronze_raw` | 60s | Lưu raw event, audit trail |
+| `SilverJob` | Table API/SQL | Iceberg `bronze_raw` (streaming read) | Iceberg `silver_detections` | 30s (implied) | Flatten detections, clean bbox, filter conf>=0.4, dedup ROW_NUMBER |
+| `GoldTrackSummaryJob` | Table API/SQL | Iceberg `silver_detections` (streaming read) | Iceberg `gold_track_summary` (upsert) | 30s (implied) | Track lifecycle aggregate: enter/exit/duration |
+| `RealtimeMetricsJob` | **DataStream API** | Pulsar (raw JSON, subscription riêng) | Redis + DLQ Pulsar topic | **10s** | Live count, heatmap, active tracks, DLQ routing |
+
+### Lakehouse path (Table API)
+
+```
+Pulsar → BronzeIngestJob → Iceberg bronze_raw (raw JSON + parsed fields)
+                                  ↓ (streaming read, monitor-interval=1s)
+                           SilverJob → Iceberg silver_detections (flattened, cleaned)
+                                  ↓ (streaming read)
+                           GoldTrackSummaryJob → Iceberg gold_track_summary (upsert)
+```
+
+Lakehouse path chấp nhận latency 2-3 phút vì mỗi tầng phụ thuộc Iceberg commit cycle (checkpoint 60s). Đây là đánh đổi chấp nhận được cho historical analytics — nơi tính đầy đủ và schema evolution quan trọng hơn latency.
+
+### Realtime path (DataStream API)
+
+```
+Pulsar → RealtimeMetricsJob → Redis (live_count, heatmap, active_tracks)
+                           → DLQ Pulsar topic (invalid events)
+```
+
+Realtime path đọc trực tiếp từ Pulsar với subscription riêng (`flink-realtime-sub`), không qua Iceberg, đạt latency <5s. Watermark delay 5s cho event time. Checkpoint 10s (nhanh hơn lakehouse).
 
 ## 4. Event time và watermark
 
@@ -76,35 +95,54 @@ event_time = parse(capture_ts)
 watermark = max_seen_event_time - 5 seconds
 ```
 
-## 5. Validation stage
+## 5. Validation stage (đã triển khai)
 
-Validation tách event thành ba nhóm:
+Validation được thực hiện ở 2 tầng:
 
-| Nhóm | Điều kiện | Output |
+### Lakehouse path (ParseDetections UDTF)
+- Parse JSON, extract fields, normalize class_name, clamp bbox
+- Filter: confidence >= 0.4, required fields non-null
+- Propagate `event_id`, create `detection_id`, dedup with ROW_NUMBER by event/detection key
+- Parse errors are skipped in Silver while raw records remain in `bronze_raw` for audit
+
+### Realtime path (ParseValidateFunction)
+- Parse JSON, validate `event_id`, `store_id`, `camera_id`, `capture_ts`, `image_size`
+- Invalid events: side output -> DLQ Pulsar topic `persistent://retail/metadata/dlq-events`
+- Duplicate `event_id`: dropped by Flink keyed state with 10-minute TTL
+- Valid events: Redis live_count, heatmap, active_tracks
+
+### DLQ
+- Topic: `persistent://retail/metadata/dlq-events` (partitioned, 1 partition)
+- Được tạo trong `init-topics.sh`
+- RealtimeMetricsJob route invalid events vào DLQ qua side-output
+- DLQ topic dùng để kiểm tra invalid event và phục vụ observability
+
+## 6. Deduplication với event_id
+
+### Sinh event_id
+
+`event_id` được sinh deterministically trong `core.models.DetectionFrameEvent` khi Vision emitter serialize event:
+
+```python
+event_id = sha256(f"{camera_id}|{capture_ts}|{frame_index}").hexdigest()[:16]
+```
+
+- 16 ký tự hex (64-bit uniqueness), đủ cho thesis scope
+- Deterministic: cùng camera, timestamp, frame_index luôn tạo cùng event_id
+- Idempotent khi replay/reprocess
+
+### Dedup strategy
+
+| Path | Cơ chế | Key |
 |---|---|---|
-| Valid | Schema đúng, timestamp hợp lệ, bbox hợp lệ hoặc sửa được | Pipeline chính |
-| Invalid | Thiếu required field, timestamp sai, image size sai | DLQ |
-| Recoverable | Bbox lệch biên, confidence thiếu nhưng có default | Clean và ghi quality flag |
-
-Các metric cần emit:
-
-- `events_in_total`
-- `events_valid_total`
-- `events_invalid_total`
-- `events_late_total`
-- `events_duplicate_total`
-- `detections_valid_total`
-- `detections_filtered_low_conf_total`
-
-## 6. Deduplication
-
-Dedup theo `event_id` trong state TTL ngắn.
+| Lakehouse (Silver) | `ROW_NUMBER()` partitioned by `event_id` + detection key | Detection-level |
+| Realtime (Redis) | Flink keyed state dedup before Redis write | `event_id` |
 
 | Thuộc tính | Giá trị |
 |---|---|
 | Key | `event_id` |
-| State type | Flink keyed state hoặc RocksDB state |
-| TTL | 10 đến 30 phút |
+| State type | Flink keyed state |
+| TTL | 10 phút |
 | Duplicate action | Drop và tăng metric |
 
 Lý do cần dedup:
@@ -253,7 +291,7 @@ Lakehouse commit vào Iceberg thường gắn với checkpoint. Vì vậy histor
 |---|---|---|
 | Iceberg | Exactly-once với Flink checkpoint nếu cấu hình đúng | Phù hợp lakehouse path |
 | PostgreSQL | Có thể idempotent với unique key | Không mặc định exactly-once |
-| Redis | At-least-once | Dùng SET/TTL/idempotent key để giảm sai lệch |
+| Redis | At-least-once | Dedup bằng Flink state trước khi ghi Redis; vẫn không phải exactly-once tuyệt đối |
 | Prometheus metrics | At-least-once hoặc best-effort | Dùng để quan sát, không làm source of truth |
 
 Kết luận cho báo cáo: hệ thống đạt exactly-once cho analytical storage, còn realtime serving chấp nhận at-least-once có kiểm soát.

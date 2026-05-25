@@ -50,6 +50,7 @@ public class BronzeIngestJob {
         tEnv.executeSql(
                 "CREATE TABLE IF NOT EXISTS bronze_raw (" +
                         "  schema_version STRING," +
+                        "  event_id STRING," +
                         "  pipeline_run_id STRING," +
                         "  frame_index BIGINT," +
                         "  payload STRING," +
@@ -76,6 +77,7 @@ public class BronzeIngestJob {
                 "INSERT INTO bronze_raw " +
                         "SELECT " +
                         "  JSON_VALUE(raw_payload, '$.schema_version'), " +
+                        "  JSON_VALUE(raw_payload, '$.event_id'), " +
                         "  JSON_VALUE(raw_payload, '$.pipeline_run_id'), " +
                         "  CAST(JSON_VALUE(raw_payload, '$.frame_index') AS BIGINT), " +
                         "  raw_payload, " +
