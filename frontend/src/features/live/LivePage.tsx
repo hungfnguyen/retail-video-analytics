@@ -8,8 +8,14 @@ import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
 import { ZoneHeatmap } from './components/ZoneHeatmap'
 import { useLiveData } from './hooks/useLiveData'
+import type { AppPage } from '../../shared/components/AppShell'
 
-export function LivePage() {
+type LivePageProps = {
+  activePage: AppPage
+  onPageChange: (page: AppPage) => void
+}
+
+export function LivePage({ activePage, onPageChange }: LivePageProps) {
   const { data, error, switchCamera } = useLiveData()
   const [cameraMenuOpen, setCameraMenuOpen] = useState(false)
 
@@ -24,13 +30,12 @@ export function LivePage() {
   const selectedCamera = data.cameras.find(
     (camera) => camera.camera_id === data.selected_camera_id,
   )
-  const onlineCameras = data.cameras.filter((c) => c.status === 'online')
   const statusBadge = selectedCamera?.status === 'online'
     ? { label: 'Running', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
     : { label: 'Warning', className: 'border-amber-200 bg-amber-50 text-amber-700' }
 
   return (
-    <AppShell>
+    <AppShell activePage={activePage} onPageChange={onPageChange}>
       {/* Page header */}
       <header className="mb-5 flex items-center justify-between">
         <h1 className="m-0 text-[26px] font-bold leading-tight text-slate-950">Live Store Monitor</h1>
