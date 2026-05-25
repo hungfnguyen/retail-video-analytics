@@ -22,7 +22,7 @@ Thiết kế mới dùng hướng **metadata-first**:
 | [04_LAKEHOUSE_DESIGN.md](./04_LAKEHOUSE_DESIGN.md) | Thiết kế Iceberg lakehouse theo Bronze, Silver, Gold |
 | [05_OPERATIONAL_STORAGE.md](./05_OPERATIONAL_STORAGE.md) | PostgreSQL, Redis, S3 và access pattern cho serving |
 | [06_CAMERA_EDGE_PROCESSING.md](./06_CAMERA_EDGE_PROCESSING.md) | Xử lý camera tại edge: RTSP, YOLO, tracking, worker, publisher |
-| [07_DASHBOARD_AND_SERVING.md](./07_DASHBOARD_AND_SERVING.md) | FastAPI, Streamlit, Grafana, API và dashboard requirements |
+| [07_DASHBOARD_AND_SERVING.md](./07_DASHBOARD_AND_SERVING.md) | FastAPI, Frontend SPA, API và dashboard requirements |
 | [08_IMPLEMENTATION_ROADMAP.md](./08_IMPLEMENTATION_ROADMAP.md) | Roadmap triển khai codebase mới theo milestone |
 | [09_EVALUATION_PLAN.md](./09_EVALUATION_PLAN.md) | Kế hoạch đánh giá chức năng, hiệu năng, chất lượng dữ liệu |
 | [10_S3_INFRASTRUCTURE.md](./10_S3_INFRASTRUCTURE.md) | Thiết kế S3 bucket, folder structure, Iceberg namespace, partitioning, access control |
@@ -53,7 +53,7 @@ Apache Flink
                                 Trino
                                   |
                                   v
-                      Grafana / Streamlit / SQL analysis
+                         FastAPI / Frontend / SQL analysis
 ```
 
 ## Công nghệ chính
@@ -68,8 +68,8 @@ Apache Flink
 | Object storage | AWS S3 | Sampled frames, Iceberg table data |
 | Lakehouse | Apache Iceberg | Bronze, Silver, Gold analytical tables |
 | Query | Trino | SQL engine cho Iceberg |
-| Serving | FastAPI, Streamlit, Grafana | API, live UI, historical dashboard |
-| Observability | Prometheus, Grafana | System metrics và pipeline health |
+| Serving | FastAPI, Frontend SPA | API, live UI, analytics UI, system UI |
+| Observability | FastAPI health, service checks | System metrics và pipeline health |
 
 ## Nguyên tắc thiết kế
 
@@ -86,7 +86,6 @@ Apache Flink
 |---|---:|---|
 | FastAPI | 8000 | REST API, WebSocket, MJPEG endpoint |
 | Streamlit | 8501 | Live monitor, event search, track replay |
-| Grafana | 3000 | Historical KPI và system dashboard |
 | Flink UI | 8081 | Theo dõi streaming jobs |
 | Pulsar Admin | 8080 hoặc 8084 | Theo dõi broker và topic |
 | Trino | 8083 | SQL query engine |

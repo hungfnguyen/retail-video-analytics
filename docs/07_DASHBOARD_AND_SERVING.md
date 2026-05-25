@@ -9,8 +9,7 @@ Serving layer biến dữ liệu trong Redis, PostgreSQL, S3 và Iceberg thành 
 | Thành phần | Vai trò |
 |---|---|
 | FastAPI | REST API, WebSocket, MJPEG stream, service integration |
-| Streamlit | Live monitor, alert panel, track replay, event search |
-| Grafana | Historical KPI, system health, pipeline metrics |
+| Frontend SPA | Live monitor, analytics dashboard, system monitor |
 | Trino | SQL backend cho historical analytics |
 | Redis | Live serving state |
 | PostgreSQL | Operational metadata |
@@ -20,14 +19,14 @@ Serving layer biến dữ liệu trong Redis, PostgreSQL, S3 và Iceberg thành 
 
 | Persona | Dashboard chính | Nhu cầu |
 |---|---|---|
-| Store manager | Grafana KPI | Traffic theo giờ/ngày, peak time |
-| Security/operations | Streamlit Live Monitor | Camera live, heatmap, alert |
-| Data analyst | Trino/Grafana/Export | Query lịch sử, so sánh camera |
-| System operator | Grafana Ops | Lag, FPS, checkpoint, service health |
+| Store manager | Frontend Analytics | Traffic theo giờ/ngày, peak time |
+| Security/operations | Frontend Live | Camera live, heatmap, alert |
+| Data analyst | Frontend Analytics / Export | Query lịch sử, so sánh camera |
+| System operator | Frontend System | Lag, FPS, checkpoint, service health |
 
 ## 4. FastAPI responsibilities
 
-FastAPI là serving gateway, không để Streamlit truy cập trực tiếp quá nhiều storage.
+FastAPI là serving gateway, không để frontend truy cập trực tiếp storage hay query engine.
 
 Responsibilities:
 
@@ -71,10 +70,7 @@ GET /api/v1/cameras/{camera_id}/health
 ### 5.3 Live stats
 
 ```text
-GET /api/v1/live/{camera_id}/stats
-GET /api/v1/live/{camera_id}/heatmap
-GET /api/v1/live/{camera_id}/tracks
-GET /api/v1/live/alerts
+GET /api/v1/live/{camera_id}/dashboard
 ```
 
 Example:
@@ -136,9 +132,9 @@ Message types:
 {"type": "camera_health", "camera_id": "cam_01", "status": "online"}
 ```
 
-## 7. Streamlit pages
+## 7. Frontend pages
 
-### 7.1 Live Monitor
+### 7.1 Live
 
 Primary page.
 
@@ -154,9 +150,8 @@ Features:
 
 Data source:
 
-- API live stats endpoint.
-- API heatmap endpoint.
-- API frame/MJPEG endpoint.
+- API live dashboard endpoint.
+- API frame/MJPEG/WebRTC endpoint.
 
 ### 7.2 Alerts
 
@@ -173,21 +168,7 @@ Data source:
 - PostgreSQL via API.
 - S3 pre-signed frame URL via API.
 
-### 7.3 Track Replay
-
-Features:
-
-- Search track by camera/time/track_id.
-- Show first/last seen, duration.
-- Show sampled path over frame.
-- Show position samples.
-
-Data source:
-
-- PostgreSQL track events.
-- Sampled frames from S3.
-
-### 7.4 Historical Analytics
+### 7.3 Analytics
 
 Features:
 
@@ -200,56 +181,33 @@ Data source:
 
 - Trino/Iceberg via API.
 
-## 8. Grafana dashboards
+### 7.4 System
 
-### 8.1 Retail KPI dashboard
+Features:
 
-| Panel | Data source |
-|---|---|
-| Visitors today estimate | Trino Gold |
-| Peak hour | Trino Gold |
-| Hourly person count | Trino Gold |
-| Camera comparison | Trino Gold |
-| Historical heatmap summary | Trino Gold |
+- Service health.
+- Pipeline status.
+- Dependency latency.
+- Recent operational signals.
 
-### 8.2 Realtime operations dashboard
+Data source:
 
-| Panel | Data source |
-|---|---|
-| Current count by camera | Redis exporter or API metrics |
-| Active alerts | PostgreSQL/API |
-| Camera online status | PostgreSQL/Prometheus |
-| Processing FPS | Prometheus |
+- FastAPI system health endpoints.
+- Redis/Flink/Pulsar/Trino dependency checks.
 
-### 8.3 Pipeline health dashboard
+## 8. Frontend realtime delivery
 
-| Panel | Data source |
-|---|---|
-| Pulsar publish/consume rate | Prometheus |
-| Consumer lag | Pulsar metrics |
-| Flink checkpoint duration | Flink metrics |
-| Flink restart count | Flink metrics |
-| Redis memory | Redis exporter |
-| PostgreSQL connections | Postgres exporter |
-| API latency | Prometheus |
-
-## 9. Streamlit realtime limitation
-
-Streamlit không phải frontend realtime tối ưu cho video FPS cao. Thiết kế demo nên chọn một trong hai hướng:
+Frontend là delivery layer chính cho production UI.
 
 | Hướng | Khi dùng |
 |---|---|
-| Polling 1 FPS | Demo đơn giản, live heatmap không cần video mượt |
-| MJPEG endpoint | Cần stream frame mượt hơn trong browser |
-| streamlit-webrtc | Cần WebRTC interaction, setup phức tạp hơn |
-| React frontend | Production direction, ngoài phạm vi MVP |
+| Polling dashboard JSON | Metadata live cards, heatmap, alerts |
+| MJPEG endpoint | Fallback video stream |
+| WebRTC | Video realtime độ trễ thấp |
+| Trino-backed analytics APIs | Historical charts và summaries |
 
-Đề xuất MVP:
+## 9. Security
 
-- Streamlit dùng polling/API để hiển thị heatmap và latest frame.
-- FastAPI cung cấp MJPEG endpoint nếu cần live frame mượt hơn.
-
-## 10. Security
 
 - Không trả trực tiếp S3 private URI cho browser nếu bucket private.
 - API tạo pre-signed URL có thời hạn ngắn.
@@ -257,11 +215,11 @@ Streamlit không phải frontend realtime tối ưu cho video FPS cao. Thiết k
 - Dashboard auth có thể đơn giản trong MVP nhưng cần nêu hướng production.
 - Không hiển thị hoặc lưu PII.
 
-## 11. Success criteria
+## 10. Success criteria
 
-- Streamlit xem được live count và heatmap.
+- Frontend xem được live count và heatmap.
 - Alert mới xuất hiện trên dashboard trong vài giây.
 - Có thể search alert/track và mở sampled frame.
-- Grafana query được Gold tables qua Trino.
-- Ops dashboard thể hiện FPS, lag, checkpoint hoặc health.
+- Analytics page query được Gold tables qua FastAPI/Trino.
+- System page thể hiện FPS, lag, checkpoint hoặc health.
 

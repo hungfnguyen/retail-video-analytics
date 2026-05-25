@@ -1,7 +1,7 @@
 # Retail Video Analytics — Realtime + Lakehouse
 
 > Đồ án tốt nghiệp Data Engineering: hệ thống realtime pipeline thu thập & xử lý metadata video cho chuỗi bán lẻ.
-> Stack: **YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/MinIO → Trino → Grafana**
+> Stack: **YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/S3 → Trino → FastAPI → Frontend**
 
 ---
 
@@ -24,7 +24,7 @@
 | **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
 | **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
 | **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
-| **Visualization** | Grafana 11.3 | Dashboards near-real-time |
+| **Serving UI** | Frontend SPA + FastAPI | Live monitoring, analytics, system views |
 
 ## 📁 Runtime Layout
 
@@ -38,7 +38,6 @@ infrastructure/
 ├── flink/
 ├── minio/
 ├── trino/
-└── grafana/
 ```
 
 ---
@@ -60,9 +59,8 @@ Vision (YOLO11 + BoTSORT)
   │    Silver → Iceberg              Redis heatmap (ZINCRBY)
   │    Gold   → Iceberg              Redis active tracks (HSET)
   │           │                      DLQ → Pulsar dlq-events
-  │    Trino → Grafana                     │
-  │    (historical)                  FastAPI → Streamlit
-  │                                       (chưa implement)
+  │    Trino → FastAPI                     │
+  │    (historical)                  FastAPI → Frontend
   │
   └── sampled JPEG / alert MP4 → MinIO (S3)
 ```
@@ -74,7 +72,6 @@ Vision (YOLO11 + BoTSORT)
 | Service | Port | URL | Credentials |
 |---------|------|-----|-------------|
 | Flink UI | 8081 | http://localhost:8081 | — |
-| Grafana | 3000 | http://localhost:3000 | admin / admin |
 | Trino | 8083 | http://localhost:8083 | — |
 | Pulsar Admin | 8084 | http://localhost:8084 | — |
 | MinIO Console | 9001 | http://localhost:9001 | minioadmin / minioadmin123 |
@@ -201,7 +198,6 @@ docker exec pulsar-broker bin/pulsar-client produce \
 | Service | Port | URL |
 |---------|------|-----|
 | **Flink UI** | 8081 | http://localhost:8081 |
-| **Grafana** | 3000 | http://localhost:3000 (admin/admin) |
 | **Trino** | 8083 | http://localhost:8083 |
 | **Pulsar Admin** | 8084 | http://localhost:8084 |
 | **MinIO Console** | 9001 | http://localhost:9001 |
@@ -212,13 +208,13 @@ docker exec pulsar-broker bin/pulsar-client produce \
 
 ---
 
-## 📊 Grafana Dashboards
+## Frontend Delivery
 
-Sau khi login Grafana (http://localhost:3000):
+Dashboard chính của hệ thống là frontend SPA.
 
-- **RVA - People Overview**: Detections/unique people theo phút và camera
-- **RVA - Zone Dwell & Heatmap**: Visits và dwell time theo zone
-- **RVA - Track Summary**: Track với duration, movement và confidence
+- `/live`: video realtime, live count, active tracks, heatmap, health ngắn hạn
+- `/analytics`: historical analytics đọc qua FastAPI từ Trino/Iceberg
+- `/system`: trạng thái service và pipeline health
 
 ---
 
@@ -248,7 +244,7 @@ retail-video-analytics/
 ├── configs/              # cameras.yaml, logging.yaml
 ├── data/videos/          # video1.mp4, video2.mp4
 ├── docs/                 # 14 tài liệu kiến trúc
-├── infrastructure/       # Docker config: Pulsar, Flink, MinIO, Trino, Grafana
+├── infrastructure/       # Docker config: Pulsar, Flink, MinIO, Trino
 ├── packages/             # Shared Python packages
 │   ├── core/             # Pydantic models, constants, settings, time utils
 │   ├── messaging/        # Pulsar producer/consumer wrappers

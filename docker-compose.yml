@@ -259,28 +259,6 @@ services:
     networks:
       - retail-net
   
-  grafana:
-      image: grafana/grafana-oss:11.3.0
-      container_name: grafana
-      ports:
-        - "3000:3000"
-      environment:
-        GF_SECURITY_ADMIN_USER: ${GRAFANA_ADMIN_USER:-admin}
-        GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
-        # Cài plugin Trino; một số môi trường cần cho phép (nếu plugin chưa ký)
-        GF_INSTALL_PLUGINS: trino-datasource
-        GF_PLUGINS_ALLOW_LOADING_UNSIGNED_PLUGINS: trino-datasource
-      volumes:
-        - ./infrastructure/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
-        - ./infrastructure/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
-        - grafana_data:/var/lib/grafana
-        - ./logs/grafana:/var/log/grafana
-      depends_on:
-        - trino
-      restart: unless-stopped
-      networks:
-        - retail-net
-
 volumes:
   trino_data:
     driver: local
@@ -291,8 +269,6 @@ volumes:
   minio_data:
     driver: local
   mc_config:
-    driver: local
-  grafana_data:
     driver: local
 
 networks:

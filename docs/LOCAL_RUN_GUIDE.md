@@ -26,7 +26,6 @@ This starts the local infrastructure stack:
 - MinIO
 - Iceberg REST
 - Trino
-- Grafana
 
 Check containers:
 
@@ -105,7 +104,6 @@ VITE_API_BASE_URL=http://localhost:8000
 | FastAPI | http://localhost:8000 |
 | FastAPI Docs | http://localhost:8000/docs |
 | Flink UI | http://localhost:8081 |
-| Grafana | http://localhost:3000 |
 | Trino | http://localhost:8083 |
 | MinIO Console | http://localhost:9001 |
 | Iceberg REST | http://localhost:8181 |
