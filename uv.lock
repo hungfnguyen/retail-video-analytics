@@ -1845,7 +1845,7 @@ requires-dist = [
     { name = "torch", specifier = "==2.4.1+cu124", index = "https://download.pytorch.org/whl/cu124" },
     { name = "torchreid", specifier = "==0.2.5" },
     { name = "torchvision", specifier = "==0.19.1+cu124", index = "https://download.pytorch.org/whl/cu124" },
-    { name = "ultralytics", specifier = ">=8.4.53" },
+    { name = "ultralytics", specifier = ">=8.2" },
 ]
 
 [[package]]
