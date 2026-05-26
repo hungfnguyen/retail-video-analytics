@@ -16,6 +16,8 @@ This guide explains how to run the Retail Video Analytics project locally for de
 Run from the repository root:
 
 ```bash
+cd D:\workspace\retail-video-analytics
+docker compose -f docker-compose.dev.yml up -d --build
 docker compose up -d --build
 ```
 

@@ -26,6 +26,11 @@ class YoloTrackerBase:
             import torch
 
             if force_gpu:
+                if not torch.cuda.is_available():
+                    raise RuntimeError(
+                        "FORCE_GPU=1 but CUDA is not available. Run Vision with the project .venv "
+                        "or install a CUDA-enabled PyTorch build."
+                    )
                 self.device = 0
                 print("[Tracker] Device: GPU (cuda:0) - forced via FORCE_GPU=1")
             else:
