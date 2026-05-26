@@ -20,6 +20,8 @@ env/
 # Build / distribution artifacts
 build/
 dist/
+node_modules/
+**/node_modules/
 *.egg-info/
 
 # Logs & temp
@@ -55,8 +57,12 @@ AGENTS.md
 CHANGELOG.md
 HANDOFF.md
 # Environment files (local config only)
-!.env
-!vision/.env
+.env
+.env.*
+**/.env
+**/.env.*
+!.env.example
+!**/.env.example
 
 # Model backup files
 vision/main.py.backup
