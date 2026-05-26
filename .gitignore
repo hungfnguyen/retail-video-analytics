@@ -1,16 +1,30 @@
+# IDE / AI Agents
+.vscode/
+.idea/
+*.code-workspace
 AGENTS.md
 .codex
 .claude
-# Bytecode / cache
-*__pycache__/
+.serena/
+.agent
+.opencode
+GEMINI.md
+
+# Python
+__pycache__/
 *.py[cod]
 *$py.class
+.mypy_cache/
+.pytest_cache/
+.uv-cache/
+coverage.xml
+.coverage*
 
-# Virtual environments
-.venv312/
+# Virtual Environments
+.venv/
 venv/
 env/
-.venv/
+.venv312/
 
 # IDE / Editor settings
 .vscode/
@@ -41,19 +55,7 @@ weights/
 .DS_Store
 Thumbs.db
 
-# Python tooling
-.mypy_cache/
-.pytest_cache/
-coverage.xml
-.coverage*
-
-.serena/
-detections_output.ndjson
-**/target/
-**/.ipynb_checkpoints/
-
-data/
-AGENTS.md
+# Docs generated (nếu có)
 CHANGELOG.md
 HANDOFF.md
 # Environment files (local config only)

@@ -12,7 +12,11 @@
 *.log
 *.pt
 !yolov8n.pt
-ai/__pycache__/
+services/vision/__pycache__/
+services/vision/detect/models/
+services/vision/metadata/
+services/vision/video/
+services/vision/videos/
 data/
 README.md
 AGENTS.md

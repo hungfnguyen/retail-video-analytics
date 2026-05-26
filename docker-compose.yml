@@ -12,8 +12,9 @@ services:
       - ./infrastructure/pulsar/scripts:/pulsar/scripts
       - ./infrastructure/pulsar/schema:/pulsar/schema
       - pulsar_data:/pulsar/data
+      - ./logs/pulsar:/pulsar/logs
     environment:
-      PULSAR_MEM: "-Xms512m -Xmx512m -XX:MaxDirectMemorySize=1g"
+      PULSAR_MEM: "-Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/admin/v2/brokers/health"]
       interval: 10s
@@ -51,12 +52,16 @@ services:
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
       - flink_state:/opt/flink/state
-      - ./flink-jobs/sql:/opt/flink/usrlib/sql
+      - ./services/flink-jobs/sql:/opt/flink/usrlib/sql
+      - ./logs/flink:/opt/flink/log
     environment:
       AWS_REGION: ${S3_REGION}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
       
     healthcheck:
@@ -79,9 +84,12 @@ services:
       - flink_state:/opt/flink/state
     environment:
       AWS_REGION: ${S3_REGION}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
     
     networks:
@@ -103,79 +111,99 @@ services:
         condition: service_healthy
       pulsar-broker:
         condition: service_healthy
+      redis:
+        condition: service_healthy
     environment:
       AWS_REGION: ${S3_REGION}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
     networks:
       - retail-net
     restart: "no"
 
-  minio:
-    build: ./infrastructure/minio
-    container_name: minio
+  redis:
+    image: redis:7-alpine
+    container_name: redis
     ports:
-      - "9000:9000"   # MinIO API
-      - "9001:9001"   # MinIO Console
-    environment:
-      # Provide these via .env file or CI secrets for production
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    volumes:
-      - minio_data:/data
-    command: server /data --console-address ":9001"
-    restart: unless-stopped
+      - "6379:6379"
     healthcheck:
-      test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/ready"]
-      interval: 15s
-      timeout: 10s
-      retries: 5
-      start_period: 30s
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      timeout: 3s
+      retries: 10
+    restart: unless-stopped
     networks:
       - retail-net
 
-  mc:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
-    container_name: mc
-    depends_on:
-      minio:
-        condition: service_healthy
-    environment:
-      MINIO_ALIAS: local
-      MINIO_SERVER_URL: http://minio:9000
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-    entrypoint: ["/bin/sh","-lc","trap : TERM INT; while :; do sleep 3600; done"]
-    volumes:
-      - mc_config:/root/.mc
-      - ./infrastructure/minio/scripts:/scripts:ro
-    networks:
-      - retail-net
-
-
-  minio-init:
-    image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
-    container_name: minio-init
-    depends_on:
-      minio:
-        condition: service_healthy
-    entrypoint: ["/bin/bash", "/scripts/init.sh"]
-    environment:
-      MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-      MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-      MINIO_SERVER_URL: ${MINIO_SERVER_URL}
-      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
-      MINIO_ADDITIONAL_BUCKETS: ${MINIO_ADDITIONAL_BUCKETS:-}
-      MINIO_MC_ALIAS: local
-    volumes:
-      - mc_config:/root/.mc
-      - ./infrastructure/minio/scripts/init.sh:/scripts/init.sh:ro
-    restart: "no"
-    networks:
-      - retail-net
+  # # === MinIO (disabled — using AWS S3 instead) ===
+  # # Uncomment for local dev without AWS S3
+  # minio:
+  #   build: ./infrastructure/minio
+  #   container_name: minio
+  #   ports:
+  #     - "9000:9000"   # MinIO API
+  #     - "9001:9001"   # MinIO Console
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   volumes:
+  #     - minio_data:/data
+  #   command: server /data --console-address ":9001"
+  #   restart: unless-stopped
+  #   healthcheck:
+  #     test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/ready"]
+  #     interval: 15s
+  #     timeout: 10s
+  #     retries: 5
+  #     start_period: 30s
+  #   networks:
+  #     - retail-net
+  #
+  # mc:
+  #   image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
+  #   container_name: mc
+  #   depends_on:
+  #     minio:
+  #       condition: service_healthy
+  #   environment:
+  #     MINIO_ALIAS: local
+  #     MINIO_SERVER_URL: http://minio:9000
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #   entrypoint: ["/bin/sh","-lc","trap : TERM INT; while :; do sleep 3600; done"]
+  #   volumes:
+  #     - mc_config:/root/.mc
+  #     - ./infrastructure/minio/scripts:/scripts:ro
+  #   networks:
+  #     - retail-net
+  #
+  #
+  # minio-init:
+  #   image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
+  #   container_name: minio-init
+  #   depends_on:
+  #     minio:
+  #       condition: service_healthy
+  #   entrypoint: ["/bin/bash", "/scripts/init.sh"]
+  #   environment:
+  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
+  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
+  #     MINIO_SERVER_URL: ${MINIO_SERVER_URL}
+  #     ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+  #     MINIO_ADDITIONAL_BUCKETS: ${MINIO_ADDITIONAL_BUCKETS:-}
+  #     MINIO_MC_ALIAS: local
+  #   volumes:
+  #     - mc_config:/root/.mc
+  #     - ./infrastructure/minio/scripts/init.sh:/scripts/init.sh:ro
+  #   restart: "no"
+  #   networks:
+  #     - retail-net
 
   iceberg-rest:
     image: tabulario/iceberg-rest:0.7.0
@@ -184,20 +212,15 @@ services:
       - "8181:8181"
     environment:
       AWS_REGION: ${S3_REGION}
-      AWS_ACCESS_KEY_ID: ${MINIO_ROOT_USER}
-      AWS_SECRET_ACCESS_KEY: ${MINIO_ROOT_PASSWORD}
+      AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
+      AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       CATALOG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
       CATALOG_S3_ENDPOINT: ${S3_ENDPOINT}
-      CATALOG_S3_ACCESS__KEY__ID: ${MINIO_ROOT_USER}
-      CATALOG_S3_SECRET__ACCESS__KEY: ${MINIO_ROOT_PASSWORD}
-      CATALOG_S3_PATH__STYLE__ACCESS: "true"
+      CATALOG_S3_ACCESS__KEY__ID: ${S3_ACCESS_KEY}
+      CATALOG_S3_SECRET__ACCESS__KEY: ${S3_SECRET_KEY}
+      CATALOG_S3_PATH__STYLE__ACCESS: "${S3_PATH_STYLE}"
       CATALOG_S3_REGION: ${S3_REGION}
-    depends_on:
-      minio:
-        condition: service_healthy
-      minio-init:
-        condition: service_completed_successfully
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/localhost/8181 || exit 1"]
       interval: 10s
@@ -216,6 +239,7 @@ services:
     volumes:
       - ./infrastructure/trino/etc:/etc/trino
       - trino_data:/data/trino
+      - ./logs/trino:/data/trino/var/log
     environment:
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -250,6 +274,7 @@ services:
         - ./infrastructure/grafana/provisioning/datasources:/etc/grafana/provisioning/datasources
         - ./infrastructure/grafana/provisioning/dashboards:/etc/grafana/provisioning/dashboards
         - grafana_data:/var/lib/grafana
+        - ./logs/grafana:/var/log/grafana
       depends_on:
         - trino
       restart: unless-stopped
