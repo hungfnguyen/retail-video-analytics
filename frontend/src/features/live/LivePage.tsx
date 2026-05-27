@@ -3,7 +3,6 @@ import { useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
 import { AlertList } from './components/AlertList'
 import { LiveMetricCards } from './components/LiveMetricCards'
-import { PipelineHealth } from './components/PipelineHealth'
 import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
 import { ZoneHeatmap } from './components/ZoneHeatmap'
@@ -92,23 +91,19 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
       </header>
 
       {/* Primary live monitoring area */}
-      <div className="grid grid-cols-[minmax(600px,1.2fr)_minmax(430px,0.8fr)] gap-5">
+      <div className="grid gap-5">
+        <LiveMetricCards stats={data.stats} />
         <VideoPanel frame={data.frame} />
-
-        <div className="grid gap-4.5">
-          <LiveMetricCards stats={data.stats} />
-          <AlertList alerts={data.alerts} />
-        </div>
       </div>
 
       {/* Supporting live analytics */}
-      <div className="mt-5 grid grid-cols-[1.15fr_1fr_1fr] gap-5">
+      <div className="mt-5 grid grid-cols-[1.2fr_0.85fr_0.95fr] gap-5">
         <TrafficChart
           summary={data.traffic_summary}
           traffic={data.traffic}
         />
         <ZoneHeatmap cells={data.zone_heatmap} />
-        <PipelineHealth services={data.pipeline_health} />
+        <AlertList alerts={data.alerts} />
       </div>
     </AppShell>
   )
