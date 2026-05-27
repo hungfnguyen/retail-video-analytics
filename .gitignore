@@ -43,6 +43,7 @@ node_modules/
 logs/
 tmp/
 temp/
+runtime/
 
 # Checkpoints / model weights (except explicitly tracked yolo file)
 checkpoints/
