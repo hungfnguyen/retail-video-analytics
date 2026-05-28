@@ -26,7 +26,7 @@ graph TD
     Pulsar --> Flink[Flink Streaming Jobs]
 
     Flink --> Redis[Fast Path: Redis\nLive Count, Heatmap, Alerts]
-    Flink --> Iceberg[Lakehouse Path: Iceberg\nB/S/G Tables on S3/MinIO]
+    Flink --> Iceberg[Lakehouse Path: Iceberg\nB/S/G Tables on S3]
     Iceberg --> Trino[Trino Query Engine]
 
     Redis --> FastAPI[FastAPI BFF\nREST + WS + MJPEG]

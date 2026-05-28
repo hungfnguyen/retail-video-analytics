@@ -19,10 +19,10 @@
 | Layer | Công nghệ | Mô tả |
 |-------|-----------|-------|
 | **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata |
-| **Media Plane** | OpenCV + S3/MinIO | Upload sampled JPEG 1fps và optional alert MP4 clips |
+| **Media Plane** | OpenCV + S3 | Upload sampled JPEG 1fps và optional alert MP4 clips |
 | **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
 | **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
-| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
+| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (AWS S3 cho local demo) |
 | **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
 | **Serving UI** | Frontend SPA + FastAPI | Live monitoring, analytics, system views |
 
@@ -36,7 +36,7 @@ services/
 infrastructure/
 ├── pulsar/
 ├── flink/
-├── minio/
+├── s3/
 ├── trino/
 ```
 
@@ -62,7 +62,7 @@ Vision (YOLO11 + BoTSORT)
   │    Trino → FastAPI                     │
   │    (historical)                  FastAPI → Frontend
   │
-  └── sampled JPEG / alert MP4 → MinIO (S3)
+  └── sampled JPEG / alert MP4 → AWS S3 (S3)
 ```
 
 ---
@@ -74,8 +74,8 @@ Vision (YOLO11 + BoTSORT)
 | Flink UI | 8081 | http://localhost:8081 | — |
 | Trino | 8083 | http://localhost:8083 | — |
 | Pulsar Admin | 8084 | http://localhost:8084 | — |
-| MinIO Console | 9001 | http://localhost:9001 | minioadmin / minioadmin123 |
-| MinIO API | 9000 | http://localhost:9000 | — |
+| AWS S3 Console | 9001 | http://localhost:9001 | CHANGE_ME / CHANGE_ME |
+| AWS S3 API | 9000 | https://s3.ap-southeast-2.amazonaws.com | — |
 | Iceberg REST | 8181 | http://localhost:8181 | — |
 | Pulsar Broker | 6650 | pulsar://localhost:6650 | — |
 | Redis | 6379 | redis://localhost:6379 | — |
@@ -160,7 +160,7 @@ docker exec trino trino --execute \
   "SELECT event_id, camera_id, frame_index FROM lakehouse.rva.bronze_raw LIMIT 5"
 ```
 
-### MinIO — sampled frames & clips
+### AWS S3 — sampled frames & clips
 
 ```bash
 # List sampled JPEG frames
@@ -200,8 +200,8 @@ docker exec pulsar-broker bin/pulsar-client produce \
 | **Flink UI** | 8081 | http://localhost:8081 |
 | **Trino** | 8083 | http://localhost:8083 |
 | **Pulsar Admin** | 8084 | http://localhost:8084 |
-| **MinIO Console** | 9001 | http://localhost:9001 |
-| **MinIO API** | 9000 | http://localhost:9000 |
+| **AWS S3 Console** | 9001 | http://localhost:9001 |
+| **AWS S3 API** | 9000 | https://s3.ap-southeast-2.amazonaws.com |
 | **Iceberg REST** | 8181 | http://localhost:8181 |
 | **Pulsar Broker** | 6650 | pulsar://localhost:6650 |
 | **FastAPI API** | 8000 | http://localhost:8000 |
@@ -224,9 +224,9 @@ Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/visi
 
 | Biến | Mặc định | Mô tả |
 |------|----------|-------|
-| `S3_ENDPOINT` | `http://localhost:9000` | MinIO endpoint (Vision trên host) |
-| `S3_ACCESS_KEY` | `minioadmin` | Access key |
-| `S3_SECRET_KEY` | `minioadmin123` | Secret key |
+| `S3_ENDPOINT` | `https://s3.ap-southeast-2.amazonaws.com` | AWS S3 endpoint (Vision trên host) |
+| `S3_ACCESS_KEY` | `CHANGE_ME` | Access key |
+| `S3_SECRET_KEY` | `CHANGE_ME` | Secret key |
 | `S3_BUCKET` | `warehouse` | Bucket |
 | `S3_REGION` | `us-east-1` | Region |
 | `CAMERA_ID` | `cam_01` | Camera ID (single-cam mode) |
@@ -244,7 +244,7 @@ retail-video-analytics/
 ├── configs/              # cameras.yaml, logging.yaml
 ├── data/videos/          # video1.mp4, video2.mp4
 ├── docs/                 # 14 tài liệu kiến trúc
-├── infrastructure/       # Docker config: Pulsar, Flink, MinIO, Trino
+├── infrastructure/       # Docker config: Pulsar, Flink, AWS S3, Trino
 ├── packages/             # Shared Python packages
 │   ├── core/             # Pydantic models, constants, settings, time utils
 │   ├── messaging/        # Pulsar producer/consumer wrappers

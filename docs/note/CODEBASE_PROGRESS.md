@@ -9,7 +9,7 @@
 
 **Đồ án tốt nghiệp Data Engineering**: Hệ thống realtime pipeline thu thập & xử lý metadata video camera siêu thị.
 
-**Stack**: YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/MinIO → Trino → Grafana
+**Stack**: YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/S3 → Trino → Grafana
 
 **Monorepo**: Python uv workspace (`services/vision`, `packages/core`, `packages/messaging`, `packages/storage`) + Java Maven (`services/flink-jobs/java`)
 
@@ -82,8 +82,8 @@
 - flink-taskmanager (1600m, 8 slots)
 - flink-job-submitter (submit 4 jobs, exit 0)
 - redis:7-alpine
-- minio (S3-compatible)
-- mc + minio-init (create buckets)
+- s3 (S3-compatible)
+- mc + s3-init (create buckets)
 - iceberg-rest:0.7.0
 - trino:418
 - grafana:11.3.0

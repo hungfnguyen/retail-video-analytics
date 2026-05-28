@@ -37,7 +37,7 @@ flowchart TB
         end
 
         PulsarPub --> Pulsar["Apache Pulsar"]
-        FrameSave --> S3["S3 / MinIO"]
+        FrameSave --> S3["S3 / AWS S3"]
         TrackEmit --> PG["PostgreSQL\n(Phase 2 target)"]
     end
 

@@ -8,7 +8,7 @@ Repo hiện tại vẫn là codebase của tiểu luận chuyên ngành. Pipelin
 Vision AI
   -> Pulsar
   -> Flink Bronze/Silver/Gold
-  -> Iceberg on MinIO
+  -> Iceberg on AWS S3
   -> Trino
   -> Grafana
 ```
@@ -35,7 +35,7 @@ Nguyên tắc:
 Pipeline cần giữ:
 
 ```text
-Vision -> Pulsar -> Flink -> Iceberg/MinIO -> Trino -> Grafana
+Vision -> Pulsar -> Flink -> Iceberg/S3 -> Trino -> Grafana
 ```
 
 Các contract cần giữ:
@@ -89,7 +89,7 @@ retail-video-analytics/
 ├── infrastructure/
 │   ├── pulsar/
 │   ├── flink/
-│   ├── minio/
+│   ├── s3/
 │   ├── trino/
 │   └── grafana/
 ├── scripts/
@@ -140,7 +140,7 @@ Nhưng trong phase 1 chưa bắt buộc tạo package nếu code chưa dùng đ�
 - Không thêm Redis realtime path.
 - Không thêm PostgreSQL schema mới.
 - Không thêm API/Streamlit.
-- Không migrate MinIO sang GCS.
+- Không migrate AWS S3 sang GCS.
 - Không tuyên bố unique visitors nếu vẫn chỉ có `track_id`.
 
 ## 7. Definition Of Done Cho Phase 1
@@ -164,7 +164,7 @@ Checklist:
 ```text
 [ ] Docker Compose build thành công
 [ ] Pulsar healthy
-[ ] MinIO bucket warehouse tồn tại
+[ ] AWS S3 bucket warehouse tồn tại
 [ ] Iceberg REST healthy
 [ ] Flink JobManager và TaskManager healthy
 [ ] Bronze job RUNNING

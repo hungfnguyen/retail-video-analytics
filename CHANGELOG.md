@@ -22,7 +22,7 @@ Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail V
 
 ## 2025-12-01
 
-- **2025-12-05: Fix Iceberg REST dependency chain at docker-compose.yml - Thêm condition: service_healthy cho MinIO và minio-init trước khi Iceberg REST khởi động, tương tự Trino đợi Iceberg REST healthy. Giải quyết lỗi "Failed to load table" do Iceberg REST khởi động trước khi MinIO sẵn sàng (completed)**
+- **2025-12-05: Fix Iceberg REST dependency chain at docker-compose.yml - Thêm condition: service_healthy cho AWS S3 và s3-init trước khi Iceberg REST khởi động, tương tự Trino đợi Iceberg REST healthy. Giải quyết lỗi "Failed to load table" do Iceberg REST khởi động trước khi AWS S3 sẵn sàng (completed)**
 
 - **2025-12-05: Fix Grafana time axis at infrastructure/grafana/provisioning/dashboards/rva_traffic_overview.json - Thay HOUR(ts_hour)/DATE(ts_hour) bằng timestamp chuẩn (ts_hour, CAST(DATE(ts_hour) AS TIMESTAMP)) để Grafana Timeseries nhận đúng cột time, hết lỗi "Data is missing a time field"/"No data" (completed)**
 
@@ -73,15 +73,15 @@ Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail V
 ## 2025-10-05
 
 ### Flink Bronze Checkpoint Fix
-- **2025-10-05: Re-enable Flink checkpointing and add JVM `--add-opens` at infrastructure/flink/conf/flink-conf.yaml - Allow Iceberg Bronze streaming sink to commit Parquet files to MinIO (completed)**
-- **2025-10-05: Update docs/HANDOFF.md - Document checkpoint status, new MinIO data footprint, and follow-up actions (completed)**
+- **2025-10-05: Re-enable Flink checkpointing and add JVM `--add-opens` at infrastructure/flink/conf/flink-conf.yaml - Allow Iceberg Bronze streaming sink to commit Parquet files to AWS S3 (completed)**
+- **2025-10-05: Update docs/HANDOFF.md - Document checkpoint status, new AWS S3 data footprint, and follow-up actions (completed)**
 
 ## 2025-09-30
 
 ### End-to-End Pipeline Completion
 - **2025-09-30: Fix Avro deserialization issue by migrating to JSON schema at ai/emit/pulsar_producer.py & flink-jobs/bronze_ingest.sql - Resolve ArrayIndexOutOfBoundsException between Python Pulsar client and Flink Avro deserializer; 288 messages successfully written to Bronze layer (completed)**
 - **2025-09-30: Disable Flink checkpointing at infrastructure/flink/conf/flink-conf.yaml - Workaround Java reflection error with Arrays$ArrayList; allows Bronze job to complete successfully (completed)**
-- **2025-09-30: Verify end-to-end data flow at warehouse/rva/bronze_raw/data/ - 3 Parquet files (67KiB) written to MinIO, partitioned by store_id; full pipeline validated (completed)**
+- **2025-09-30: Verify end-to-end data flow at warehouse/rva/bronze_raw/data/ - 3 Parquet files (67KiB) written to AWS S3, partitioned by store_id; full pipeline validated (completed)**
 - **2025-09-30: Update documentation at docs/data-flow-guide.md, docs/HANDOFF.md, docs/CHANGELOG.md - Simplify workflow guide, remove outdated troubleshooting, document current working state (completed)**
 
 ### Pulsar Version Upgrade & Topic Policies Fix
@@ -107,7 +107,7 @@ Ghi láº¡i táº¥t cáº£ cÃ¡c cÃ´ng viá»‡c Ä‘Ã£ hoÃ n thÃ 
 - **2025-09-28: Align Pulsar client libs for Flink image at infrastructure/flink/Dockerfile - Added admin API jar to unblock SQL client (completed)**
 - **2025-09-28: Bundle Avro 1.11.3 + Jackson 2.15.2 and pre-create checkpoint dirs at infrastructure/flink/Dockerfile - Flink SQL bronze ingestion job runs without missing classes/checkpoint errors (completed)**
 - **2025-09-28: Build Flink lakehouse image at infrastructure/flink/Dockerfile & update docker-compose to preload connectors (completed)**
-- **2025-09-28: Automate MinIO warehouse bootstrap with minio-init service & cleanup scripts - Ensure ICEBERG_WAREHOUSE bucket exists on startup (completed)**
+- **2025-09-28: Automate AWS S3 warehouse bootstrap with s3-init service & cleanup scripts - Ensure ICEBERG_WAREHOUSE bucket exists on startup (completed)**
 - **2025-09-28: Document parallel venv + Docker quick-start paths at docs/guide.md - Users can choose workflow per environment (completed)**
 - **2025-09-28: Restore detections_output.ndjson sample at repo root - Dockerized Pulsar producer build succeeds with bundled demo data (completed)**
 - **2025-09-28: Set PYTHONPATH for Pulsar producer container at infrastructure/pulsar/producer.Dockerfile - Fix ModuleNotFoundError for ai package during docker run (completed)**
@@ -127,19 +127,19 @@ Ghi láº¡i táº¥t cáº£ cÃ¡c cÃ´ng viá»‡c Ä‘Ã£ hoÃ n thÃ 
 ## 2025-09-25
 
 ### Lakehouse Architecture Completion
-- **2025-09-25: Add Iceberg REST catalog service at docker-compose.yml - Lakehouse table format support vá»›i MinIO backend; Iceberg service on port 8181 (completed)**
-- **2025-09-25: Add MinIO service vÃ  complete docker-compose stack at infrastructure/minio/ - Setup object storage cho Lakehouse architecture; docker-compose fully functional (completed)**
+- **2025-09-25: Add Iceberg REST catalog service at docker-compose.yml - Lakehouse table format support vá»›i AWS S3 backend; Iceberg service on port 8181 (completed)**
+- **2025-09-25: Add AWS S3 service vÃ  complete docker-compose stack at infrastructure/s3/ - Setup object storage cho Lakehouse architecture; docker-compose fully functional (completed)**
 - **2025-09-25: Fix port conflicts between Pulsar vÃ  Flink at docker-compose.yml - Resolve 8080 port conflict, Pulsar admin now on 8082; full 4-service stack healthy (completed)**
-- **2025-09-25: Setup MinIO configuration vá»›i proper credentials at .env - MinIO healthcheck passing vá»›i secure credentials, warehouse bucket created (completed)**
+- **2025-09-25: Setup AWS S3 configuration vá»›i proper credentials at .env - AWS S3 healthcheck passing vá»›i secure credentials, warehouse bucket created (completed)**
 
 ### Documentation & Cross-Platform Support
-- **2025-09-25: Create comprehensive data flow guide at docs/data-flow-guide.md - Complete tutorial cho AI â†’ Pulsar â†’ Flink â†’ MinIO pipeline vá»›i PowerShell commands (completed)**
+- **2025-09-25: Create comprehensive data flow guide at docs/data-flow-guide.md - Complete tutorial cho AI â†’ Pulsar â†’ Flink â†’ AWS S3 pipeline vá»›i PowerShell commands (completed)**
 - **2025-09-25: Add cross-platform compatibility at .gitattributes - Prevent CRLF/LF issues cho .sh, .env files; Windows/Linux compatibility (completed)**
 - **2025-09-25: Update project status at docs/HANDOFF.md vÃ  docs/CHANGELOG.md - Current status vá»›i infrastructure completion, next steps defined (completed)**
 
 ### Iceberg Integration Development
 - **2025-09-25: Setup Iceberg configuration at infrastructure/iceberg/ - Table schemas vÃ  namespace definitions; catalog config templates (completed)**
-- **2025-09-25: Test Iceberg-MinIO connectivity at lakehouse layer - Namespace creation successful, table creation pending AWS region fix (in progress)**
+- **2025-09-25: Test Iceberg-AWS S3 connectivity at lakehouse layer - Namespace creation successful, table creation pending AWS region fix (in progress)**
 
 ## 2025-09-24
 
@@ -165,5 +165,5 @@ Ghi láº¡i táº¥t cáº£ cÃ¡c cÃ´ng viá»‡c Ä‘Ã£ hoÃ n thÃ 
 - **2025-09-24: Setup project configuration at configs/.env.example - Environment template (completed)**
 
 ### Current Status
-- **HoÃ n thÃ nh**: Full infrastructure stack (Pulsar + Flink + MinIO + Iceberg REST), Core AI pipeline, Documentation suite, Cross-platform compatibility
+- **HoÃ n thÃ nh**: Full infrastructure stack (Pulsar + Flink + AWS S3 + Iceberg REST), Core AI pipeline, Documentation suite, Cross-platform compatibility
 - **Äang tiáº¿n hÃ nh**: Iceberg lakehouse integration (AWS region config), AI pipeline integration vá»›i Pulsar, Flink jobs development

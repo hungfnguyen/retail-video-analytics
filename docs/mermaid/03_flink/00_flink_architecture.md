@@ -219,7 +219,7 @@ Với Docker Compose, muốn thêm TaskManager: phải thêm service `flink-task
 sequenceDiagram
     participant JM as JobManager
     participant TM as TaskManager
-    participant CK as Checkpoint Storage (MinIO)
+    participant CK as Checkpoint Storage (AWS S3)
 
     loop Mỗi 10s (Realtime) / 30s (Lakehouse)
         JM->>TM: trigger checkpoint

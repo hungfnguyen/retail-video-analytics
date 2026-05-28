@@ -10,7 +10,7 @@ graph LR
     B -->|JSON Lines| C[Metadata File]
     C -->|Replay Script| D[Apache Pulsar]
     D -->|Streaming| E[Apache Flink]
-    E -->|Iceberg Format| F[(MinIO / Lakehouse)]
+    E -->|Iceberg Format| F[(AWS S3 / Lakehouse)]
 ```
 
 ---
@@ -80,7 +80,7 @@ Apache Flink đóng vai trò là bộ máy xử lý trung tâm, tiêu thụ dữ
 
 Dữ liệu cuối cùng nằm yên tại hệ thống lưu trữ phân tán, sẵn sàng cho các truy vấn phân tích.
 
-*   **Công nghệ**: **Apache Iceberg** (Table Format) trên nền **MinIO** (Object Storage).
+*   **Công nghệ**: **Apache Iceberg** (Table Format) trên nền **AWS S3** (Object Storage).
 *   **Cấu trúc**:
     *   **Catalog**: REST Catalog.
     *   **Namespace**: `retail`.

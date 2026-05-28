@@ -130,7 +130,7 @@ sequenceDiagram
 sequenceDiagram
     participant PL as Pipeline (main thread)
     participant FS as FrameSampler
-    participant S3 as S3 / MinIO
+    participant S3 as S3 / AWS S3
 
     PL->>FS: sampler.save(frame_jpg, frame_index=500)
     FS->>FS: ThreadPoolExecutor.submit(upload)

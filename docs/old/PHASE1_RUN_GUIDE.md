@@ -6,7 +6,7 @@ Tài liệu này hướng dẫn các bước chạy hệ thống sau khi đã ho
 
 ## 1. Khởi chạy Hạ tầng (Infrastructure)
 
-Mọi dịch vụ hạ tầng (Pulsar, Flink, MinIO, Trino, Grafana) vẫn được quản lý qua Docker Compose tại root.
+Mọi dịch vụ hạ tầng (Pulsar, Flink, AWS S3, Trino, Grafana) vẫn được quản lý qua Docker Compose tại root.
 
 ```bash
 # Đứng tại root project
@@ -81,7 +81,7 @@ Truy cập [http://localhost:3000](http://localhost:3000):
 - Mở Dashboard: **RVA - People Overview**.
 - Xác nhận các biểu đồ đang nhảy dữ liệu realtime.
 
-### 4.5. Kiểm tra sampled frames và alert clips trên MinIO
+### 4.5. Kiểm tra sampled frames và alert clips trên AWS S3
 
 ```bash
 # Sampled JPEG frames

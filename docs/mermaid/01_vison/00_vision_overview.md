@@ -26,7 +26,7 @@ flowchart TB
 
     subgraph Outputs["📤 Outputs"]
         Pulsar["Apache Pulsar\ndetection frame events"]
-        S3["S3 / MinIO\nsampled frames (1fps)"]
+        S3["S3 / AWS S3\nsampled frames (1fps)"]
         PG["PostgreSQL\ntrack lifecycle events"]
         Metrics["Prometheus\nfps, health, lag"]
     end
@@ -60,7 +60,7 @@ sequenceDiagram
     participant Pub as DetectionPublisher
     participant Pulsar as Apache Pulsar
     participant FS as FrameSampler
-    participant S3 as S3/MinIO
+    participant S3 as S3
 
     CM->>CW: spawn worker cho cam_01
 
@@ -93,5 +93,5 @@ sequenceDiagram
 | **YOLO Detector** | Object | Inference person detection, confidence filter |
 | **BoTSORT Tracker** | Object | Gán track_id, tracking lifecycle |
 | **DetectionPublisher** | Object | Publish event JSON lên Pulsar (async, retry) |
-| **FrameSampler** | Object | Lưu frame mẫu 1fps vào S3/MinIO (async upload) |
+| **FrameSampler** | Object | Lưu frame mẫu 1fps vào S3 (async upload) |
 | **TrackLifecycleManager** | Object | Theo dõi track start/sample/end, ghi PostgreSQL (Phase 2) |

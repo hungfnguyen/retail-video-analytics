@@ -95,7 +95,7 @@ python vision/main.py
 | Flink UI | 8081 | http://localhost:8081 |
 | Grafana | 3000 | http://localhost:3000 |
 | Trino | 8082 | http://localhost:8082 |
-| MinIO Console | 9001 | http://localhost:9001 |
+| AWS S3 Console | 9001 | http://localhost:9001 |
 | Pulsar Admin | 8084 | http://localhost:8084 |
 
 ### 4.2. Query dữ liệu với Trino

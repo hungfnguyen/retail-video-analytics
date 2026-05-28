@@ -9,7 +9,7 @@ Input                          Vision Module                       Output
 ──────                         ──────────────                      ──────
 RTSP cam_01 ──┐          ┌── CameraWorker(cam_01) ──┐          ┌─ Pulsar
                │          │                          │          │
-Video cam_02 ──┼──────────┼── CameraWorker(cam_02) ──┼──────────┼─ S3/MinIO
+Video cam_02 ──┼──────────┼── CameraWorker(cam_02) ──┼──────────┼─ S3
                │          │                          │          │
 RTSP cam_03 ──┘          └── CameraWorker(cam_03) ──┘          └─ PostgreSQL
 ```

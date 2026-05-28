@@ -12,7 +12,7 @@
 s3://retail-video-analytics/
 ```
 
-> Trong demo local: MinIO bucket `warehouse` giữ nguyên trong Docker Compose. Cấu trúc bên trong bucket giống hệt production S3 để đảm bảo tính nhất quán khi migrate.
+> Trong demo local: AWS S3 bucket `warehouse` giữ nguyên trong Docker Compose. Cấu trúc bên trong bucket giống hệt production S3 để đảm bảo tính nhất quán khi migrate.
 
 ## 2. S3 top-level layout
 
@@ -144,12 +144,12 @@ S3_SECRET_KEY=<your-secret-key>
 # Iceberg warehouse
 ICEBERG_WAREHOUSE=s3://retail-video-analytics/lakehouse
 
-# Cho local demo (MinIO)
-S3_ENDPOINT=http://minio:9000
+# Cho local demo (AWS S3)
+S3_ENDPOINT=https://s3.ap-southeast-2.amazonaws.com
 S3_REGION=us-east-1
 S3_BUCKET=warehouse
-S3_ACCESS_KEY=minioadmin
-S3_SECRET_KEY=minioadmin123
+S3_ACCESS_KEY=CHANGE_ME
+S3_SECRET_KEY=CHANGE_ME
 ICEBERG_WAREHOUSE=s3://warehouse/lakehouse
 ```
 
@@ -176,14 +176,14 @@ ICEBERG_WAREHOUSE=s3://warehouse/lakehouse
 | FastAPI | `frames/*`, `clips/*` | `s3:GetObject` | Signed URL generation |
 | Admin | `*` | Full access | Maintenance |
 
-> Trong demo local, MinIO dùng 1 access key duy nhất cho toàn bộ service.
+> Trong demo local, AWS S3 dùng 1 access key duy nhất cho toàn bộ service.
 
 ## 10. Migration path: local → production
 
 ```
 Local demo (Docker Compose)              Production (AWS)
 ─────────────────────────────────        ─────────────────────────
-MinIO: minio:9000                  →      S3: s3.ap-southeast-1.amazonaws.com
+AWS S3: s3:9000                  →      S3: s3.ap-southeast-1.amazonaws.com
 Bucket: warehouse                  →      Bucket: retail-video-analytics
 Path style: true                   →      Path style: false (virtual-hosted)
 Auth: static access key            →      Auth: IAM role hoặc access key

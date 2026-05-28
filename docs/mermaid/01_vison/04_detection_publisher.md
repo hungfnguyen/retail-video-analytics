@@ -85,7 +85,7 @@ flowchart TB
     Split --> MetricSink
 
     PulsarSink --> Pulsar["Pulsar"]
-    FrameSink --> S3["S3/MinIO"]
+    FrameSink --> S3["S3"]
     TrackSink --> PG["PostgreSQL"]
     MetricSink --> Prom["Prometheus"]
 

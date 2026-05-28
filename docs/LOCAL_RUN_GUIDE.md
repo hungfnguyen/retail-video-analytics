@@ -23,7 +23,7 @@ This starts the local infrastructure stack:
 
 - Pulsar
 - Flink
-- MinIO
+- AWS S3
 - Iceberg REST
 - Trino
 
@@ -49,7 +49,7 @@ Run from the repository root:
 uv run --package rva-vision python services/vision/main.py
 ```
 
-The Vision service reads the configured video sources, runs YOLO + tracking, publishes metadata to Pulsar, and uploads sampled frames to MinIO when media upload is enabled.
+The Vision service reads the configured video sources, runs YOLO + tracking, publishes metadata to Pulsar, and uploads sampled frames to AWS S3 when media upload is enabled.
 
 ## 4. Run FastAPI Backend
 
@@ -66,7 +66,7 @@ http://localhost:8000/health
 http://localhost:8000/api/v1/live/cam_01/dashboard
 ```
 
-The current API starts with mock Live dashboard data. Real Redis, Trino, MinIO, and Prometheus integrations can be added behind the same API contract later.
+The current API starts with mock Live dashboard data. Real Redis, Trino, AWS S3, and Prometheus integrations can be added behind the same API contract later.
 
 ## 5. Run Frontend
 
@@ -105,7 +105,7 @@ VITE_API_BASE_URL=http://localhost:8000
 | FastAPI Docs | http://localhost:8000/docs |
 | Flink UI | http://localhost:8081 |
 | Trino | http://localhost:8083 |
-| MinIO Console | http://localhost:9001 |
+| AWS S3 Console | http://localhost:9001 |
 | Iceberg REST | http://localhost:8181 |
 
 ## Minimal Frontend Demo Mode

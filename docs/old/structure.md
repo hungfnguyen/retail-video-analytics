@@ -5,7 +5,7 @@
 - **Total files**: 72 (project files only, excludes .gitignore patterns)
 - **Project type**: Data Engineering / Stream Processing
 - **Main language**: Python (Vision AI), Java (Flink Jobs)
-- **Stack**: YOLO11 + BoTSORT → Apache Pulsar → Apache Flink → Apache Iceberg (MinIO) → Trino → Grafana
+- **Stack**: YOLO11 + BoTSORT → Apache Pulsar → Apache Flink → Apache Iceberg (AWS S3) → Trino → Grafana
 
 ## Core Project Structure
 
@@ -62,7 +62,7 @@ retail-video-analytics/
 │   │   ├── conf/standalone.conf    # Pulsar broker config
 │   │   ├── schema/metadata-json-schema.json
 │   │   └── scripts/init-topics.sh  # Tạo topic retail/metadata/events
-│   ├── minio/
+│   ├── s3/
 │   │   ├── Dockerfile
 │   │   └── scripts/init.sh         # Tạo bucket warehouse
 │   ├── trino/
@@ -137,7 +137,7 @@ retail-video-analytics/
                              │
                              ▼
 ┌─────────────────────────────────────────────────────────────────────┐
-│                    LAKEHOUSE (Iceberg on MinIO)                     │
+│                    LAKEHOUSE (Iceberg on AWS S3)                     │
 │  Tables: bronze_raw, silver_detections, gold_*                     │
 │  Format: Parquet, Partitioned by store_id                          │
 └────────────────────────────┬────────────────────────────────────────┘
@@ -255,7 +255,7 @@ python main.py
 ### 3. Validate Data Flow
 - **Pulsar UI**: http://localhost:8082 (check topic messages)
 - **Flink UI**: http://localhost:8081 (check 8 running jobs)
-- **MinIO**: http://localhost:9001 (check warehouse bucket)
+- **AWS S3**: http://localhost:9001 (check warehouse bucket)
 - **Grafana**: http://localhost:3000 (check dashboards - admin/admin)
 - **Trino**: http://localhost:8083 (query Iceberg tables)
 
@@ -300,7 +300,7 @@ python main.py
 | Vision AI | YOLO11, BoTSORT, OpenCV | Latest | - |
 | Message Broker | Apache Pulsar | 3.3.2 | 8082 |
 | Stream Processing | Apache Flink | 1.18 | 8081 |
-| Storage | MinIO (S3) | Latest | 9000/9001 |
+| Storage | AWS S3 (S3) | Latest | 9000/9001 |
 | Table Format | Apache Iceberg | 1.4+ | - |
 | Catalog | Iceberg REST | 0.7.0 | 8181 |
 | Query Engine | Trino | 418 | 8083 |

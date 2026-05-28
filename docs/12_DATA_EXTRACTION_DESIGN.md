@@ -6,8 +6,8 @@ Vision module produces **3 output planes** from the same camera source, nhưng c
 
 ```
                          ┌─── Plane 1: Metadata JSON ──→ Pulsar ──→ Flink ──→ Iceberg
-Frame ──→ YOLO+BoTSORT ──┼─── Plane 2: Sampled JPEG ──→ S3/MinIO
-                         └─── Plane 3: Alert Clip ────→ S3/MinIO
+Frame ──→ YOLO+BoTSORT ──┼─── Plane 2: Sampled JPEG ──→ S3
+                         └─── Plane 3: Alert Clip ────→ S3
 ```
 
 | Plane | Format | Destination | Size/frame | Frequency | Purpose |
@@ -150,7 +150,7 @@ logger = logging.getLogger(__name__)
 
 
 class FrameSampler:
-    """Upload sampled JPEG frames to S3/MinIO asynchronously.
+    """Upload sampled JPEG frames to S3 asynchronously.
 
     Sampling strategy:
       - 1 frame per `interval_sec` seconds per camera
@@ -161,7 +161,7 @@ class FrameSampler:
 
     def __init__(
         self,
-        s3_client,          # boto3.client("s3") or minio client
+        s3_client,          # boto3.client("s3") or s3 client
         bucket: str,        # "retail-video-analytics"
         store_id: str,
         camera_id: str,
@@ -563,10 +563,10 @@ settings:
   pulsar_topic: persistent://retail/metadata/events
 
   # --- Plane 2: Frame sampling ---
-  s3_endpoint: http://localhost:9000          # MinIO local; https://s3.ap-southeast-1.amazonaws.com for prod
+  s3_endpoint: https://s3.ap-southeast-2.amazonaws.com          # AWS S3 local; https://s3.ap-southeast-1.amazonaws.com for prod
   s3_bucket: retail-video-analytics
-  s3_access_key: minioadmin
-  s3_secret_key: minioadmin
+  s3_access_key: CHANGE_ME
+  s3_secret_key: CHANGE_ME
   s3_region: ap-southeast-1
   frame_sample_interval_sec: 1                # 1 JPEG per second per camera
   frame_jpeg_quality: 85                      # 0-100, 85 balances size/quality
@@ -581,7 +581,7 @@ settings:
 
 ```bash
 # .env overrides (highest priority)
-S3_ENDPOINT=http://localhost:9000
+S3_ENDPOINT=https://s3.ap-southeast-2.amazonaws.com
 S3_BUCKET=retail-video-analytics
 FRAME_SAMPLE_INTERVAL_SEC=1
 ```
@@ -652,11 +652,11 @@ Iceberg compaction + Parquet compression reduces metadata by ~3× at rest.
 
 | Component | Status | Notes |
 |-----------|--------|-------|
-| `FrameSampler` | Implemented | Upload sampled JPEGs asynchronously to S3/MinIO. |
+| `FrameSampler` | Implemented | Upload sampled JPEGs asynchronously to S3. |
 | `SampledFrameCreatedEvent` | Implemented | Published to `persistent://retail/metadata/media-events` after successful upload. |
 | `AlertClipExtractor` | Implemented, disabled by default | Enable with `alert_clip_enabled: true`. |
 | `ClipCreatedEvent` | Implemented | Published after MP4 upload succeeds. |
-| MinIO bucket setup | Implemented | Uses existing local `warehouse` bucket. |
+| AWS S3 bucket setup | Implemented | Uses existing local `warehouse` bucket. |
 | FastAPI pre-signed URL endpoint | Not implemented | Future serving-layer work. |
 
 ---

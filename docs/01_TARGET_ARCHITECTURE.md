@@ -173,7 +173,7 @@ Lợi ích:
 
 - Video file thay cho camera RTSP.
 - Docker Compose chạy Pulsar, Flink, Redis, PostgreSQL, Trino, Grafana, API, Streamlit.
-- S3 có thể thay bằng bucket thật hoặc adapter local (MinIO) trong môi trường dev.
+- S3 có thể thay bằng bucket thật hoặc adapter local (AWS S3) trong môi trường dev.
 - Một đến hai camera/video stream.
 
 ### Single VM demo

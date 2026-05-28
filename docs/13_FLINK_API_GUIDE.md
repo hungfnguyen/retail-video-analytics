@@ -37,7 +37,7 @@ cfg.put("catalog-impl", "org.apache.iceberg.rest.RESTCatalog");
 cfg.put("uri", "http://iceberg-rest:8181");
 cfg.put("warehouse", "s3://warehouse/iceberg");
 cfg.put("io-impl", "org.apache.iceberg.aws.s3.S3FileIO");
-cfg.put("s3.endpoint", "http://minio:9000");
+cfg.put("s3.endpoint", "https://s3.ap-southeast-2.amazonaws.com");
 // ...
 
 String catalogSql = "CREATE CATALOG lakehouse WITH (" +
