@@ -35,7 +35,7 @@ settings:
   live_media_fps: 15
   live_media_jpeg_quality: 75
 
-  # Media plane: sampled JPEGs and optional alert clips to S3/MinIO.
+  # Media plane: sampled JPEGs and optional alert clips to S3.
   media_upload_enabled: true
   pulsar_media_topic: persistent://retail/metadata/media-events
   # Use environment variables for credentials:
@@ -43,13 +43,13 @@ settings:
 
 
   s3_endpoint: ""
-  # s3_endpoint: http://localhost:9000 # minio
-  s3_region: us-east-1
+  # s3_endpoint: https://s3.ap-southeast-2.amazonaws.com # s3
+  s3_region: ap-southeast-2
   s3_bucket: retail-video-analytics-prod
   s3_access_key: ""
   s3_secret_key: ""
   s3_path_style: false
-  #s3_path_style: true #minio
+  #s3_path_style: true #s3
 
   frame_sampling_enabled: true
   frame_sample_interval_sec: 1

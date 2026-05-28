@@ -21,12 +21,12 @@ public class GoldTrackSummaryJob {
         cfg.put("uri", getenv("ICEBERG_REST_URI", "http://iceberg-rest:8181"));
         cfg.put("warehouse", ensureWarehouseSuffix(getenv("ICEBERG_WAREHOUSE", "s3://warehouse"), "/iceberg"));
         cfg.put("io-impl", "org.apache.iceberg.aws.s3.S3FileIO");
-        cfg.put("s3.endpoint", getenv("S3_ENDPOINT", "http://minio:9000"));
-        cfg.put("s3.path-style-access", getenv("S3_PATH_STYLE", "true"));
-        cfg.put("s3.region", getenv("S3_REGION", "us-east-1"));
+        cfg.put("s3.endpoint", getenv("S3_ENDPOINT", "https://s3.ap-southeast-2.amazonaws.com"));
+        cfg.put("s3.path-style-access", getenv("S3_PATH_STYLE", "false"));
+        cfg.put("s3.region", getenv("S3_REGION", "ap-southeast-2"));
 
-        String accessKey = firstNotBlank(System.getenv("MINIO_ROOT_USER"), System.getenv("AWS_ACCESS_KEY_ID"));
-        String secretKey = firstNotBlank(System.getenv("MINIO_ROOT_PASSWORD"), System.getenv("AWS_SECRET_ACCESS_KEY"));
+        String accessKey = firstNotBlank(System.getenv("S3_ACCESS_KEY"), System.getenv("AWS_ACCESS_KEY_ID"));
+        String secretKey = firstNotBlank(System.getenv("S3_SECRET_KEY"), System.getenv("AWS_SECRET_ACCESS_KEY"));
         if (accessKey != null) {
             cfg.put("s3.access-key-id", accessKey);
         }
@@ -93,11 +93,12 @@ public class GoldTrackSummaryJob {
         return (v == null || v.isEmpty()) ? def : v;
     }
 
-    private static String firstNotBlank(String a, String b) {
-        if (a != null && !a.isBlank())
-            return a;
-        if (b != null && !b.isBlank())
-            return b;
+    private static String firstNotBlank(String... values) {
+        for (String v : values) {
+            if (v != null && !v.isBlank()) {
+                return v;
+            }
+        }
         return null;
     }
 

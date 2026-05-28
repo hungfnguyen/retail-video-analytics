@@ -119,7 +119,7 @@ class ZoneHeatmapCell(BaseModel):
 
 
 class ServiceHealth(BaseModel):
-    service: Literal["pulsar", "flink", "redis", "minio", "trino", "fastapi"]
+    service: Literal["pulsar", "flink", "redis", "s3", "trino", "fastapi"]
     display_name: str
     role: str
     status: Literal["ok", "warning", "down"]

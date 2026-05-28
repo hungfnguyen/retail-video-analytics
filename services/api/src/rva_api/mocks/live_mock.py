@@ -175,8 +175,8 @@ LIVE_DASHBOARD_MOCK = LiveDashboardData(
             "latency_ms": 45,
         },
         {
-            "service": "minio",
-            "display_name": "MinIO",
+            "service": "s3",
+            "display_name": "AWS S3",
             "role": "Object Storage",
             "status": "ok",
             "last_check_ts": "2026-05-16T15:42:11+07:00",

@@ -14,9 +14,6 @@ CONTAINERS=(
     flink-taskmanager
     flink-job-submitter
     redis
-    minio
-    minio-init
-    mc
     iceberg-rest
     trino
     grafana

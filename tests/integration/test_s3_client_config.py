@@ -17,14 +17,14 @@ class TestS3ClientConfig:
 
     def test_full_config(self):
         config = S3ClientConfig(
-            endpoint_url="http://minio:9000",
+            endpoint_url="https://s3.ap-southeast-2.amazonaws.com",
             region_name="us-east-1",
             bucket="warehouse",
-            access_key="minioadmin",
-            secret_key="minioadmin123",
+            access_key="CHANGE_ME",
+            secret_key="CHANGE_ME",
             path_style=True,
         )
-        assert config.endpoint_url == "http://minio:9000"
+        assert config.endpoint_url == "https://s3.ap-southeast-2.amazonaws.com"
 
     def test_frozen_dataclass(self):
         config = S3ClientConfig(

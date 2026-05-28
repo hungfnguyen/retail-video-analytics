@@ -43,7 +43,7 @@ const containers = [
   ['pulsar', 'Running', '12.1%', '1.2Gi / 4Gi', '4d 02h 13m'],
   ['flink-jobmanager', 'Running', '14.5%', '1.1Gi / 4Gi', '4d 02h 10m'],
   ['flink-taskmanager', 'Running', '32.8%', '2.6Gi / 8Gi', '4d 02h 10m'],
-  ['minio', 'Running', '16.3%', '768Mi / 4Gi', '4d 02h 09m'],
+  ['s3', 'Running', '16.3%', '768Mi / 4Gi', '4d 02h 09m'],
   ['fastapi', 'Running', '9.6%', '256Mi / 1Gi', '4d 02h 07m'],
 ]
 
@@ -52,7 +52,7 @@ const logs = [
   ['15:41:04', 'INFO', 'pulsar', 'Published 18,742 messages to topic rva.events'],
   ['15:41:03', 'INFO', 'flink-jobmanager', 'Checkpoint completed in 1.18s'],
   ['15:41:02', 'INFO', 'flink-taskmanager', 'Processed 18,512 records'],
-  ['15:41:01', 'WARN', 'minio', 'S3 backend response 210ms for PutObject'],
+  ['15:41:01', 'WARN', 's3', 'S3 backend response 210ms for PutObject'],
   ['15:41:00', 'INFO', 'fastapi', 'GET /api/v1/live/stats 200 12ms'],
 ]
 
@@ -69,7 +69,7 @@ function serviceCards(services: ServiceHealth[]) {
   return [
     { service: 'pulsar', display_name: 'Pulsar', role: 'Event broker', status: 'warning', latency_ms: 0, last_check_ts: '' },
     { service: 'flink', display_name: 'Flink', role: 'Stream processing', status: 'warning', latency_ms: 0, last_check_ts: '' },
-    { service: 'minio', display_name: 'MinIO', role: 'Object storage', status: 'warning', latency_ms: 0, last_check_ts: '' },
+    { service: 's3', display_name: 'AWS S3', role: 'Object storage', status: 'warning', latency_ms: 0, last_check_ts: '' },
     { service: 'trino', display_name: 'Trino', role: 'SQL analytics', status: 'warning', latency_ms: 0, last_check_ts: '' },
     { service: 'redis', display_name: 'Redis', role: 'Realtime state', status: 'warning', latency_ms: 0, last_check_ts: '' },
     { service: 'fastapi', display_name: 'FastAPI', role: 'Backend gateway', status: 'warning', latency_ms: 0, last_check_ts: '' },

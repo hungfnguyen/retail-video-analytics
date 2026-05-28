@@ -14,7 +14,7 @@ services:
       - pulsar_data:/pulsar/data
       - ./logs/pulsar:/pulsar/logs
     environment:
-      PULSAR_MEM: "-Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m"
+      PULSAR_MEM: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=1g"
     healthcheck:
       test: ["CMD", "curl", "-f", "http://localhost:8080/admin/v2/brokers/health"]
       interval: 10s
@@ -36,7 +36,7 @@ services:
       - ./infrastructure/pulsar/schema:/pulsar/schema
       - ./infrastructure/pulsar/conf/client.conf:/pulsar/conf/client.conf
     environment:
-      PULSAR_MEM: "-Xms256m -Xmx256m -XX:MaxDirectMemorySize=256m"
+      PULSAR_MEM: "-Xms1g -Xmx2g -XX:MaxDirectMemorySize=1g"
     restart: "no"
     networks:
       - retail-net
@@ -56,14 +56,22 @@ services:
       - ./logs/flink:/opt/flink/log
     environment:
       AWS_REGION: ${S3_REGION}
+      AWS_DEFAULT_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PATH_STYLE: ${S3_PATH_STYLE}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
-      
+
     healthcheck:
       test: ["CMD", "curl", "-fsS", "http://localhost:8081/overview"]
       interval: 10s
@@ -84,14 +92,22 @@ services:
       - flink_state:/opt/flink/state
     environment:
       AWS_REGION: ${S3_REGION}
+      AWS_DEFAULT_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PATH_STYLE: ${S3_PATH_STYLE}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
       LOG4J_CONFIGURATION_FILE: /opt/flink/conf/log4j2.properties
-    
+
     networks:
       - retail-net
 
@@ -115,8 +131,16 @@ services:
         condition: service_healthy
     environment:
       AWS_REGION: ${S3_REGION}
+      AWS_DEFAULT_REGION: ${S3_REGION}
       AWS_ACCESS_KEY_ID: ${S3_ACCESS_KEY}
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
+      S3_ENDPOINT: ${S3_ENDPOINT}
+      S3_PATH_STYLE: ${S3_PATH_STYLE}
+      S3_REGION: ${S3_REGION}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY}
+      S3_SECRET_KEY: ${S3_SECRET_KEY}
+      ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
+      ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -140,70 +164,6 @@ services:
     restart: unless-stopped
     networks:
       - retail-net
-
-  # # === MinIO (disabled — using AWS S3 instead) ===
-  # # Uncomment for local dev without AWS S3
-  # minio:
-  #   build: ./infrastructure/minio
-  #   container_name: minio
-  #   ports:
-  #     - "9000:9000"   # MinIO API
-  #     - "9001:9001"   # MinIO Console
-  #   environment:
-  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-  #   volumes:
-  #     - minio_data:/data
-  #   command: server /data --console-address ":9001"
-  #   restart: unless-stopped
-  #   healthcheck:
-  #     test: ["CMD", "curl", "-fsS", "http://localhost:9000/minio/health/ready"]
-  #     interval: 15s
-  #     timeout: 10s
-  #     retries: 5
-  #     start_period: 30s
-  #   networks:
-  #     - retail-net
-  #
-  # mc:
-  #   image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
-  #   container_name: mc
-  #   depends_on:
-  #     minio:
-  #       condition: service_healthy
-  #   environment:
-  #     MINIO_ALIAS: local
-  #     MINIO_SERVER_URL: http://minio:9000
-  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-  #   entrypoint: ["/bin/sh","-lc","trap : TERM INT; while :; do sleep 3600; done"]
-  #   volumes:
-  #     - mc_config:/root/.mc
-  #     - ./infrastructure/minio/scripts:/scripts:ro
-  #   networks:
-  #     - retail-net
-  #
-  #
-  # minio-init:
-  #   image: minio/mc:RELEASE.2025-08-13T08-35-41Z-cpuv1
-  #   container_name: minio-init
-  #   depends_on:
-  #     minio:
-  #       condition: service_healthy
-  #   entrypoint: ["/bin/bash", "/scripts/init.sh"]
-  #   environment:
-  #     MINIO_ROOT_USER: ${MINIO_ROOT_USER}
-  #     MINIO_ROOT_PASSWORD: ${MINIO_ROOT_PASSWORD}
-  #     MINIO_SERVER_URL: ${MINIO_SERVER_URL}
-  #     ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
-  #     MINIO_ADDITIONAL_BUCKETS: ${MINIO_ADDITIONAL_BUCKETS:-}
-  #     MINIO_MC_ALIAS: local
-  #   volumes:
-  #     - mc_config:/root/.mc
-  #     - ./infrastructure/minio/scripts/init.sh:/scripts/init.sh:ro
-  #   restart: "no"
-  #   networks:
-  #     - retail-net
 
   iceberg-rest:
     image: tabulario/iceberg-rest:0.7.0
@@ -239,7 +199,6 @@ services:
     volumes:
       - ./infrastructure/trino/etc:/etc/trino
       - trino_data:/data/trino
-      - ./logs/trino:/data/trino/var/log
     environment:
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       S3_ENDPOINT: ${S3_ENDPOINT}
@@ -265,10 +224,6 @@ volumes:
   flink_state:
     driver: local
   pulsar_data:
-    driver: local
-  minio_data:
-    driver: local
-  mc_config:
     driver: local
 
 networks:
