@@ -54,6 +54,11 @@ class FakeRedis:
         return members if withscores else [member for member, _ in members]
 
 
+@pytest.fixture(autouse=True)
+def stub_dependency_health(monkeypatch):
+    monkeypatch.setattr(live, "_tcp_health", lambda raw: ("ok", 1))
+
+
 def test_live_dashboard_maps_redis_state(monkeypatch):
     monkeypatch.setattr(live, "_get_redis_client", lambda: FakeRedis())
     monkeypatch.setattr(
@@ -117,7 +122,14 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.heatmap_points[0].intensity == 1.0
     assert len(data.zone_heatmap) == 42
     assert max(cell.value for cell in data.zone_heatmap) == 100
-    assert data.pipeline_health[0].service == "redis"
+    assert {service.service for service in data.pipeline_health} == {
+        "pulsar",
+        "flink",
+        "redis",
+        "minio",
+        "trino",
+        "fastapi",
+    }
 
 
 def test_get_redis_client_raises_503_when_unavailable(monkeypatch):
@@ -231,4 +243,7 @@ def test_live_dashboard_marks_count_missing_when_frame_is_stale(monkeypatch):
     assert data.stats.count_source == "missing"
     assert data.stats.metadata_status == "stale"
     assert data.stats.status == "warning"
-    assert data.pipeline_health[1].status == "warning"
+    fastapi_health = next(
+        service for service in data.pipeline_health if service.service == "fastapi"
+    )
+    assert fastapi_health.status == "warning"
