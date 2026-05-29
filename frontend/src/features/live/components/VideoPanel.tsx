@@ -13,25 +13,27 @@ export function VideoPanel({ frame }: VideoPanelProps) {
   const renderMjpegFallback = Boolean(streamUrl) && (!webRtcEnabled || fallbackRequired)
   const mediaFps = frame.media_fps > 0 ? frame.media_fps : frame.fps
   const mediaLatencyMs = frame.media_latency_ms || frame.latency_ms
+  const imageAspectRatio = frame.image_size.width > 0 && frame.image_size.height > 0
+    ? `${frame.image_size.width} / ${frame.image_size.height}`
+    : '16 / 9'
 
   return (
-    <section className="relative min-h-[490px] overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-      <div className="absolute left-3.5 top-3.5 z-40 rounded-md bg-slate-900/75 px-2.5 py-1.5 text-[13px] text-white">
-        Media FPS {mediaFps.toFixed(1)} | Media latency {mediaLatencyMs}ms | Infer {frame.inference_ms}ms
-      </div>
-
-      <div className="relative h-[440px] overflow-hidden bg-[linear-gradient(90deg,rgba(15,23,42,0.1)_1px,transparent_1px),linear-gradient(rgba(15,23,42,0.08)_1px,transparent_1px),linear-gradient(180deg,#dce7f1_0%,#cbd9e8_44%,#b7c6d3_100%)] bg-[length:58px_58px,58px_58px,100%_100%]">
+    <section className="overflow-hidden rounded-lg border border-slate-200 bg-white shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
+      <div
+        className="relative max-h-[72vh] min-h-[520px] overflow-hidden bg-slate-950"
+        style={{ aspectRatio: imageAspectRatio }}
+      >
         {renderMjpegFallback ? (
           <img
             alt={`Live camera ${frame.camera_id}`}
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             src={streamUrl}
           />
         ) : streamUrl ? (
           <video
             ref={videoRef}
             autoPlay
-            className="h-full w-full object-cover"
+            className="h-full w-full object-contain"
             muted
             playsInline
           />
@@ -74,8 +76,9 @@ export function VideoPanel({ frame }: VideoPanelProps) {
         )}
       </div>
 
-      <div className="flex items-center justify-between px-4 py-3.5 text-[13px] text-slate-500">
+      <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 text-[13px] text-slate-500">
         <span>Camera: {frame.camera_id}</span>
+        <span>Media {mediaFps.toFixed(1)} FPS | Latency {mediaLatencyMs}ms | Infer {frame.inference_ms}ms</span>
         <span>
           Frame {frame.frame_id} | Proc {frame.processing_fps.toFixed(1)} FPS | Enc {frame.encode_ms}ms | Drops{' '}
           {frame.reader_drop_count}

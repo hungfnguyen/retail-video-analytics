@@ -4,18 +4,18 @@
 cameras:
   - camera_id: cam_01
     store_id: store_001
-    name: "Entrance"
+    name: "Cam_1"
     source_type: video_file
-    source_uri: data/videos/video1.mp4
+    source_uri: data/videos/video_main.mp4
     enabled: true
     fps_target: 25
 
   - camera_id: cam_02
     store_id: store_001
-    name: "Aisle"
+    name: "Cam_2"
     source_type: video_file
-    source_uri: data/videos/video2.mp4
-    enabled: true
+    source_uri: data/videos/Video_1.mp4
+    enabled: false
     fps_target: 25
 
 settings:
