@@ -2,10 +2,12 @@ from __future__ import annotations
 
 import json
 import os
+import socket
 import time
 from datetime import datetime, timezone
 from pathlib import Path
 from typing import Any
+from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 
@@ -24,6 +26,7 @@ STALE_FRAME_MS = 10_000
 MEDIA_STALE_MS = 3_000
 METADATA_FRESH_MS = 1_500
 METADATA_STALE_MS = 5_000
+HEALTH_CHECK_TIMEOUT_SECONDS = 0.1
 
 _redis_client: Any | None = None
 
@@ -388,26 +391,104 @@ def _empty_traffic() -> list[dict[str, int | str]]:
     return []
 
 
+def _health_endpoint(raw: str) -> tuple[str, int] | None:
+    parsed = urlparse(raw)
+    if parsed.hostname:
+        if parsed.port:
+            return parsed.hostname, parsed.port
+        if parsed.scheme == "https":
+            return parsed.hostname, 443
+        if parsed.scheme == "http":
+            return parsed.hostname, 80
+        if parsed.scheme == "pulsar":
+            return parsed.hostname, 6650
+        return None
+
+    if ":" not in raw:
+        return None
+
+    host, port_raw = raw.rsplit(":", 1)
+    try:
+        return host, int(port_raw)
+    except ValueError:
+        return None
+
+
+def _tcp_health(raw: str) -> tuple[str, int]:
+    endpoint = _health_endpoint(raw)
+    if endpoint is None:
+        return "warning", 0
+
+    start = time.perf_counter()
+    try:
+        with socket.create_connection(endpoint, timeout=HEALTH_CHECK_TIMEOUT_SECONDS):
+            latency_ms = max(0, int((time.perf_counter() - start) * 1000))
+            return "ok", latency_ms
+    except OSError:
+        return "down", 0
+
+
+def _service_health_entry(
+    service: str,
+    display_name: str,
+    role: str,
+    status: str,
+    now: datetime,
+    latency_ms: int,
+) -> dict[str, Any]:
+    return {
+        "service": service,
+        "display_name": display_name,
+        "role": role,
+        "status": status,
+        "last_check_ts": now.isoformat(),
+        "latency_ms": latency_ms,
+    }
+
+
 def _pipeline_health(
-    now: datetime, redis_latency_ms: int, frame_status: str
+    now: datetime,
+    redis_latency_ms: int,
+    frame_status: str,
+    redis_status: str = "ok",
 ) -> list[dict[str, Any]]:
+    pulsar_status, pulsar_latency_ms = _tcp_health(
+        os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
+    )
+    flink_status, flink_latency_ms = _tcp_health(
+        os.getenv("FLINK_REST_URL", "http://localhost:8081")
+    )
+    s3_status, s3_latency_ms = _tcp_health(
+        os.getenv("S3_ENDPOINT", "https://s3.amazonaws.com")
+    )
+    trino_status, trino_latency_ms = _tcp_health(
+        os.getenv("TRINO_URL", "http://localhost:8083")
+    )
+
     return [
-        {
-            "service": "redis",
-            "display_name": "Redis",
-            "role": "Realtime State",
-            "status": "ok",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": redis_latency_ms,
-        },
-        {
-            "service": "fastapi",
-            "display_name": "FastAPI",
-            "role": "Serving API",
-            "status": "ok" if frame_status == "stable" else "warning",
-            "last_check_ts": now.isoformat(),
-            "latency_ms": 0,
-        },
+        _service_health_entry(
+            "pulsar", "Pulsar", "Event Stream", pulsar_status, now, pulsar_latency_ms
+        ),
+        _service_health_entry(
+            "flink", "Flink", "Stream Processing", flink_status, now, flink_latency_ms
+        ),
+        _service_health_entry(
+            "redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms
+        ),
+        _service_health_entry(
+            "s3", "S3", "Object Storage", s3_status, now, s3_latency_ms
+        ),
+        _service_health_entry(
+            "trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms
+        ),
+        _service_health_entry(
+            "fastapi",
+            "FastAPI",
+            "Serving API",
+            "ok" if frame_status == "stable" else "warning",
+            now,
+            0,
+        ),
     ]
 
 

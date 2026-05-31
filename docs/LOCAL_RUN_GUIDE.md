@@ -28,6 +28,8 @@ aws s3 ls s3://retail-video-analytics-prod/
 ## 3. Start Infrastructure
 
 ```bash
+cd D:\workspace\retail-video-analytics
+docker compose -f docker-compose.dev.yml up -d --build
 docker compose up -d --build
 docker compose ps
 ```
