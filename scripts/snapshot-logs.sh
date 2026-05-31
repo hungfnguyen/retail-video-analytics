@@ -16,7 +16,6 @@ CONTAINERS=(
     redis
     iceberg-rest
     trino
-    grafana
 )
 
 echo "=== Snapshot logs → ${SNAPSHOT_DIR} ==="

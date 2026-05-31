@@ -1,269 +1,97 @@
 # Data Flow And Contracts
 
-## 1. Mục tiêu
+## Topics
 
-Tài liệu này định nghĩa cách dữ liệu đi qua hệ thống và contract giữa các service. Contract rõ ràng giúp pipeline dễ kiểm thử, dễ replay, dễ evolve schema và giảm lỗi khi nhiều module phát triển độc lập.
+| Topic | Purpose |
+|---|---|
+| `persistent://retail/metadata/events` | Detection frame events from Vision |
+| `persistent://retail/metadata/media-events` | Optional sampled frame / clip artifact events |
+| `persistent://retail/metadata/dlq-events` | Invalid detection events from realtime validation |
 
-## 2. Data flow tổng thể
+`events` is partitioned by camera count so events for a camera can preserve ordering through a stable partition key.
 
-```text
-Camera / Video
-    |
-    v
-Vision Edge Service
-    |
-    +--> DetectionFrameEvent -> Pulsar topic detection_frames
-    |
-    +--> Sampled frame jpg -> S3
-    |
-    +--> TrackLifecycleEvent -> PostgreSQL hoặc Pulsar topic track_lifecycle
-    |
-    v
-Flink
-    |
-    +--> Realtime aggregates -> Redis
-    +--> AlertEvent -> PostgreSQL + Redis pub/sub
-    +--> Bronze/Silver/Gold tables -> Iceberg
-```
+## Detection Event Contract
 
-## 3. Time semantics
-
-Hệ thống dùng ba loại thời gian:
-
-| Trường | Ý nghĩa | Nguồn |
-|---|---|---|
-| `capture_ts` | Thời điểm frame được camera/video reader lấy ra | Vision service |
-| `event_ts` | Thời điểm nghiệp vụ dùng cho windowing | Thường bằng `capture_ts` |
-| `ingest_ts` | Thời điểm event được publish hoặc nhận vào pipeline | Producer/Flink |
-| `process_ts` | Thời điểm Flink xử lý event | Flink runtime |
-
-Quy tắc:
-
-- Window analytics dùng `event_ts`.
-- Latency đo bằng `process_ts - capture_ts`.
-- Lakehouse partition ưu tiên theo `event_date` lấy từ `event_ts`.
-- Nếu `event_ts` thiếu hoặc sai format, event vào dead-letter topic.
-
-## 4. Topic naming
-
-| Topic | Nội dung | Partition key |
-|---|---|---|
-| `persistent://retail/ingest/detection-frames-v1` | Detection frame events từ vision | `store_id:camera_id` |
-| `persistent://retail/ops/track-lifecycle-v1` | Track start/end/sample nếu publish qua broker | `store_id:camera_id:track_id` |
-| `persistent://retail/ops/alerts-v1` | Alert events | `store_id:camera_id` |
-| `persistent://retail/ops/system-metrics-v1` | FPS, lag, worker health | `service_id` |
-| `persistent://retail/metadata/dlq-events` | Event lỗi schema hoặc quality rule | `source_topic` |
-
-Trong MVP có thể chỉ dùng topic detection frame và để Flink sinh ra alert/metrics.
-
-## 5. DetectionFrameEvent contract
-
-Một message tương ứng một frame đã xử lý.
+Vision publishes JSON events with this shape:
 
 ```json
 {
   "schema_version": "1.0",
-  "event_id": "cam_01-000001502-2026-05-05T10:30:00.123Z",
-  "pipeline_run_id": "run_20260505_103000",
-  "store_id": "store_001",
-  "camera_id": "cam_01",
-  "frame_index": 1502,
-  "capture_ts": "2026-05-05T10:30:00.123Z",
-  "ingest_ts": "2026-05-05T10:30:00.180Z",
+  "event_id": "...",
+  "pipeline_run_id": "...",
+  "frame_index": 123,
+  "capture_ts": "2026-05-28T15:39:58.123Z",
+  "source": {
+    "store_id": "store_001",
+    "camera_id": "cam_01",
+    "source_type": "video_file"
+  },
   "image_size": {
-    "width": 1920,
-    "height": 1080
-  },
-  "model": {
-    "name": "yolo11n",
-    "version": "0.1",
-    "confidence_threshold": 0.4,
-    "tracker": "botsort"
-  },
-  "frame_ref": {
-    "saved": true,
-    "uri": "s3://retail-video-analytics/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
+    "width": 1280,
+    "height": 720
   },
   "detections": [
     {
-      "track_id": 42,
+      "det_id": "123-0",
+      "class": "person",
       "class_id": 0,
-      "class_name": "person",
-      "confidence": 0.87,
-      "bbox": {
-        "x1": 100,
-        "y1": 200,
-        "x2": 300,
-        "y2": 620
-      },
-      "centroid": {
-        "x": 200,
-        "y": 410
-      }
+      "conf": 0.86,
+      "track_id": 42,
+      "bbox": {"x1": 100, "y1": 120, "x2": 220, "y2": 420},
+      "bbox_norm": {"x": 0.078, "y": 0.166, "w": 0.093, "h": 0.416},
+      "centroid": {"x": 160, "y": 270},
+      "centroid_norm": {"x": 0.125, "y": 0.375}
     }
-  ]
+  ],
+  "runtime": {
+    "model_name": "yolo11l.pt",
+    "tracker_type": "botsort"
+  }
 }
 ```
 
-## 6. Required fields
+## Identity Fields
 
-| Field | Bắt buộc | Ghi chú |
-|---|---|---|
-| `schema_version` | Có | Major/minor version |
-| `event_id` | Có | Dùng cho dedup |
-| `pipeline_run_id` | Có | Dùng lineage và replay |
-| `store_id` | Có | Scope theo cửa hàng |
-| `camera_id` | Có | Scope theo camera |
-| `frame_index` | Có | Tăng dần trong một run |
-| `capture_ts` | Có | ISO-8601 UTC |
-| `image_size.width` | Có | Pixel width |
-| `image_size.height` | Có | Pixel height |
-| `detections` | Có | Có thể là mảng rỗng |
-
-## 7. DetectionObject contract
-
-| Field | Type | Rule |
-|---|---|---|
-| `track_id` | integer hoặc null | Null nếu detector chưa tracking được |
-| `class_id` | integer | Với person thường là `0` |
-| `class_name` | string | MVP chỉ xử lý `person` |
-| `confidence` | float | 0.0 đến 1.0 |
-| `bbox.x1` | integer | 0 đến width - 1 |
-| `bbox.y1` | integer | 0 đến height - 1 |
-| `bbox.x2` | integer | Lớn hơn `x1` |
-| `bbox.y2` | integer | Lớn hơn `y1` |
-| `centroid.x` | integer | Nằm trong bbox |
-| `centroid.y` | integer | Nằm trong bbox |
-
-## 8. TrackLifecycleEvent contract
-
-Track lifecycle có thể được ghi trực tiếp vào PostgreSQL bởi vision service hoặc publish qua Pulsar để Flink xử lý. Với MVP, ghi PostgreSQL trực tiếp đơn giản hơn. Với kiến trúc data platform đầy đủ, publish qua Pulsar giúp replay và audit tốt hơn.
-
-```json
-{
-  "schema_version": "1.0",
-  "event_id": "track-cam_01-42-start-2026-05-05T10:30:00.123Z",
-  "store_id": "store_001",
-  "camera_id": "cam_01",
-  "track_id": 42,
-  "event_type": "track_start",
-  "event_ts": "2026-05-05T10:30:00.123Z",
-  "position": {
-    "x": 200,
-    "y": 410
-  },
-  "frame_uri": "s3://retail-video-analytics/frames/2026-05-05/cam_01/10/10-30-00_001502.jpg"
-}
-```
-
-Allowed `event_type`:
-
-- `track_start`
-- `position_sample`
-- `track_end`
-
-## 9. AlertEvent contract
-
-```json
-{
-  "schema_version": "1.0",
-  "alert_id": "alert-cam_01-20260505T103005Z-density",
-  "alert_type": "density_spike",
-  "severity": "medium",
-  "store_id": "store_001",
-  "camera_id": "cam_01",
-  "event_ts": "2026-05-05T10:30:05Z",
-  "window": {
-    "start_ts": "2026-05-05T10:30:00Z",
-    "end_ts": "2026-05-05T10:30:05Z"
-  },
-  "metrics": {
-    "person_count": 28,
-    "threshold": 20,
-    "max_heatmap_value": 15.5
-  },
-  "hotspot": {
-    "grid_x": 32,
-    "grid_y": 18
-  },
-  "status": "active"
-}
-```
-
-## 10. Idempotency
-
-Mỗi event phải có khóa idempotency.
-
-| Event | Idempotency key |
+| Field | Meaning |
 |---|---|
-| Detection frame | `event_id` |
-| Detection object trong Silver | `event_id + detection_index` hoặc hash bbox/track |
-| Track lifecycle | `camera_id + track_id + event_type + event_ts` |
-| Alert | `camera_id + alert_type + window_start + window_end` |
-| Heatmap cell aggregate | `camera_id + window_start + grid_x + grid_y` |
+| `event_id` | Deterministic frame event id, used for deduplication |
+| `pipeline_run_id` | Vision process/run identifier |
+| `source.camera_id` | Camera scope for ordering and serving |
+| `source.store_id` | Store grouping key |
+| `frame_index` | Frame number within the Vision run |
+| `track_id` | Tracker-generated identity scoped to a camera/run |
 
-Redis và PostgreSQL sinks cần thiết kế để duplicate không tạo kết quả sai nghiêm trọng:
+## Storage Contracts
 
-- PostgreSQL dùng unique constraint.
-- Redis current count dùng `SET`, không dùng cộng dồn nếu event có thể replay.
-- Redis heatmap live có TTL và window ngắn để duplicate tự hết ảnh hưởng.
-- Gold tables dùng upsert/merge theo aggregate key nếu batch rewrite.
+### Redis
 
-## 11. Data quality rules
+```text
+stats:count:{camera_id}                 current person count, short TTL
+live:frame:{camera_id}                  latest parsed frame metadata, short TTL
+heatmap:live:{camera_id}                sorted set of grid cells
+track:active:{camera_id}:{track_id}     hash with bbox/grid/last_seen/confidence
+```
 
-### Schema rules
+### Iceberg
 
-- `schema_version` phải thuộc danh sách version hỗ trợ.
-- `camera_id`, `store_id`, `event_id` không rỗng.
-- `capture_ts` parse được ISO-8601.
-- `image_size.width` và `image_size.height` lớn hơn 0.
-- `detections` là array.
+```text
+lakehouse.rva.bronze_raw
+lakehouse.rva.silver_detections
+lakehouse.rva.gold_track_summary
+```
 
-### Business rules
+### AWS S3 Media
 
-- Chỉ nhận `class_name = person` cho các metric người.
-- `confidence >= confidence_threshold` mới vào Silver.
-- `bbox` phải nằm trong frame hoặc được clip vào biên frame.
-- `track_id` chỉ được coi unique trong phạm vi camera và session.
-- Event quá trễ so với watermark được đưa vào late-event side output.
+```text
+frames/{date}/{store_id}/{camera_id}/{hour}h/{HHMMSS}_{frame_index}.jpg
+clips/{date}/{store_id}/{camera_id}/{alert_id}.mp4
+```
 
-### Quality outputs
+Media upload is optional and controlled by `media_upload_enabled` in `configs/cameras.yaml`.
 
-| Output | Ý nghĩa |
-|---|---|
-| `valid_record_count` | Số event hợp lệ |
-| `invalid_record_count` | Số event lỗi schema |
-| `late_record_count` | Số event trễ watermark |
-| `duplicate_record_count` | Số event trùng id |
-| `empty_detection_frame_count` | Frame không có detection |
+## Compatibility Notes
 
-## 12. Schema evolution
-
-Quy tắc versioning:
-
-- Thêm field optional: tăng minor version, ví dụ `1.0` -> `1.1`.
-- Đổi type hoặc đổi ý nghĩa field: tăng major version, ví dụ `1.x` -> `2.0`.
-- Không xóa field đang có consumer dùng trong cùng major version.
-- Consumer phải bỏ qua field lạ.
-- Lakehouse Bronze lưu raw payload để có thể parse lại khi schema thay đổi.
-
-## 13. Privacy and security
-
-- Không lưu thông tin định danh cá nhân.
-- Không dùng face recognition.
-- Sampled frame có lifecycle retention ngắn.
-- RTSP URL và S3 credentials không commit vào repo.
-- Dashboard chỉ hiển thị track ID kỹ thuật, không hiển thị danh tính người.
-
-## 14. Contract testing
-
-Mỗi contract cần test:
-
-- JSON schema validation.
-- Backward compatibility giữa producer và consumer.
-- Invalid bbox.
-- Empty detections.
-- Missing optional `frame_ref`.
-- Duplicate `event_id`.
-- Late event theo watermark.
-
+- Raw payload is kept in Bronze so downstream parsing can evolve.
+- Silver filters only valid person detections with sufficient confidence.
+- Realtime state is TTL based; Iceberg is the analytical source of truth.
+- Redis writes are low-latency serving state and should not be treated as historical storage.

@@ -1,149 +1,105 @@
 # Local Run Guide
 
-This guide explains how to run the Retail Video Analytics project locally for development and demo.
+## 1. Install Dependencies
 
-## Prerequisites
+```bash
+cd /home/hungfnguyen/project/retail-video-analytics
+uv sync --all-packages
+cd frontend
+npm install
+cd ..
+```
 
-- Docker Desktop
-- Docker Compose
-- Python 3.12+
-- uv
-- Node.js 20+
-- npm
+## 2. Configure AWS S3
 
-## 1. Start Infrastructure
+Create `.env` from `.env.example` and fill credentials.
 
-Run from the repository root:
+```bash
+cp .env.example .env
+```
+
+Verify AWS access:
+
+```bash
+aws sts get-caller-identity
+aws s3 ls s3://retail-video-analytics-prod/
+```
+
+## 3. Start Infrastructure
 
 ```bash
 docker compose up -d --build
-```
-
-This starts the local infrastructure stack:
-
-- Pulsar
-- Flink
-- AWS S3
-- Iceberg REST
-- Trino
-
-Check containers:
-
-```bash
 docker compose ps
 ```
 
-## 2. Install Python Dependencies
+Expected services:
 
-Run from the repository root:
+- `pulsar-broker`
+- `pulsar-init`
+- `flink-jobmanager`
+- `flink-taskmanager`
+- `flink-job-submitter`
+- `redis`
+- `iceberg-rest`
+- `trino`
 
-```bash
-uv sync --all-packages
-```
-
-## 3. Run Vision Service
-
-Run from the repository root:
+## 4. Start Vision
 
 ```bash
 uv run --package rva-vision python services/vision/main.py
 ```
 
-The Vision service reads the configured video sources, runs YOLO + tracking, publishes metadata to Pulsar, and uploads sampled frames to AWS S3 when media upload is enabled.
-
-## 4. Run FastAPI Backend
-
-Open a second terminal at the repository root:
+## 5. Start FastAPI
 
 ```bash
 uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
 ```
 
-Current API checks:
+Verify:
 
-```text
-http://localhost:8000/health
-http://localhost:8000/api/v1/live/cam_01/dashboard
+```bash
+curl http://localhost:8000/health
+curl http://localhost:8000/api/v1/live/cam_01/dashboard
 ```
 
-The current API starts with mock Live dashboard data. Real Redis, Trino, AWS S3, and Prometheus integrations can be added behind the same API contract later.
-
-## 5. Run Frontend
-
-Open a third terminal:
+## 6. Start Frontend
 
 ```bash
 cd frontend
-npm install
 npm run dev
 ```
 
-Open the Vite URL:
+Open:
 
 ```text
 http://localhost:5173
 ```
 
-The frontend reads the API base URL from:
-
-```text
-frontend/.env.local
-```
-
-Default value:
-
-```env
-VITE_API_BASE_URL=http://localhost:8000
-```
-
-## Service URLs
-
-| Service | URL |
-|---|---|
-| Frontend | http://localhost:5173 |
-| FastAPI | http://localhost:8000 |
-| FastAPI Docs | http://localhost:8000/docs |
-| Flink UI | http://localhost:8081 |
-| Trino | http://localhost:8083 |
-| AWS S3 Console | http://localhost:9001 |
-| Iceberg REST | http://localhost:8181 |
-
-## Minimal Frontend Demo Mode
-
-For UI-only work, Docker and Vision are not required.
-
-Run only:
+## 7. Verify Pipeline
 
 ```bash
-uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
+curl -s http://localhost:8081/jobs/overview
+
+docker exec redis redis-cli GET stats:count:cam_01
+
+docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
 ```
 
-Then:
+## 8. Stop
+
+Stop Vision, API, and Frontend with `Ctrl+C` in their terminals.
+
+Stop infrastructure:
 
 ```bash
-cd frontend
-npm run dev
+docker compose down
 ```
 
-This mode uses the FastAPI mock dashboard endpoint.
-
-## Full Pipeline Demo Mode
-
-For a full data pipeline demo, run the commands in this order:
+Reset infrastructure state:
 
 ```bash
-docker compose up -d --build
-uv sync --all-packages
-uv run --package rva-vision python services/vision/main.py
-```
-
-Then start the API and frontend in separate terminals:
-
-```bash
-uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
-```
-
-```bash
-cd frontend
-npm run dev
+docker compose down -v
 ```
