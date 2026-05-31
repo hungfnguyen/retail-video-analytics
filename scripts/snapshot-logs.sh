@@ -14,12 +14,8 @@ CONTAINERS=(
     flink-taskmanager
     flink-job-submitter
     redis
-    minio
-    minio-init
-    mc
     iceberg-rest
     trino
-    grafana
 )
 
 echo "=== Snapshot logs → ${SNAPSHOT_DIR} ==="

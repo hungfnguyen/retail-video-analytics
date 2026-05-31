@@ -126,12 +126,8 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "s3_endpoint": _get_optional("s3_endpoint", global_settings),
         "s3_region": _get_optional("s3_region", global_settings) or "us-east-1",
         "s3_bucket": _get_optional("s3_bucket", global_settings) or "warehouse",
-        "s3_access_key": _get_s3_credential(
-            "s3_access_key", "MINIO_ROOT_USER", global_settings
-        ),
-        "s3_secret_key": _get_s3_credential(
-            "s3_secret_key", "MINIO_ROOT_PASSWORD", global_settings
-        ),
+        "s3_access_key": _get_s3_credential("s3_access_key", global_settings),
+        "s3_secret_key": _get_s3_credential("s3_secret_key", global_settings),
         "s3_path_style": _get_bool("s3_path_style", global_settings, True),
         "frame_sampling_enabled": _get_bool(
             "frame_sampling_enabled", global_settings, True
@@ -191,15 +187,11 @@ def _resolve_project_path(raw_path: str) -> str:
     return str(PROJECT_ROOT / path)
 
 
-def _get_s3_credential(
-    key: str, fallback_env_key: str, global_settings: Dict[str, Any]
-) -> Any:
+def _get_s3_credential(key: str, global_settings: Dict[str, Any]) -> Any:
     env_key = key.upper()
     for candidate in (
         os.getenv(env_key),
         ROOT_ENV.get(env_key),
-        os.getenv(fallback_env_key),
-        ROOT_ENV.get(fallback_env_key),
         global_settings.get(key),
     ):
         if candidate is not None and str(candidate) != "":
@@ -267,16 +259,12 @@ def _fallback_single_camera() -> Dict[str, Any]:
         "live_media_fps": _get_float("live_media_fps", {}, 10.0),
         "live_media_jpeg_quality": _get_int("live_media_jpeg_quality", {}, 80),
         "media_upload_enabled": _get_bool("media_upload_enabled", {}, False),
-        "s3_endpoint": os.getenv("S3_ENDPOINT", "http://localhost:9000"),
+        "s3_endpoint": os.getenv("S3_ENDPOINT", ""),
         "s3_region": os.getenv("S3_REGION", "us-east-1"),
         "s3_bucket": os.getenv("S3_BUCKET", "warehouse"),
-        "s3_access_key": os.getenv(
-            "S3_ACCESS_KEY", os.getenv("MINIO_ROOT_USER", "minioadmin")
-        ),
-        "s3_secret_key": os.getenv(
-            "S3_SECRET_KEY", os.getenv("MINIO_ROOT_PASSWORD", "minioadmin123")
-        ),
-        "s3_path_style": _get_bool("s3_path_style", {}, True),
+        "s3_access_key": os.getenv("S3_ACCESS_KEY", ""),
+        "s3_secret_key": os.getenv("S3_SECRET_KEY", ""),
+        "s3_path_style": _get_bool("s3_path_style", {}, False),
         "frame_sampling_enabled": _get_bool("frame_sampling_enabled", {}, True),
         "frame_sample_interval_sec": _get_float("frame_sample_interval_sec", {}, 1.0),
         "frame_jpeg_quality": _get_int("frame_jpeg_quality", {}, 85),

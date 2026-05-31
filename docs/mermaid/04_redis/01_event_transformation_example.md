@@ -34,7 +34,7 @@ sequenceDiagram
     Pulsar->>Flink: Pull JSON stream
     Note over Flink: 1. Lọc nhiễu (confidence >= 0.4)<br/>2. Chống trùng lặp (Dedup)<br/>3. Tính toán Grid Heatmap (gx, gy)
     Flink->>Redis: Gửi các tập lệnh ghi (Jedis Commands)
-    Note over Redis: 1. Cập nhật String Live Count (stats:count)<br/>2. Tích luỹ ZSET Heatmap (ZINCRBY)<br/>3. Lưu/Cập nhật Hash Active Track (HSET + EXPIRE)<br/>4. Lưu String Live Frame Snapshot (SETEX)
+    Note over Redis: 1. Cập nhật String Live Count (stats:count)<br/>2. Tích luỹ ZSET Heatmap (ZINCRBY)<br/>3. Lưu/Cập nhật Hash Active Track (HSET + EXPIRE)<br/>4. Lưu latest frame metadata snapshot (SETEX)
     UI->>API: GET /api/v1/live/cam_01/dashboard (1s Polling)
     API->>Redis: GET / SCAN / ZREVRANGE
     Redis-->>API: Trả về live data thô

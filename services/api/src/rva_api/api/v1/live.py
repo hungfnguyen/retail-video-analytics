@@ -458,8 +458,8 @@ def _pipeline_health(
     flink_status, flink_latency_ms = _tcp_health(
         os.getenv("FLINK_REST_URL", "http://localhost:8081")
     )
-    minio_status, minio_latency_ms = _tcp_health(
-        os.getenv("MINIO_SERVER_URL", "http://localhost:9000")
+    s3_status, s3_latency_ms = _tcp_health(
+        os.getenv("S3_ENDPOINT", "https://s3.amazonaws.com")
     )
     trino_status, trino_latency_ms = _tcp_health(
         os.getenv("TRINO_URL", "http://localhost:8083")
@@ -476,7 +476,7 @@ def _pipeline_health(
             "redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms
         ),
         _service_health_entry(
-            "minio", "MinIO", "Object Storage", minio_status, now, minio_latency_ms
+            "s3", "S3", "Object Storage", s3_status, now, s3_latency_ms
         ),
         _service_health_entry(
             "trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms

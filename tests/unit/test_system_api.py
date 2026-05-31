@@ -49,7 +49,7 @@ def test_system_dashboard_maps_live_health_and_runtime_signals(monkeypatch):
         "pulsar",
         "flink",
         "redis",
-        "minio",
+        "s3",
         "trino",
         "fastapi",
     }

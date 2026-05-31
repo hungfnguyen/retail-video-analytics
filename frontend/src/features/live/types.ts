@@ -110,7 +110,7 @@ export type ZoneHeatmapCell = {
 }
 
 export type ServiceHealth = {
-  service: 'pulsar' | 'flink' | 'redis' | 'minio' | 'trino' | 'fastapi'
+  service: 'pulsar' | 'flink' | 'redis' | 's3' | 'trino' | 'fastapi'
   display_name: string
   role: string
   status: 'ok' | 'warning' | 'down'

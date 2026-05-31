@@ -126,7 +126,7 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
         "pulsar",
         "flink",
         "redis",
-        "minio",
+        "s3",
         "trino",
         "fastapi",
     }

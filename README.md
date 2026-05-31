@@ -1,317 +1,190 @@
-# Retail Video Analytics — Realtime + Lakehouse
+# Retail Video Analytics
 
-> Đồ án tốt nghiệp Data Engineering: hệ thống realtime pipeline thu thập & xử lý metadata video cho chuỗi bán lẻ.
-> Stack: **YOLO11 + BoTSORT → Pulsar → Flink (dual-path) → Redis + Iceberg/MinIO → Trino → Grafana**
-
----
-
-## Yêu cầu hệ thống
-
-- Docker & Docker Compose
-- Python 3.12+ (vision module)
-- Java 11+ & Maven 3.9+ (chỉ cần khi build lại Flink jobs)
-- GPU CUDA 12.4 (tùy chọn, YOLO11 chạy được trên CPU)
-
----
-
-## 📦 Thành phần chính
-
-| Layer | Công nghệ | Mô tả |
-|-------|-----------|-------|
-| **Vision AI** | YOLO11 (Ultralytics) + BoTSORT/ByteTrack | Detect & track người, xuất JSON metadata |
-| **Media Plane** | OpenCV + S3/MinIO | Upload sampled JPEG 1fps và optional alert MP4 clips |
-| **Transport** | Apache Pulsar 3.3.2 | Message broker với `Key_Shared` theo `camera_id` |
-| **Stream Compute** | Apache Flink 1.18 | Xử lý Bronze → Silver → Gold streaming |
-| **Lakehouse** | Apache Iceberg + REST Catalog | Table format trên S3 (MinIO cho local demo) |
-| **Query Engine** | Trino 418 | SQL analytics với Iceberg connector |
-| **Visualization** | Grafana 11.3 | Dashboards near-real-time |
-
-## 📁 Runtime Layout
+Data Engineering project for retail video analytics. The current implementation is an as-built realtime + lakehouse system:
 
 ```text
-services/
-├── vision/          # YOLO11 + tracker + Pulsar producer
-└── flink-jobs/      # Java Flink jobs: Bronze, Silver, Gold Track Summary
-
-infrastructure/
-├── pulsar/
-├── flink/
-├── minio/
-├── trino/
-└── grafana/
+YOLO11 + BoTSORT
+  -> Pulsar
+  -> Flink dual path
+      -> Redis realtime state
+      -> Iceberg tables on AWS S3
+  -> Trino
+  -> FastAPI
+  -> React frontend
 ```
 
----
+## Current Scope
 
-## Kiến trúc
+The project focuses on metadata extracted from video, not storing raw video as analytical data. Vision produces detection events; Flink turns those events into realtime state and lakehouse tables.
 
+Implemented now:
+
+- Multi-camera Vision worker from `configs/cameras.yaml`.
+- Detection and tracking with YOLO11 + BoTSORT/ByteTrack.
+- Pulsar metadata ingestion.
+- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`.
+- Flink realtime path: Redis count, active tracks, heatmap, latest frame snapshot, DLQ.
+- AWS S3 storage for Iceberg tables and optional sampled frames/clips.
+- Trino SQL query over Iceberg.
+- FastAPI live dashboard and media serving endpoints.
+- React frontend with Live, Analytics, and System pages. Live is connected to realtime data; Analytics/System still need deeper API integration.
+
+## Runtime Services
+
+| Service | Port | Purpose |
+|---|---:|---|
+| Pulsar broker | 6650 | Binary protocol for producers/consumers |
+| Pulsar admin | 8084 | Broker health and topic admin API |
+| Flink UI | 8081 | Job status and exceptions |
+| Iceberg REST | 8181 | Iceberg catalog service |
+| Trino | 8083 | SQL query engine |
+| Redis | 6379 | Realtime state |
+| FastAPI | 8000 | Dashboard API and media gateway |
+| Frontend | 5173 | React dashboard |
+
+AWS S3 is accessed through the AWS endpoint configured in `.env`; there is no local object-storage service in the current architecture.
+
+## Main Data Flow
+
+```text
+Vision service
+  |-- annotated latest JPEG -> runtime/live_frames/{camera_id}.jpg
+  |-- optional sampled media -> s3://retail-video-analytics-prod/frames|clips
+  `-- detection JSON -> Pulsar persistent://retail/metadata/events
+
+Pulsar events
+  |-- BronzeIngestJob -> lakehouse.rva.bronze_raw
+  |-- RealtimeMetricsJob -> Redis + DLQ
+
+bronze_raw -> SilverJob -> lakehouse.rva.silver_detections
+silver_detections -> GoldTrackSummaryJob -> lakehouse.rva.gold_track_summary
+
+Trino queries Iceberg tables.
+FastAPI reads Redis/live frames/Trino-facing data and serves the React frontend.
 ```
-Vision (YOLO11 + BoTSORT)
-  │
-  ├── metadata JSON → Pulsar (persistent://retail/metadata/events)
-  │                         │
-  │           ┌─────────────┴──────────────┐
-  │           │                            │
-  │    [Lakehouse Path]              [Realtime Path]
-  │    Table API, ckpt 60s          DataStream API, ckpt 10s
-  │    latency 2-3 min              latency <5s
-  │           │                            │
-  │    Bronze → Iceberg              Redis live_count
-  │    Silver → Iceberg              Redis heatmap (ZINCRBY)
-  │    Gold   → Iceberg              Redis active tracks (HSET)
-  │           │                      DLQ → Pulsar dlq-events
-  │    Trino → Grafana                     │
-  │    (historical)                  FastAPI → Streamlit
-  │                                       (chưa implement)
-  │
-  └── sampled JPEG / alert MP4 → MinIO (S3)
+
+## Repository Layout
+
+```text
+configs/                 Camera and logging configuration
+docs/                    Current architecture and run documentation
+frontend/                React dashboard
+infrastructure/          Pulsar, Flink, Trino container config
+packages/                Shared Python packages: core, messaging, storage
+services/api/            FastAPI backend
+services/flink-jobs/     Java Flink jobs
+services/vision/         Vision processing service
+tests/                   Unit and integration tests
 ```
 
----
+## Environment
 
-## Cổng dịch vụ
-
-| Service | Port | URL | Credentials |
-|---------|------|-----|-------------|
-| Flink UI | 8081 | http://localhost:8081 | — |
-| Grafana | 3000 | http://localhost:3000 | admin / admin |
-| Trino | 8083 | http://localhost:8083 | — |
-| Pulsar Admin | 8084 | http://localhost:8084 | — |
-| MinIO Console | 9001 | http://localhost:9001 | minioadmin / minioadmin123 |
-| MinIO API | 9000 | http://localhost:9000 | — |
-| Iceberg REST | 8181 | http://localhost:8181 | — |
-| Pulsar Broker | 6650 | pulsar://localhost:6650 | — |
-| Redis | 6379 | redis://localhost:6379 | — |
-
----
-
-## Verify hệ thống — từng layer
-
-### Infrastructure health
+Create `.env` from `.env.example` and fill AWS credentials:
 
 ```bash
-# Tất cả services phải healthy / running
-docker compose ps
-
-# Log của 1 service cụ thể
-docker compose logs flink-jobmanager
-docker compose logs redis
+cp .env.example .env
 ```
 
-### Pulsar — topics & messages
+Required storage variables:
+
+```env
+S3_ENDPOINT=https://s3.ap-southeast-2.amazonaws.com
+S3_PATH_STYLE=false
+S3_REGION=ap-southeast-2
+S3_ACCESS_KEY=CHANGE_ME
+S3_SECRET_KEY=CHANGE_ME
+ICEBERG_CATALOG_URI=http://iceberg-rest:8181
+ICEBERG_WAREHOUSE=s3a://retail-video-analytics-prod/lakehouse
+```
+
+For Vision media upload, `configs/cameras.yaml` currently uses bucket `retail-video-analytics-prod`.
+
+## Start Project
+
+From repository root:
 
 ```bash
-# Kiểm tra topics đã tạo
-docker exec pulsar-broker bin/pulsar-admin topics list retail/metadata
-
-# Xem stats topic chính
-docker exec pulsar-broker bin/pulsar-admin topics stats \
-  persistent://retail/metadata/events
-
-# Consume vài message để verify event_id
-docker exec pulsar-broker bin/pulsar-client consume \
-  persistent://retail/metadata/events \
-  -s verify-sub -n 3
-
-# DLQ stats
-docker exec pulsar-broker bin/pulsar-admin topics stats \
-  persistent://retail/metadata/dlq-events
+uv sync --all-packages
+cd frontend && npm install && cd ..
 ```
 
-### Flink — 4 jobs running
+Start infrastructure:
 
 ```bash
-# Số jobs đang chạy (expected: 4)
-curl -s http://localhost:8081/jobs/overview | python3 -m json.tool | grep state
-
-# Hoặc kiểm tra trong browser: http://localhost:8081
-```
-
-### Redis — realtime state
-
-```bash
-# Live person count (cập nhật mỗi frame, TTL 5s)
-docker exec redis redis-cli GET stats:count:cam_01
-
-# Heatmap top cells (TTL 60s)
-docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
-
-# Active tracks (TTL 30s)
-docker exec redis redis-cli KEYS "track:active:cam_01:*"
-
-# Tất cả Redis keys
-docker exec redis redis-cli KEYS "*"
-```
-
-### Iceberg — Bronze / Silver / Gold
-
-```bash
-# Query Bronze count
-docker exec trino trino --execute \
-  "SELECT COUNT(*) AS total FROM lakehouse.rva.bronze_raw"
-
-# Query Silver count  
-docker exec trino trino --execute \
-  "SELECT camera_id, COUNT(*) AS detections FROM lakehouse.rva.silver_detections GROUP BY camera_id"
-
-# Query Gold track summary
-docker exec trino trino --execute \
-  "SELECT track_id, duration_sec, frames FROM lakehouse.rva.gold_track_summary LIMIT 10"
-
-# Kiểm tra event_id trong Bronze
-docker exec trino trino --execute \
-  "SELECT event_id, camera_id, frame_index FROM lakehouse.rva.bronze_raw LIMIT 5"
-```
-
-### MinIO — sampled frames & clips
-
-```bash
-# List sampled JPEG frames
-docker exec mc mc ls --recursive local/warehouse/frames
-
-# List alert clips
-docker exec mc mc ls --recursive local/warehouse/clips
-
-# Lấy signed URL cho 1 file (thay KEY bằng path thực)
-docker exec mc mc share download local/warehouse/frames/2026-05-17/cam_01/...
-```
-
-### DLQ — invalid events
-
-```bash
-# Xem stats DLQ topic
-docker exec pulsar-broker bin/pulsar-admin topics stats \
-  persistent://retail/metadata/dlq-events
-
-# Consume DLQ messages
-docker exec pulsar-broker bin/pulsar-client consume \
-  persistent://retail/metadata/dlq-events \
-  -s dlq-verify-sub -n 3
-
-# Inject 1 event lỗi để test DLQ
-docker exec pulsar-broker bin/pulsar-client produce \
-  persistent://retail/metadata/events \
-  --messages '{"invalid": true, "missing_event_id": true}'
-```
-
----
-
-## 🌐 Cổng dịch vụ
-
-| Service | Port | URL |
-|---------|------|-----|
-| **Flink UI** | 8081 | http://localhost:8081 |
-| **Grafana** | 3000 | http://localhost:3000 (admin/admin) |
-| **Trino** | 8083 | http://localhost:8083 |
-| **Pulsar Admin** | 8084 | http://localhost:8084 |
-| **MinIO Console** | 9001 | http://localhost:9001 |
-| **MinIO API** | 9000 | http://localhost:9000 |
-| **Iceberg REST** | 8181 | http://localhost:8181 |
-| **Pulsar Broker** | 6650 | pulsar://localhost:6650 |
-| **FastAPI API** | 8000 | http://localhost:8000 |
-
----
-
-## 📊 Grafana Dashboards
-
-Sau khi login Grafana (http://localhost:3000):
-
-- **RVA - People Overview**: Detections/unique people theo phút và camera
-- **RVA - Zone Dwell & Heatmap**: Visits và dwell time theo zone
-- **RVA - Track Summary**: Track với duration, movement và confidence
-
----
-
-## 🔧 Vision Module Config
-
-Cấu hình trong `services/vision/config/settings.py` hoặc qua `services/vision/.env`:
-
-| Biến | Mặc định | Mô tả |
-|------|----------|-------|
-| `S3_ENDPOINT` | `http://localhost:9000` | MinIO endpoint (Vision trên host) |
-| `S3_ACCESS_KEY` | `minioadmin` | Access key |
-| `S3_SECRET_KEY` | `minioadmin123` | Secret key |
-| `S3_BUCKET` | `warehouse` | Bucket |
-| `S3_REGION` | `us-east-1` | Region |
-| `CAMERA_ID` | `cam_01` | Camera ID (single-cam mode) |
-| `STORE_ID` | `store_01` | Store ID (single-cam mode) |
-| `MODEL_NAME` | `yolo11l.pt` | YOLO model |
-| `TRACKER_TYPE` | `botsort` | `botsort` hoặc `bytetrack` |
-| `CONF_THRES` | `0.25` | Confidence threshold |
-
----
-
-## Cấu trúc thư mục
-
-```
-retail-video-analytics/
-├── configs/              # cameras.yaml, logging.yaml
-├── data/videos/          # video1.mp4, video2.mp4
-├── docs/                 # 14 tài liệu kiến trúc
-├── infrastructure/       # Docker config: Pulsar, Flink, MinIO, Trino, Grafana
-├── packages/             # Shared Python packages
-│   ├── core/             # Pydantic models, constants, settings, time utils
-│   ├── messaging/        # Pulsar producer/consumer wrappers
-│   └── storage/          # S3 client, Redis client
-├── services/
-│   ├── vision/           # YOLO detect → track → emit (Python)
-│   └── flink-jobs/       # Flink Java jobs (Bronze, Silver, Gold, Realtime)
-├── tests/                # unit/, integration/, e2e/
-├── docker-compose.yml
-├── Makefile
-└── pyproject.toml
-```
-
----
-
-## Troubleshooting
-
-### Không thấy data trong Trino
-Flink checkpoint mặc định 60s → chờ ít nhất 90 giây sau khi chạy Vision.
-
-### Flink job FAILED
-```bash
-# Xem log Flink
-docker compose logs flink-jobmanager | tail -50
-docker compose logs flink-taskmanager | tail -50
-
-# Xem exception trong Flink UI → job → exceptions
-```
-
-### Redis không có data
-```bash
-# Kiểm tra RealtimeMetricsJob đang RUNNING trong Flink UI
-# Kiểm tra Redis container đang chạy
-docker compose exec redis redis-cli ping
-```
-
-### Reset do schema thay đổi (thêm cột event_id)
-```bash
-docker compose down -v    # Xóa cả volumes (Iceberg data)
 docker compose up -d --build
 ```
 
-### Port conflict
-Sửa port mapping trong `docker-compose.yml`:
-- Pulsar admin: `8084:8080` (8080 thường bị chiếm)
-- Trino: `8083:8080` (8080 thường bị chiếm)
-- Flink UI: `8081:8081`
+Start Vision:
 
----
+```bash
+uv run --package rva-vision python services/vision/main.py
+```
 
-## Tài liệu
+Start API:
 
-- [Kiến trúc đích](docs/01_TARGET_ARCHITECTURE.md)
-- [Data flow & contracts](docs/02_DATA_FLOW_AND_CONTRACTS.md)
-- [Streaming pipeline — dual-path](docs/03_STREAMING_PIPELINE.md)
-- [Lakehouse design (Bronze/Silver/Gold)](docs/04_LAKEHOUSE_DESIGN.md)
-- [Flink API Guide — DataStream vs Table API](docs/13_FLINK_API_GUIDE.md)
-- [Vision multi-camera flow](docs/11_VISION_MULTI_CAMERA_FLOW.md)
-- [Implementation roadmap (M0-M8)](docs/08_IMPLEMENTATION_ROADMAP.md)
+```bash
+uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
+```
 
----
+Start frontend:
 
-## Contributors
+```bash
+cd frontend
+npm run dev
+```
 
-- [Nguyễn Tấn Hùng](https://github.com/hungfnguyen)
-- [Nguyễn Công Đôn](https://github.com/CongDon1207)
+Open:
+
+```text
+http://localhost:5173
+```
+
+## Verify
+
+Flink jobs:
+
+```bash
+curl -s http://localhost:8081/jobs/overview
+```
+
+Pulsar health:
+
+```bash
+curl -s http://localhost:8084/admin/v2/brokers/health
+```
+
+Redis realtime state:
+
+```bash
+docker exec redis redis-cli GET stats:count:cam_01
+docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
+docker exec redis redis-cli KEYS 'track:active:cam_01:*'
+```
+
+Iceberg tables through Trino:
+
+```bash
+docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
+```
+
+AWS S3 layout:
+
+```bash
+aws s3 ls s3://retail-video-analytics-prod/
+aws s3 ls s3://retail-video-analytics-prod/lakehouse/ --recursive | head
+aws s3 ls s3://retail-video-analytics-prod/frames/ --recursive | head
+```
+
+## Tests
+
+```bash
+uv run pytest tests/unit/test_live_api.py tests/unit/test_live_video_media.py tests/unit/test_live_frame_publisher.py tests/integration/test_s3_client_config.py
+cd frontend && npm run build
+```
+
+## Documentation
+
+Start with [docs/README.md](docs/README.md). The docs are now maintained as current implementation docs, not future design notes.

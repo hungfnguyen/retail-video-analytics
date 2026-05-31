@@ -52,6 +52,22 @@ weights/
 !yolov8n.pt
 
 
+# AI / LSP tools
+.antigravitycli/
+.metals/
+
+# Frontend build cache
+frontend/.vite/
+
+# Jupyter
+notebooks/.ipynb_checkpoints/
+
+# Java / Maven build output
+services/flink-jobs/java/target/
+
+# Runtime artifacts (live frames generated at runtime)
+data/live_frames/
+
 # OS / misc
 .DS_Store
 Thumbs.db

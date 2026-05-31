@@ -1,5 +1,0 @@
-D:\workspace\retail-video-analytics\services\flink-jobs\java\src\main\java\org\rva\BronzeIngestJob.java
-D:\workspace\retail-video-analytics\services\flink-jobs\java\src\main\java\org\rva\realtime\RealtimeMetricsJob.java
-D:\workspace\retail-video-analytics\services\flink-jobs\java\src\main\java\org\rva\gold\GoldTrackSummaryJob.java
-D:\workspace\retail-video-analytics\services\flink-jobs\java\src\main\java\org\rva\silver\SilverJob.java
-D:\workspace\retail-video-analytics\services\flink-jobs\java\src\main\java\org\rva\silver\udf\ParseDetections.java
