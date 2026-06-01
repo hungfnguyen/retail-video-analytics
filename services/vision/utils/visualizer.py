@@ -11,6 +11,7 @@ class Visualizer:
         self.font_scale = font_scale
         self.thickness = thickness
         self.bbox_color = (255, 191, 0)  # Lightblue (BGR)
+        self.predicted_bbox_color = (0, 191, 255)  # Orange (BGR)
         self.text_color = (0, 0, 0)      # Black
 
     def draw_tracks(self, frame: np.ndarray, tracks: List[Dict[str, Any]]) -> np.ndarray:
@@ -33,18 +34,31 @@ class Visualizer:
             label_text = obj.get("label", "unknown")
             track_id = obj.get("id", -1)
             conf = obj.get("conf", 0.0)
-            
-            display_text = f"{label_text} ID:{track_id} {conf:.2f}"
-            
-            self._draw_box_and_label(frame, (x1, y1, x2, y2), display_text)
+            track_state = obj.get("track_state", "matched")
+
+            if track_state == "predicted":
+                suffix = " pred"
+                color = self.predicted_bbox_color
+            else:
+                suffix = ""
+                color = self.bbox_color
+            display_text = f"{label_text} ID:{track_id}{suffix} {conf:.2f}"
+
+            self._draw_box_and_label(frame, (x1, y1, x2, y2), display_text, color)
             
         return frame
 
-    def _draw_box_and_label(self, frame: np.ndarray, bbox: Tuple[int, int, int, int], text: str):
+    def _draw_box_and_label(
+        self,
+        frame: np.ndarray,
+        bbox: Tuple[int, int, int, int],
+        text: str,
+        color: Tuple[int, int, int],
+    ):
         x1, y1, x2, y2 = bbox
         
         # Vẽ bbox
-        cv2.rectangle(frame, (x1, y1), (x2, y2), self.bbox_color, 2)
+        cv2.rectangle(frame, (x1, y1), (x2, y2), color, 2)
         
         # Tính kích thước text
         (text_w, text_h), baseline = cv2.getTextSize(text, self.font, self.font_scale, self.thickness)
@@ -53,7 +67,7 @@ class Visualizer:
         cv2.rectangle(frame, 
                      (x1, y1 - text_h - baseline - 5),
                      (x1 + text_w, y1),
-                     self.bbox_color, -1)
+                     color, -1)
         
         # Vẽ text
         cv2.putText(frame, text, (x1, y1 - baseline - 2),

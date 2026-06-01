@@ -60,6 +60,10 @@ class DetectionObject(BaseModel):
     centroid: Centroid
     centroid_norm: CentroidNorm
     track_id: int | None = None
+    track_state: str | None = None
+    measurement_source: str | None = None
+    missed_frames: int | None = None
+    is_predicted: bool | None = None
 
     model_config = {"populate_by_name": True}
 

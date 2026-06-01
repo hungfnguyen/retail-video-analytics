@@ -169,6 +169,19 @@ def test_media_metadata_missing_is_safe(monkeypatch, tmp_path):
 def test_live_dashboard_falls_back_to_live_frame_count(monkeypatch):
     fake_redis = FakeRedis()
     fake_redis.values.pop("stats:count:cam_01")
+    frame = json.loads(fake_redis.values["live:frame:cam_01"])
+    frame["detections"].append(
+        {
+            "track_id": None,
+            "label": "person",
+            "confidence": 0.74,
+            "bbox_norm": {"x": 0.2, "y": 0.3, "w": 0.1, "h": 0.4},
+            "centroid_norm": {"x": 0.25, "y": 0.5},
+            "grid_x": 16,
+            "grid_y": 24,
+        }
+    )
+    fake_redis.values["live:frame:cam_01"] = json.dumps(frame)
     monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
     monkeypatch.setattr(live, "_load_camera_config", lambda: [])
     monkeypatch.setattr(
@@ -183,10 +196,11 @@ def test_live_dashboard_falls_back_to_live_frame_count(monkeypatch):
 
     data = live.get_live_dashboard("cam_01")
 
-    assert data.stats.current_count == 1
+    assert data.stats.current_count == 2
     assert data.stats.count_source == "live_frame_fallback"
     assert data.stats.status == "stable"
-    assert data.traffic_summary.current_total == 1
+    assert data.traffic_summary.current_total == 2
+    assert len(data.frame.detections) == 1
 
 
 def test_live_dashboard_prefers_camera_realtime_count_when_media_is_online(monkeypatch):
@@ -216,6 +230,34 @@ def test_live_dashboard_prefers_camera_realtime_count_when_media_is_online(monke
     assert data.stats.updated_at == media_capture_ts
     assert data.frame.frame_id == 1600
     assert data.frame.capture_ts == media_capture_ts
+    assert data.traffic_summary.current_total == 3
+
+
+def test_live_dashboard_uses_camera_realtime_count_when_redis_count_missing(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.values.pop("stats:count:cam_01")
+    media_capture_ts = datetime.now(timezone.utc).isoformat()
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(live, "_load_camera_config", lambda: [])
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "frame_index": 1600,
+            "capture_ts": media_capture_ts,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 12.0,
+            "tracked_objects_count": 3,
+            "detections_count": 4,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_01")
+
+    assert data.stats.current_count == 3
+    assert data.stats.count_source == "camera_realtime"
+    assert data.stats.updated_at == media_capture_ts
     assert data.traffic_summary.current_total == 3
 
 

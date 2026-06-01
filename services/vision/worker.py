@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from track.tracker_factory import create_tracker
+from track.track_memory import TrackMemory, TrackMemoryConfig
 from emit.pulsar_emitter import PulsarEmitter
 from emit.s3_client import S3ClientConfig, create_s3_client
 from emit.frame_sampler import FrameSampler
@@ -46,6 +47,64 @@ def _publish_completed_media_events(
             emitter.emit_media_event(
                 asdict(result), frame_index=result.trigger_frame_index
             )
+
+
+def _create_track_memory(global_cfg: dict[str, Any]) -> TrackMemory:
+    return TrackMemory(
+        TrackMemoryConfig(
+            enabled=bool(global_cfg.get("track_memory_enabled", True)),
+            lost_ttl_ms=int(global_cfg.get("track_lost_ttl_ms", 1000)),
+            lost_ttl_frames=int(global_cfg.get("track_lost_ttl_frames", 15)),
+            min_hits=int(global_cfg.get("track_min_hits", 1)),
+            smooth_alpha=float(global_cfg.get("track_smooth_alpha", 0.65)),
+            publish_predicted=bool(global_cfg.get("track_publish_predicted", True)),
+            count_predicted=bool(global_cfg.get("track_count_predicted", True)),
+            predicted_conf_decay=float(
+                global_cfg.get("track_predicted_conf_decay", 0.85)
+            ),
+            min_predicted_conf=float(global_cfg.get("track_min_predicted_conf", 0.20)),
+            reid_iou_threshold=float(global_cfg.get("track_reid_iou_threshold", 0.15)),
+            reid_center_distance_px=float(
+                global_cfg.get("track_reid_center_distance_px", 120.0)
+            ),
+        )
+    )
+
+
+def _track_to_detection(
+    *,
+    frame_index: int,
+    object_index: int,
+    obj: dict[str, Any],
+    width: int,
+    height: int,
+) -> dict[str, Any]:
+    x1, y1, x2, y2 = map(float, obj["bbox"])
+    w_box = x2 - x1
+    h_box = y2 - y1
+    cx = x1 + w_box / 2.0
+    cy = y1 + h_box / 2.0
+
+    return {
+        "det_id": f"{frame_index}-{object_index}",
+        "class": obj.get("label", "person"),
+        "class_id": int(obj.get("cls", 0)),
+        "conf": float(obj.get("conf", 0.0)),
+        "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
+        "bbox_norm": {
+            "x": x1 / width,
+            "y": y1 / height,
+            "w": w_box / width,
+            "h": h_box / height,
+        },
+        "centroid": {"x": int(cx), "y": int(cy)},
+        "centroid_norm": {"x": cx / width, "y": cy / height},
+        "track_id": None if obj.get("id", -1) < 0 else int(obj["id"]),
+        "track_state": str(obj.get("track_state", "matched")),
+        "measurement_source": str(obj.get("measurement_source", "full_body")),
+        "missed_frames": int(obj.get("missed_frames", 0)),
+        "is_predicted": bool(obj.get("is_predicted", False)),
+    }
 
 
 def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
@@ -119,7 +178,14 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
         global_cfg,
     )
     visualizer = Visualizer() if live_frame_publisher else None
-
+    track_memory = _create_track_memory(global_cfg)
+    logger.info(
+        "TrackMemory enabled=%s lost_ttl=%dms/%d frames predicted=%s",
+        track_memory.config.enabled,
+        track_memory.config.lost_ttl_ms,
+        track_memory.config.lost_ttl_frames,
+        track_memory.config.publish_predicted,
+    )
     frame_sampler: FrameSampler | None = None
     clip_extractor: AlertClipExtractor | None = None
     if global_cfg.get("media_upload_enabled"):
@@ -215,46 +281,32 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
             inference_ms = max(0, int((time.perf_counter() - inference_started) * 1000))
 
             postprocess_started = time.perf_counter()
-            detections = []
-            tracked_objects = []
+            raw_objects = []
             for r in results:
-                objects = tracker._extract_objects(r)
-                tracked_objects.extend(objects)
-                for j, obj in enumerate(objects):
-                    x1, y1, x2, y2 = map(float, obj["bbox"])
-                    w_box = x2 - x1
-                    h_box = y2 - y1
-                    cx = x1 + w_box / 2.0
-                    cy = y1 + h_box / 2.0
+                raw_objects.extend(tracker._extract_objects(r))
 
-                    detections.append(
-                        {
-                            "det_id": f"{frame_index}-{j}",
-                            "class": obj.get("label", "person"),
-                            "class_id": int(obj.get("cls", 0)),
-                            "conf": float(obj.get("conf", 0.0)),
-                            "bbox": {"x1": x1, "y1": y1, "x2": x2, "y2": y2},
-                            "bbox_norm": {
-                                "x": x1 / width,
-                                "y": y1 / height,
-                                "w": w_box / width,
-                                "h": h_box / height,
-                            },
-                            "centroid": {"x": int(cx), "y": int(cy)},
-                            "centroid_norm": {"x": cx / width, "y": cy / height},
-                            "track_id": None
-                            if obj.get("id", -1) < 0
-                            else int(obj["id"]),
-                        }
-                    )
+            stable_tracks = track_memory.update(
+                raw_objects,
+                frame_index=frame_index,
+                timestamp_ms=int(capture_ts.timestamp() * 1000),
+            )
+            track_summary = track_memory.summary(stable_tracks)
+            detections = [
+                _track_to_detection(
+                    frame_index=frame_index,
+                    object_index=j,
+                    obj=obj,
+                    width=width,
+                    height=height,
+                )
+                for j, obj in enumerate(stable_tracks)
+            ]
             postprocess_ms = max(0, int((time.perf_counter() - postprocess_started) * 1000))
 
             if live_frame_publisher and visualizer:
                 try:
                     draw_started = time.perf_counter()
-                    annotated_frame = visualizer.draw_tracks(
-                        frame.copy(), tracked_objects
-                    )
+                    annotated_frame = visualizer.draw_tracks(frame.copy(), stable_tracks)
                     draw_ms = max(0, int((time.perf_counter() - draw_started) * 1000))
                     live_frame_publisher.publish(
                         annotated_frame,
@@ -269,7 +321,9 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                             "draw_ms": draw_ms,
                             "reader_queue_size": _reader.queue.qsize() if _reader else 0,
                             "reader_drop_count": _reader.drop_count if _reader else 0,
-                            "tracked_objects_count": len(tracked_objects),
+                            "raw_tracks_count": len(raw_objects),
+                            "tracked_objects_count": track_summary["stable_tracks_count"],
+                            **track_summary,
                         },
                     )
                 except Exception:

@@ -60,6 +60,10 @@ def _get_redis_client() -> Any:
 
 def _load_camera_config() -> list[dict[str, Any]]:
     config_path = Path(os.getenv("RVA_CAMERA_CONFIG", "configs/cameras.yaml"))
+    if not config_path.exists():
+        example_path = config_path.with_name("cameras.yaml.example")
+        if example_path.exists():
+            config_path = example_path
     config = load_yaml_config(config_path)
     cameras = config.get("cameras", [])
     if not isinstance(cameras, list):
@@ -266,7 +270,7 @@ def _media_current_count(
 def _resolve_current_count(
     client: Any,
     camera_id: str,
-    detections: list[dict[str, Any]],
+    fallback_detection_count: int,
     metadata_latency_ms: int | None,
     media_metadata: dict[str, Any],
     media_status: str,
@@ -284,7 +288,7 @@ def _resolve_current_count(
         return _safe_int(raw_count), "redis"
 
     if _is_fresh_latency(metadata_latency_ms):
-        return len(detections), "live_frame_fallback"
+        return fallback_detection_count, "live_frame_fallback"
 
     return 0, "missing"
 
@@ -385,6 +389,15 @@ def _detections_from_frame(frame: dict[str, Any] | None) -> list[dict[str, Any]]
             }
         )
     return result
+
+
+def _count_detections_in_frame(frame: dict[str, Any] | None) -> int:
+    if frame is None:
+        return 0
+    detections = frame.get("detections", [])
+    if not isinstance(detections, list):
+        return 0
+    return sum(1 for det in detections if isinstance(det, dict))
 
 
 def _empty_traffic() -> list[dict[str, int | str]]:
@@ -527,8 +540,14 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     active_tracks = _active_track_count(client, camera_id)
     heatmap_cells = _read_heatmap(client, camera_id)
     detections = _detections_from_frame(frame)
+    fallback_detection_count = _count_detections_in_frame(frame)
     current_count, count_source = _resolve_current_count(
-        client, camera_id, detections, latency_ms, media_metadata, media_status
+        client,
+        camera_id,
+        fallback_detection_count,
+        latency_ms,
+        media_metadata,
+        media_status,
     )
     if count_source == "missing":
         status = "warning"
