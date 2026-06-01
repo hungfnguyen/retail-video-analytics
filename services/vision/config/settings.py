@@ -12,7 +12,8 @@ BASE_DIR = Path(__file__).resolve().parent.parent
 PROJECT_ROOT = BASE_DIR.parent.parent
 
 # Load .env file from services/vision directory. Root .env is read selectively
-# for S3 credentials so host-side Vision does not inherit Docker-only endpoints.
+# for shared S3 settings so host-side Vision can use the repository-level AWS config
+# without inheriting unrelated Docker-only endpoints.
 load_dotenv(BASE_DIR / ".env")
 ROOT_ENV = dotenv_values(PROJECT_ROOT / ".env")
 
@@ -69,7 +70,11 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
 
     yaml_path = Path(path)
     if not yaml_path.exists():
-        return _fallback_single_camera()
+        example_path = PROJECT_ROOT / "configs" / "cameras.yaml.example"
+        if example_path.exists():
+            yaml_path = example_path
+        else:
+            return _fallback_single_camera()
 
     with open(yaml_path, "r") as f:
         cfg = yaml.safe_load(f)
@@ -105,6 +110,35 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "conf_thres": _get("conf_thres", global_settings),
         "class_filter": _get_class_filter(global_settings),
         "frame_queue_size": global_settings.get("frame_queue_size", 2),
+        "track_memory_enabled": _get_bool(
+            "track_memory_enabled", global_settings, True
+        ),
+        "track_lost_ttl_ms": _get_int("track_lost_ttl_ms", global_settings, 1000),
+        "track_lost_ttl_frames": _get_int(
+            "track_lost_ttl_frames", global_settings, 15
+        ),
+        "track_min_hits": _get_int("track_min_hits", global_settings, 1),
+        "track_smooth_alpha": _get_float(
+            "track_smooth_alpha", global_settings, 0.65
+        ),
+        "track_publish_predicted": _get_bool(
+            "track_publish_predicted", global_settings, True
+        ),
+        "track_count_predicted": _get_bool(
+            "track_count_predicted", global_settings, True
+        ),
+        "track_predicted_conf_decay": _get_float(
+            "track_predicted_conf_decay", global_settings, 0.85
+        ),
+        "track_min_predicted_conf": _get_float(
+            "track_min_predicted_conf", global_settings, 0.20
+        ),
+        "track_reid_iou_threshold": _get_float(
+            "track_reid_iou_threshold", global_settings, 0.15
+        ),
+        "track_reid_center_distance_px": _get_float(
+            "track_reid_center_distance_px", global_settings, 120.0
+        ),
         "health_check_interval_sec": global_settings.get(
             "health_check_interval_sec", 10
         ),
@@ -123,12 +157,12 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "media_upload_enabled": _get_bool(
             "media_upload_enabled", global_settings, False
         ),
-        "s3_endpoint": _get_optional("s3_endpoint", global_settings),
-        "s3_region": _get_optional("s3_region", global_settings) or "us-east-1",
-        "s3_bucket": _get_optional("s3_bucket", global_settings) or "warehouse",
+        "s3_endpoint": _get_s3_optional("s3_endpoint", global_settings),
+        "s3_region": _get_s3_optional("s3_region", global_settings) or "us-east-1",
+        "s3_bucket": _get_s3_optional("s3_bucket", global_settings) or "warehouse",
         "s3_access_key": _get_s3_credential("s3_access_key", global_settings),
         "s3_secret_key": _get_s3_credential("s3_secret_key", global_settings),
-        "s3_path_style": _get_bool("s3_path_style", global_settings, True),
+        "s3_path_style": _get_s3_bool("s3_path_style", global_settings, True),
         "frame_sampling_enabled": _get_bool(
             "frame_sampling_enabled", global_settings, True
         ),
@@ -178,6 +212,28 @@ def _get_optional(key: str, global_settings: Dict[str, Any]) -> Any:
         if env_val is not None and env_val != "":
             return env_val
     return global_settings.get(key)
+
+
+def _get_s3_optional(key: str, global_settings: Dict[str, Any]) -> Any:
+    env_key = key.upper()
+    for candidate in (
+        os.getenv(f"RVA_{env_key}"),
+        os.getenv(env_key),
+        ROOT_ENV.get(env_key),
+        global_settings.get(key),
+    ):
+        if candidate is not None and str(candidate) != "":
+            return candidate
+    return None
+
+
+def _get_s3_bool(key: str, global_settings: Dict[str, Any], default: bool) -> bool:
+    raw = _get_s3_optional(key, global_settings)
+    if raw is None:
+        return default
+    if isinstance(raw, bool):
+        return raw
+    return str(raw).strip().lower() in {"1", "true", "yes", "y", "on"}
 
 
 def _resolve_project_path(raw_path: str) -> str:
@@ -248,6 +304,25 @@ def _fallback_single_camera() -> Dict[str, Any]:
         "conf_thres": settings.CONF_THRES,
         "class_filter": settings.CLASS_FILTER,
         "frame_queue_size": 2,
+        "track_memory_enabled": _get_bool("track_memory_enabled", {}, True),
+        "track_lost_ttl_ms": _get_int("track_lost_ttl_ms", {}, 1000),
+        "track_lost_ttl_frames": _get_int("track_lost_ttl_frames", {}, 15),
+        "track_min_hits": _get_int("track_min_hits", {}, 1),
+        "track_smooth_alpha": _get_float("track_smooth_alpha", {}, 0.65),
+        "track_publish_predicted": _get_bool("track_publish_predicted", {}, True),
+        "track_count_predicted": _get_bool("track_count_predicted", {}, True),
+        "track_predicted_conf_decay": _get_float(
+            "track_predicted_conf_decay", {}, 0.85
+        ),
+        "track_min_predicted_conf": _get_float(
+            "track_min_predicted_conf", {}, 0.20
+        ),
+        "track_reid_iou_threshold": _get_float(
+            "track_reid_iou_threshold", {}, 0.15
+        ),
+        "track_reid_center_distance_px": _get_float(
+            "track_reid_center_distance_px", {}, 120.0
+        ),
         "health_check_interval_sec": 10,
         "worker_graceful_shutdown_sec": 10,
         "reconnect_delay_max_sec": 30,

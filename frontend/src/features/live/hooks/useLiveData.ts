@@ -2,7 +2,7 @@ import { useCallback, useEffect, useState } from 'react'
 import { getLiveDashboardData } from '../api/liveApi'
 import type { LiveDashboardData } from '../types'
 
-const POLL_INTERVAL_MS = 1000
+const POLL_INTERVAL_MS = 500
 
 type LiveDataState = {
   data: LiveDashboardData | null
