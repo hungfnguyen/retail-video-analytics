@@ -91,13 +91,14 @@ Required storage variables:
 S3_ENDPOINT=https://s3.ap-southeast-2.amazonaws.com
 S3_PATH_STYLE=false
 S3_REGION=ap-southeast-2
+S3_BUCKET=retail-video-analytics-prod
 S3_ACCESS_KEY=CHANGE_ME
 S3_SECRET_KEY=CHANGE_ME
 ICEBERG_CATALOG_URI=http://iceberg-rest:8181
 ICEBERG_WAREHOUSE=s3a://retail-video-analytics-prod/lakehouse
 ```
 
-For Vision media upload, `configs/cameras.yaml` currently uses bucket `retail-video-analytics-prod`.
+Vision media upload now reads bucket and credentials from `.env` (`S3_BUCKET`, `S3_*`).
 
 ## Start Project
 

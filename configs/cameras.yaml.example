@@ -6,7 +6,7 @@ cameras:
     store_id: store_001
     name: "Cam_1"
     source_type: video_file
-    source_uri: data/videos/video_main.mp4
+    source_uri: data/videos/video1.mp4
     enabled: true
     fps_target: 25
 
@@ -15,7 +15,7 @@ cameras:
     name: "Cam_2"
     source_type: video_file
     source_uri: data/videos/Video_1.mp4
-    enabled: false
+    enabled: true
     fps_target: 25
 
 settings:
@@ -24,6 +24,21 @@ settings:
   conf_thres: 0.25
   class_filter: [0]
   frame_queue_size: 1
+
+  # Short-term track memory bridges brief retail occlusions so live count and
+  # overlays do not flicker when a shopper is hidden for a few frames.
+  track_memory_enabled: true
+  track_lost_ttl_ms: 1000
+  track_lost_ttl_frames: 15
+  track_min_hits: 1
+  track_smooth_alpha: 0.65
+  track_publish_predicted: true
+  track_count_predicted: true
+  track_predicted_conf_decay: 0.85
+  track_min_predicted_conf: 0.20
+  track_reid_iou_threshold: 0.15
+  track_reid_center_distance_px: 120
+
   health_check_interval_sec: 10
   worker_graceful_shutdown_sec: 10
   reconnect_delay_max_sec: 30
@@ -36,20 +51,10 @@ settings:
   live_media_jpeg_quality: 75
 
   # Media plane: sampled JPEGs and optional alert clips to S3.
+  # S3 infrastructure values are loaded from .env: S3_ENDPOINT, S3_REGION,
+  # S3_BUCKET, S3_ACCESS_KEY, S3_SECRET_KEY, S3_PATH_STYLE.
   media_upload_enabled: true
   pulsar_media_topic: persistent://retail/metadata/media-events
-  # Use environment variables for credentials:
-  # S3_ACCESS_KEY, S3_SECRET_KEY, S3_BUCKET, S3_ENDPOINT.
-
-
-  s3_endpoint: ""
-  # s3_endpoint: https://s3.ap-southeast-2.amazonaws.com # s3
-  s3_region: ap-southeast-2
-  s3_bucket: retail-video-analytics-prod
-  s3_access_key: ""
-  s3_secret_key: ""
-  s3_path_style: false
-  #s3_path_style: true #s3
 
   frame_sampling_enabled: true
   frame_sample_interval_sec: 1

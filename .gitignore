@@ -89,3 +89,6 @@ vision/main.py.backup
 .opencode
 
 video_main.mp4
+# Per-developer camera config
+configs/cameras.yaml
+!configs/cameras.yaml.example
