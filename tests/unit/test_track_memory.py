@@ -89,6 +89,7 @@ def test_track_memory_stitches_new_detector_id_to_lost_track():
     )
 
     assert stitched[0]["id"] == 7
+    assert stitched[0]["raw_track_id"] == 99
     assert stitched[0]["track_state"] == "matched"
     assert stitched[0]["detector_ids"] == [7, 99]
     assert memory.summary(stitched)["id_switch_suspect_count"] == 1

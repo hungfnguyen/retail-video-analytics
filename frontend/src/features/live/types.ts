@@ -15,6 +15,7 @@ export type Camera = {
 
 export type Detection = {
   track_id: number
+  global_track_id?: string | null
   label: 'person'
   confidence: number
   bbox_norm: {
@@ -29,6 +30,20 @@ export type HeatmapPoint = {
   x: number
   y: number
   intensity: number
+}
+
+export type ZoneCount = {
+  zone_id: string
+  zone_type: string
+  count: number
+}
+
+export type LineCrossing = {
+  line_id: string
+  line_type: string
+  direction: string
+  track_id?: number | null
+  global_track_id?: string | null
 }
 
 export type LiveFrame = {
@@ -57,6 +72,8 @@ export type LiveFrame = {
   reader_drop_count: number
   detections: Detection[]
   heatmap_points: HeatmapPoint[]
+  zone_counts: ZoneCount[]
+  line_crossings: LineCrossing[]
 }
 
 export type LiveStats = {

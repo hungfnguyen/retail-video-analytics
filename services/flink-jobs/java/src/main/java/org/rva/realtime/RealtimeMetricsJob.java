@@ -69,6 +69,9 @@ public class RealtimeMetricsJob {
         int[] gridXs;
         int[] gridYs;
         Long[] trackIds;
+        String[] globalTrackIds;
+        List<Map<String, Object>> zoneCounts;
+        List<Map<String, Object>> lineCrossings;
         double[] bboxXs;
         double[] bboxYs;
         double[] bboxWs;
@@ -138,6 +141,7 @@ public class RealtimeMetricsJob {
             List<Integer> gridXList = new ArrayList<>();
             List<Integer> gridYList = new ArrayList<>();
             List<Long> trackIdList = new ArrayList<>();
+            List<String> globalTrackIdList = new ArrayList<>();
             List<Double> bboxXList = new ArrayList<>();
             List<Double> bboxYList = new ArrayList<>();
             List<Double> bboxWList = new ArrayList<>();
@@ -182,11 +186,17 @@ public class RealtimeMetricsJob {
                     if (tid != null && !tid.isNull() && tid.isNumber()) {
                         trackId = tid.asLong();
                     }
+                    String globalTrackId = null;
+                    JsonNode gid = det.get("global_track_id");
+                    if (gid != null && !gid.isNull() && gid.isTextual()) {
+                        globalTrackId = gid.asText();
+                    }
 
                     count++;
                     gridXList.add(gx);
                     gridYList.add(gy);
                     trackIdList.add(trackId);
+                    globalTrackIdList.add(globalTrackId);
                     bboxXList.add(bx);
                     bboxYList.add(by);
                     bboxWList.add(bw);
@@ -209,6 +219,9 @@ public class RealtimeMetricsJob {
             evt.gridXs = gridXList.stream().mapToInt(Integer::intValue).toArray();
             evt.gridYs = gridYList.stream().mapToInt(Integer::intValue).toArray();
             evt.trackIds = trackIdList.toArray(new Long[0]);
+            evt.globalTrackIds = globalTrackIdList.toArray(new String[0]);
+            evt.zoneCounts = parseZoneCounts(root.path("zone_counts"));
+            evt.lineCrossings = parseLineCrossings(root.path("line_crossings"));
             evt.bboxXs = toDoubleArray(bboxXList);
             evt.bboxYs = toDoubleArray(bboxYList);
             evt.bboxWs = toDoubleArray(bboxWList);
@@ -259,6 +272,47 @@ public class RealtimeMetricsJob {
             return Math.max(min, Math.min(max, val));
         }
 
+        private static List<Map<String, Object>> parseZoneCounts(JsonNode zoneCounts) {
+            List<Map<String, Object>> values = new ArrayList<>();
+            if (zoneCounts == null || !zoneCounts.isArray()) {
+                return values;
+            }
+            for (JsonNode zone : zoneCounts) {
+                String zoneId = zone.path("zone_id").asText("");
+                if (zoneId.isEmpty()) {
+                    continue;
+                }
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("zone_id", zoneId);
+                item.put("zone_type", zone.path("zone_type").asText("unknown"));
+                item.put("count", zone.path("count").asInt(0));
+                values.add(item);
+            }
+            return values;
+        }
+
+        private static List<Map<String, Object>> parseLineCrossings(JsonNode lineCrossings) {
+            List<Map<String, Object>> values = new ArrayList<>();
+            if (lineCrossings == null || !lineCrossings.isArray()) {
+                return values;
+            }
+            for (JsonNode line : lineCrossings) {
+                String lineId = line.path("line_id").asText("");
+                String direction = line.path("direction").asText("");
+                if (lineId.isEmpty() || direction.isEmpty()) {
+                    continue;
+                }
+                Map<String, Object> item = new LinkedHashMap<>();
+                item.put("line_id", lineId);
+                item.put("line_type", line.path("line_type").asText("crossing"));
+                item.put("direction", direction);
+                item.put("track_id", line.path("track_id").isNumber() ? line.path("track_id").asLong() : null);
+                item.put("global_track_id", line.path("global_track_id").isTextual() ? line.path("global_track_id").asText() : null);
+                values.add(item);
+            }
+            return values;
+        }
+
         private static double[] toDoubleArray(List<Double> values) {
             double[] arr = new double[values.size()];
             for (int i = 0; i < values.size(); i++) {
@@ -305,6 +359,9 @@ public class RealtimeMetricsJob {
         private static final int COUNT_EXPIRE_SEC = 5;
         private static final int FRAME_EXPIRE_SEC = 10;
         private static final int TRACK_EXPIRE_SEC = 30;
+        private static final int ZONE_EXPIRE_SEC = 10;
+        private static final int QUEUE_EXPIRE_SEC = 10;
+        private static final int LINE_EXPIRE_SEC = 300;
 
         private transient JedisPool pool;
 
@@ -366,11 +423,65 @@ public class RealtimeMetricsJob {
                     fields.put("bbox_w", String.valueOf(evt.bboxWs[i]));
                     fields.put("bbox_h", String.valueOf(evt.bboxHs[i]));
                     fields.put("confidence", String.valueOf(evt.confidences[i]));
+                    if (i < evt.globalTrackIds.length && evt.globalTrackIds[i] != null) {
+                        fields.put("global_track_id", evt.globalTrackIds[i]);
+                    }
                     jedis.hset(trackKey, fields);
                     jedis.expire(trackKey, TRACK_EXPIRE_SEC);
                 }
+
+                writeZoneCounts(jedis, evt, ts);
+                writeLineCrossings(jedis, evt);
             } catch (Exception e) {
                 LOG.warn("Redis write failed for camera {}: {}", cameraId, e.toString());
+            }
+        }
+
+        private void writeZoneCounts(Jedis jedis, ParsedEvent evt, String ts) {
+            if (evt.zoneCounts == null || evt.zoneCounts.isEmpty()) {
+                return;
+            }
+            String zoneKey = "zone:count:" + evt.cameraId;
+            Map<String, String> zoneFields = new HashMap<>();
+            for (Map<String, Object> zone : evt.zoneCounts) {
+                String zoneId = String.valueOf(zone.get("zone_id"));
+                String zoneType = String.valueOf(zone.getOrDefault("zone_type", "unknown"));
+                String count = String.valueOf(zone.getOrDefault("count", 0));
+                if (zoneId == null || zoneId.isEmpty() || "null".equals(zoneId)) {
+                    continue;
+                }
+                zoneFields.put(zoneId, count);
+                if ("queue".equals(zoneType)) {
+                    String queueKey = "queue:live:" + evt.cameraId + ":" + zoneId;
+                    Map<String, String> queueFields = new HashMap<>();
+                    queueFields.put("zone_id", zoneId);
+                    queueFields.put("zone_type", zoneType);
+                    queueFields.put("current_count", count);
+                    queueFields.put("last_update_ts", ts);
+                    jedis.hset(queueKey, queueFields);
+                    jedis.expire(queueKey, QUEUE_EXPIRE_SEC);
+                }
+            }
+            if (!zoneFields.isEmpty()) {
+                jedis.hset(zoneKey, zoneFields);
+                jedis.expire(zoneKey, ZONE_EXPIRE_SEC);
+            }
+        }
+
+        private void writeLineCrossings(Jedis jedis, ParsedEvent evt) {
+            if (evt.lineCrossings == null || evt.lineCrossings.isEmpty()) {
+                return;
+            }
+            for (Map<String, Object> crossing : evt.lineCrossings) {
+                String lineId = String.valueOf(crossing.get("line_id"));
+                String direction = String.valueOf(crossing.get("direction"));
+                if (lineId == null || lineId.isEmpty() || "null".equals(lineId)
+                        || direction == null || direction.isEmpty() || "null".equals(direction)) {
+                    continue;
+                }
+                String lineKey = "line:count:" + evt.cameraId + ":" + lineId + ":5m";
+                jedis.hincrBy(lineKey, direction + "_count", 1L);
+                jedis.expire(lineKey, LINE_EXPIRE_SEC);
             }
         }
 
@@ -399,6 +510,9 @@ public class RealtimeMetricsJob {
             for (int i = 0; i < evt.gridXs.length; i++) {
                 Map<String, Object> det = new LinkedHashMap<>();
                 det.put("track_id", evt.trackIds[i]);
+                if (i < evt.globalTrackIds.length) {
+                    det.put("global_track_id", evt.globalTrackIds[i]);
+                }
                 det.put("label", "person");
                 det.put("confidence", evt.confidences[i]);
 
@@ -419,6 +533,8 @@ public class RealtimeMetricsJob {
                 detections.add(det);
             }
             frame.put("detections", detections);
+            frame.put("zone_counts", evt.zoneCounts == null ? List.of() : evt.zoneCounts);
+            frame.put("line_crossings", evt.lineCrossings == null ? List.of() : evt.lineCrossings);
             return MAPPER.writeValueAsString(frame);
         }
     }

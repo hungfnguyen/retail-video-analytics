@@ -378,6 +378,7 @@ def _detections_from_frame(frame: dict[str, Any] | None) -> list[dict[str, Any]]
         result.append(
             {
                 "track_id": _safe_int(det.get("track_id")),
+                "global_track_id": det.get("global_track_id"),
                 "label": "person",
                 "confidence": _safe_float(det.get("confidence")),
                 "bbox_norm": {
@@ -386,6 +387,59 @@ def _detections_from_frame(frame: dict[str, Any] | None) -> list[dict[str, Any]]
                     "w": _safe_float(bbox_norm.get("w")),
                     "h": _safe_float(bbox_norm.get("h")),
                 },
+            }
+        )
+    return result
+
+
+def _zone_counts_from_sources(
+    frame: dict[str, Any] | None, media_metadata: dict[str, Any]
+) -> list[dict[str, Any]]:
+    raw = (frame or {}).get("zone_counts")
+    if not isinstance(raw, list) or not raw:
+        raw = media_metadata.get("zone_counts")
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        zone_id = str(item.get("zone_id") or "")
+        if not zone_id:
+            continue
+        result.append(
+            {
+                "zone_id": zone_id,
+                "zone_type": str(item.get("zone_type") or "unknown"),
+                "count": _safe_int(item.get("count")),
+            }
+        )
+    return result
+
+
+def _line_crossings_from_sources(
+    frame: dict[str, Any] | None, media_metadata: dict[str, Any]
+) -> list[dict[str, Any]]:
+    raw = (frame or {}).get("line_crossings")
+    if not isinstance(raw, list) or not raw:
+        raw = media_metadata.get("line_crossings")
+    if not isinstance(raw, list):
+        return []
+    result = []
+    for item in raw:
+        if not isinstance(item, dict):
+            continue
+        line_id = str(item.get("line_id") or "")
+        direction = str(item.get("direction") or "")
+        if not line_id or not direction:
+            continue
+        result.append(
+            {
+                "line_id": line_id,
+                "line_type": str(item.get("line_type") or "crossing"),
+                "direction": direction,
+                "track_id": item.get("track_id"),
+                "global_track_id": item.get("global_track_id"),
             }
         )
     return result
@@ -609,6 +663,8 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "reader_drop_count": reader_drop_count,
             "detections": detections,
             "heatmap_points": _heatmap_points(heatmap_cells),
+            "zone_counts": _zone_counts_from_sources(frame, media_metadata),
+            "line_crossings": _line_crossings_from_sources(frame, media_metadata),
         },
         "stats": {
             "camera_id": camera_id,

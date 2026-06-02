@@ -33,8 +33,10 @@ class Visualizer:
             x1, y1, x2, y2 = map(int, bbox)
             label_text = obj.get("label", "unknown")
             track_id = obj.get("id", -1)
+            global_track_id = obj.get("global_track_id")
             conf = obj.get("conf", 0.0)
             track_state = obj.get("track_state", "matched")
+            zone_id = obj.get("primary_zone_id")
 
             if track_state == "predicted":
                 suffix = " pred"
@@ -42,7 +44,9 @@ class Visualizer:
             else:
                 suffix = ""
                 color = self.bbox_color
-            display_text = f"{label_text} ID:{track_id}{suffix} {conf:.2f}"
+            display_id = global_track_id or f"ID:{track_id}"
+            zone_suffix = f" {zone_id}" if zone_id else ""
+            display_text = f"{label_text} {display_id}{suffix}{zone_suffix} {conf:.2f}"
 
             self._draw_box_and_label(frame, (x1, y1, x2, y2), display_text, color)
             

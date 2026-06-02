@@ -105,11 +105,47 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "pulsar_service_url": pulsar_url,
         "pulsar_topic": pulsar_topic,
         "pulsar_media_topic": pulsar_media_topic,
-        "model_name": _get("model_name", global_settings),
-        "tracker_type": _get("tracker_type", global_settings),
-        "conf_thres": _get("conf_thres", global_settings),
-        "class_filter": _get_class_filter(global_settings),
-        "frame_queue_size": global_settings.get("frame_queue_size", 2),
+        "model_name": _get_vision_setting("model_name", global_settings),
+        "tracker_type": _get_vision_setting("tracker_type", global_settings),
+        "conf_thres": float(_get_vision_setting("conf_thres", global_settings)),
+        "class_filter": _get_vision_class_filter(global_settings),
+        "frame_policy": _get_frame_policy(global_settings),
+        "frame_queue_size": _get_frame_queue_size(global_settings),
+        "event_schema_version": str(
+            _get_optional("event_schema_version", global_settings) or "1.0"
+        ),
+        "publish_vision_facts": _get_bool(
+            "publish_vision_facts", global_settings, True
+        ),
+        "detector_type": str(
+            _get_optional("detector_type", global_settings) or "ultralytics_yolo"
+        ),
+        "detector_iou": _get_float("detector_iou", global_settings, 0.70),
+        "detector_imgsz": _get_int("detector_imgsz", global_settings, 1280),
+        "detector_half": _get_bool("detector_half", global_settings, True),
+        "track_activation_threshold": _get_float(
+            "track_activation_threshold", global_settings, 0.20
+        ),
+        "lost_track_buffer": _get_int("lost_track_buffer", global_settings, 60),
+        "minimum_consecutive_frames": _get_int(
+            "minimum_consecutive_frames", global_settings, 2
+        ),
+        "minimum_iou_threshold": _get_optional(
+            "minimum_iou_threshold", global_settings
+        ),
+        "high_conf_det_threshold": _get_optional(
+            "high_conf_det_threshold", global_settings
+        ),
+        "tracker_frame_rate": _get_optional("tracker_frame_rate", global_settings),
+        "track_smoothing_enabled": _get_bool(
+            "track_smoothing_enabled", global_settings, True
+        ),
+        "track_smoothing_length": _get_int(
+            "track_smoothing_length", global_settings, 5
+        ),
+        "zones_config_path": _resolve_project_path(
+            _get_optional("zones_config_path", global_settings) or "configs/zones.yaml"
+        ),
         "track_memory_enabled": _get_bool(
             "track_memory_enabled", global_settings, True
         ),
@@ -196,6 +232,21 @@ def _get(key: str, global_settings: Dict[str, Any]) -> Any:
     return global_settings.get(key)
 
 
+def _get_vision_setting(key: str, global_settings: Dict[str, Any]) -> Any:
+    """Resolve production Vision runtime settings.
+
+    Legacy variables like MODEL_NAME/TRACKER_TYPE/CONF_THRES are still used in
+    single-camera fallback mode, but multi-camera YAML should not be silently
+    overridden by an old services/vision/.env. Use RVA_* for explicit overrides.
+    """
+    rva_env = os.getenv(f"RVA_{key.upper()}")
+    if rva_env is not None and rva_env != "":
+        return rva_env
+    if key in global_settings and global_settings[key] is not None:
+        return global_settings[key]
+    return os.getenv(key.upper())
+
+
 def _get_class_filter(global_settings: Dict[str, Any]) -> List[int]:
     env_str = os.getenv("CLASS_FILTER")
     if env_str:
@@ -204,6 +255,39 @@ def _get_class_filter(global_settings: Dict[str, Any]) -> List[int]:
         except Exception:
             pass
     return global_settings.get("class_filter", [0])
+
+
+def _get_vision_class_filter(global_settings: Dict[str, Any]) -> List[int]:
+    env_str = os.getenv("RVA_CLASS_FILTER")
+    if env_str:
+        try:
+            return json.loads(env_str)
+        except Exception:
+            pass
+    return global_settings.get("class_filter", _get_class_filter(global_settings))
+
+
+def _get_frame_policy(global_settings: Dict[str, Any]) -> Dict[str, Any]:
+    raw = global_settings.get("frame_policy")
+    if not isinstance(raw, dict):
+        mode = str(_get_optional("frame_policy_mode", global_settings) or "tracking_safe")
+        return {
+            "mode": mode,
+            "max_queue_size": _get_int("frame_queue_size", global_settings, 4),
+            "allow_drop": True,
+            "max_consecutive_drops": 3,
+        }
+    return {
+        "mode": str(raw.get("mode", "tracking_safe")),
+        "max_queue_size": int(raw.get("max_queue_size", global_settings.get("frame_queue_size", 4))),
+        "allow_drop": bool(raw.get("allow_drop", True)),
+        "max_consecutive_drops": int(raw.get("max_consecutive_drops", 3)),
+    }
+
+
+def _get_frame_queue_size(global_settings: Dict[str, Any]) -> int:
+    policy = _get_frame_policy(global_settings)
+    return int(policy.get("max_queue_size", global_settings.get("frame_queue_size", 2)))
 
 
 def _get_optional(key: str, global_settings: Dict[str, Any]) -> Any:
@@ -303,7 +387,23 @@ def _fallback_single_camera() -> Dict[str, Any]:
         "tracker_type": settings.TRACKER_TYPE,
         "conf_thres": settings.CONF_THRES,
         "class_filter": settings.CLASS_FILTER,
-        "frame_queue_size": 2,
+        "frame_policy": {"mode": "tracking_safe", "max_queue_size": 4, "allow_drop": True},
+        "frame_queue_size": 4,
+        "event_schema_version": "1.0",
+        "publish_vision_facts": True,
+        "detector_type": "ultralytics_yolo",
+        "detector_iou": 0.70,
+        "detector_imgsz": 1280,
+        "detector_half": True,
+        "track_activation_threshold": 0.20,
+        "lost_track_buffer": 60,
+        "minimum_consecutive_frames": 2,
+        "minimum_iou_threshold": None,
+        "high_conf_det_threshold": None,
+        "tracker_frame_rate": None,
+        "track_smoothing_enabled": True,
+        "track_smoothing_length": 5,
+        "zones_config_path": _resolve_project_path("configs/zones.yaml"),
         "track_memory_enabled": _get_bool("track_memory_enabled", {}, True),
         "track_lost_ttl_ms": _get_int("track_lost_ttl_ms", {}, 1000),
         "track_lost_ttl_frames": _get_int("track_lost_ttl_frames", {}, 15),
