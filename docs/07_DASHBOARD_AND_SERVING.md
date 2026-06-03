@@ -18,6 +18,7 @@ FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media en
 |---|---|
 | `GET /health` | API health |
 | `GET /api/v1/live/{camera_id}/dashboard` | Live dashboard data from Redis and live media metadata |
+| `GET /api/v1/analytics/dashboard` | Historical analytics from Trino over Iceberg Silver/Gold tables |
 | `GET /media/live/{camera_id}/snapshot.jpg` | Latest JPEG snapshot |
 | `GET /media/live/{camera_id}/stream` | MJPEG fallback stream |
 | `POST /media/live/{camera_id}/webrtc/offer` | WebRTC offer/answer endpoint |
@@ -54,12 +55,12 @@ VITE_LIVE_VIDEO_TRANSPORT=mjpeg
 | Page | Status |
 |---|---|
 | Live | Connected to FastAPI realtime endpoint and media stream |
-| Analytics | UI exists; still needs backend analytics endpoints |
+| Analytics | Connected to FastAPI analytics endpoint backed by Trino |
 | System | UI exists; service cards partially use live API; deeper system metrics are pending |
 
 ## Next Serving Work
 
-- Add FastAPI analytics endpoints backed by Trino.
+- Add narrower analytics endpoints for drill-down and exports.
 - Add system health endpoints for Pulsar, Flink, Trino, S3, Redis, and API.
 - Replace placeholder traffic/alerts with real data contracts.
 - Add cache and query limits for analytical endpoints.

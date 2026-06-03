@@ -34,7 +34,7 @@ _redis_client: Any | None = None
 def _redis_config() -> RedisClientConfig:
     return RedisClientConfig(
         host=os.getenv("REDIS_HOST", "localhost"),
-        port=int(os.getenv("REDIS_PORT", "6379")),
+        port=int(os.getenv("REDIS_PORT", os.getenv("REDIS_HOST_PORT", "16379"))),
         password=os.getenv("REDIS_PASSWORD") or None,
         db=int(os.getenv("REDIS_DB", "0")),
     )

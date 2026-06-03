@@ -142,6 +142,17 @@ def test_get_redis_client_raises_503_when_unavailable(monkeypatch):
     assert exc_info.value.status_code == 503
 
 
+def test_redis_config_defaults_to_host_mapped_port(monkeypatch):
+    monkeypatch.delenv("REDIS_HOST", raising=False)
+    monkeypatch.delenv("REDIS_PORT", raising=False)
+    monkeypatch.delenv("REDIS_HOST_PORT", raising=False)
+
+    config = live._redis_config()
+
+    assert config.host == "localhost"
+    assert config.port == 16379
+
+
 def test_read_media_metadata_from_configured_dir(monkeypatch, tmp_path):
     metadata_path = tmp_path / "cam_01.json"
     metadata_path.write_text(

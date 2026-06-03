@@ -7,7 +7,7 @@ React + TypeScript + Vite dashboard for Retail Video Analytics.
 | Page | Status |
 |---|---|
 | Live | Connected to FastAPI live endpoint and media stream |
-| Analytics | UI scaffold with static data; backend analytics integration pending |
+| Analytics | Connected to FastAPI analytics endpoint backed by Trino over Silver/Gold tables |
 | System | UI scaffold with partial live health data; full system API pending |
 
 ## Run
