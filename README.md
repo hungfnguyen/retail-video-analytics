@@ -27,7 +27,7 @@ Implemented now:
 - AWS S3 storage for Iceberg tables and optional sampled frames/clips.
 - Trino SQL query over Iceberg.
 - FastAPI live dashboard and media serving endpoints.
-- React frontend with Live, Analytics, and System pages. Live is connected to realtime data; Analytics/System still need deeper API integration.
+- React frontend with Live, Analytics, and System pages. Live is connected to realtime data; Analytics reads Trino-backed lakehouse summaries; System uses backend-driven health data.
 
 ## Runtime Services
 
@@ -38,7 +38,7 @@ Implemented now:
 | Flink UI | 8081 | Job status and exceptions |
 | Iceberg REST | 8181 | Iceberg catalog service |
 | Trino | 8083 | SQL query engine |
-| Redis | 6379 | Realtime state |
+| Redis | 16379 on host, 6379 in Docker network | Realtime state |
 | FastAPI | 8000 | Dashboard API and media gateway |
 | Frontend | 5173 | React dashboard |
 
