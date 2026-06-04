@@ -40,7 +40,13 @@ Each new table should include:
 
 ## Phase 3: Analytics API
 
-Add FastAPI endpoints backed by Trino:
+Current MVP endpoint:
+
+```text
+GET /api/v1/analytics/dashboard
+```
+
+Add narrower FastAPI endpoints backed by Trino when drill-down workflows need them:
 
 ```text
 GET /api/v1/analytics/hourly-traffic

@@ -9,6 +9,7 @@ from rva_api.api.media.live_webrtc import (
     close_peer_connections,
     router as live_webrtc_router,
 )
+from rva_api.api.v1.analytics import router as analytics_router
 from rva_api.api.v1.live import router as live_router
 from rva_api.api.v1.system import router as system_router
 
@@ -35,6 +36,7 @@ app.add_middleware(
 
 app.include_router(live_router, prefix="/api/v1")
 app.include_router(system_router, prefix="/api/v1")
+app.include_router(analytics_router, prefix="/api/v1")
 app.include_router(live_video_router)
 app.include_router(live_webrtc_router)
 
