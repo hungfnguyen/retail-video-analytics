@@ -244,6 +244,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
     last_source_frame_index: int | None = None
     last_reader_drop_count = 0
     previous_track_ids: set[int] = set()
+    queue_entered_ms_by_track: dict[int, int] = {}
     schema_version = str(global_cfg.get("event_schema_version", "1.0"))
     publish_vision_facts = bool(global_cfg.get("publish_vision_facts", True))
 
@@ -304,11 +305,34 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
             zone_started = time.perf_counter()
             zone_assignments, zone_counts = zone_runtime.assign(stable_tracks, width, height)
+            queue_track_ids_this_frame: set[int] = set()
+            current_ts_ms = int(capture_ts.timestamp() * 1000)
             for track, zones in zip(stable_tracks, zone_assignments):
                 primary_zone = next((zone for zone in zones if zone.get("is_primary")), None)
                 if primary_zone:
                     track["primary_zone_id"] = primary_zone.get("zone_id")
                     track["primary_zone_type"] = primary_zone.get("zone_type")
+                track_id = track.get("id")
+                if (
+                    isinstance(track_id, int)
+                    and primary_zone
+                    and primary_zone.get("zone_type") == "queue"
+                ):
+                    queue_track_ids_this_frame.add(track_id)
+                    entered_ms = queue_entered_ms_by_track.setdefault(track_id, current_ts_ms)
+                    wait_ms = max(0, current_ts_ms - entered_ms)
+                    track["queue_wait_ms"] = wait_ms
+                    track["queue_wait_seconds"] = wait_ms // 1000
+                else:
+                    track.pop("queue_wait_ms", None)
+                    track.pop("queue_wait_seconds", None)
+                    if isinstance(track_id, int):
+                        queue_entered_ms_by_track.pop(track_id, None)
+            queue_entered_ms_by_track = {
+                track_id: entered_ms
+                for track_id, entered_ms in queue_entered_ms_by_track.items()
+                if track_id in queue_track_ids_this_frame
+            }
             line_crossings = zone_runtime.trigger_lines(stable_tracks, width, height)
             zone_ms = max(0, int((time.perf_counter() - zone_started) * 1000))
 

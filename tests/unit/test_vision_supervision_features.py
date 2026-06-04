@@ -7,8 +7,8 @@ VISION_PATH = Path(__file__).resolve().parents[2] / "services" / "vision"
 if str(VISION_PATH) not in sys.path:
     sys.path.insert(0, str(VISION_PATH))
 
-from features.detections import add_global_track_ids, track_to_detection
-from zones.zone_manager import RetailZoneRuntime, ZoneSpec
+from features.detections import add_global_track_ids, track_to_detection  # noqa: E402
+from zones.zone_manager import RetailZoneRuntime, ZoneSpec  # noqa: E402
 
 
 def test_track_to_detection_adds_global_id_anchor_zone_and_queue():
@@ -20,6 +20,8 @@ def test_track_to_detection_adds_global_id_anchor_zone_and_queue():
         "cls": 0,
         "label": "person",
         "conf": 0.86,
+        "queue_wait_ms": 68_000,
+        "queue_wait_seconds": 68,
     }
     zones = [
         {
@@ -47,6 +49,8 @@ def test_track_to_detection_adds_global_id_anchor_zone_and_queue():
     assert detection["anchor"]["y"] == 420
     assert detection["queue"]["in_queue"] is True
     assert detection["queue"]["queue_zone_id"] == "checkout_queue_01"
+    assert detection["queue"]["wait_ms"] == 68_000
+    assert detection["queue"]["wait_seconds"] == 68
 
 
 def test_add_global_track_ids_uses_stable_integer_id():

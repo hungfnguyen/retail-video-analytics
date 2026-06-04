@@ -115,6 +115,8 @@ def track_to_detection(
         "queue": {
             "in_queue": in_queue,
             "queue_zone_id": primary_zone.get("zone_id") if in_queue and primary_zone else None,
+            "wait_ms": int(obj.get("queue_wait_ms", 0)) if in_queue else 0,
+            "wait_seconds": int(obj.get("queue_wait_seconds", 0)) if in_queue else 0,
         },
         "quality": {
             "bbox_area": w_box * h_box,
