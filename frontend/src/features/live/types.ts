@@ -34,8 +34,11 @@ export type HeatmapPoint = {
 
 export type ZoneCount = {
   zone_id: string
+  zone_name?: string | null
   zone_type: string
   count: number
+  track_ids?: number[]
+  global_track_ids?: string[]
 }
 
 export type LineCrossing = {

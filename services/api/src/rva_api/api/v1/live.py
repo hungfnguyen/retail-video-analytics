@@ -75,6 +75,66 @@ def _load_camera_config() -> list[dict[str, Any]]:
     ]
 
 
+def _zone_config_path() -> Path:
+    env_path = os.getenv("RVA_ZONE_CONFIG")
+    if env_path:
+        return Path(env_path)
+
+    camera_config_path = Path(os.getenv("RVA_CAMERA_CONFIG", "configs/cameras.yaml"))
+    if not camera_config_path.exists():
+        example_path = camera_config_path.with_name("cameras.yaml.example")
+        if example_path.exists():
+            camera_config_path = example_path
+
+    try:
+        camera_config = load_yaml_config(camera_config_path)
+    except Exception:
+        camera_config = {}
+
+    settings = camera_config.get("settings", {}) if isinstance(camera_config, dict) else {}
+    configured = settings.get("zones_config_path") if isinstance(settings, dict) else None
+    return Path(str(configured or "configs/zones.yaml"))
+
+
+def _zone_specs_for_camera(camera_id: str, cameras: list[dict[str, Any]]) -> dict[str, dict[str, str]]:
+    zone_path = _zone_config_path()
+    if not zone_path.exists():
+        return {}
+
+    matched = next((camera for camera in cameras if camera.get("camera_id") == camera_id), {})
+    store_id = str(matched.get("store_id") or "store_001")
+
+    try:
+        payload = load_yaml_config(zone_path)
+    except Exception:
+        return {}
+
+    camera_cfg = (
+        payload.get("stores", {})
+        .get(store_id, {})
+        .get("cameras", {})
+        .get(camera_id, {})
+    )
+    zones = camera_cfg.get("zones", []) if isinstance(camera_cfg, dict) else []
+    result: dict[str, dict[str, str]] = {}
+    for zone in zones:
+        if not isinstance(zone, dict) or not zone.get("zone_id"):
+            continue
+        zone_id = str(zone["zone_id"])
+        result[zone_id] = {
+            "zone_id": zone_id,
+            "zone_name": str(zone.get("zone_name") or zone_id),
+            "zone_type": str(zone.get("zone_type") or "unknown"),
+        }
+    return result
+
+
+def _decode_redis_value(value: Any) -> str:
+    if isinstance(value, bytes):
+        return value.decode("utf-8", errors="replace")
+    return str(value)
+
+
 def _camera_status(frame: dict[str, Any] | None, latency_ms: int | None) -> str:
     if frame is None:
         return "warning"
@@ -393,28 +453,72 @@ def _detections_from_frame(frame: dict[str, Any] | None) -> list[dict[str, Any]]
 
 
 def _zone_counts_from_sources(
-    frame: dict[str, Any] | None, media_metadata: dict[str, Any]
+    frame: dict[str, Any] | None,
+    media_metadata: dict[str, Any],
+    client: Any,
+    camera_id: str,
+    cameras: list[dict[str, Any]],
 ) -> list[dict[str, Any]]:
+    specs = _zone_specs_for_camera(camera_id, cameras)
     raw = (frame or {}).get("zone_counts")
     if not isinstance(raw, list) or not raw:
         raw = media_metadata.get("zone_counts")
-    if not isinstance(raw, list):
-        return []
+
+    if isinstance(raw, list) and raw:
+        result = [
+            _normalize_zone_count(item, specs)
+            for item in raw
+            if isinstance(item, dict)
+        ]
+        return [item for item in result if item.get("zone_id")]
+
+    try:
+        redis_counts = client.hgetall(f"zone:count:{camera_id}")
+    except Exception:
+        redis_counts = {}
+
     result = []
-    for item in raw:
-        if not isinstance(item, dict):
-            continue
-        zone_id = str(item.get("zone_id") or "")
+    for raw_zone_id, raw_count in redis_counts.items():
+        zone_id = _decode_redis_value(raw_zone_id)
         if not zone_id:
             continue
+        spec = specs.get(zone_id, {})
         result.append(
             {
                 "zone_id": zone_id,
-                "zone_type": str(item.get("zone_type") or "unknown"),
-                "count": _safe_int(item.get("count")),
+                "zone_name": spec.get("zone_name") or zone_id,
+                "zone_type": spec.get("zone_type") or "unknown",
+                "count": _safe_int(_decode_redis_value(raw_count)),
+                "track_ids": [],
+                "global_track_ids": [],
             }
         )
-    return result
+    return sorted(result, key=lambda item: str(item.get("zone_id", "")))
+
+
+def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]) -> dict[str, Any]:
+    zone_id = str(item.get("zone_id") or "")
+    if not zone_id:
+        return {}
+    spec = specs.get(zone_id, {})
+    track_ids = item.get("track_ids")
+    global_track_ids = item.get("global_track_ids")
+    return {
+        "zone_id": zone_id,
+        "zone_name": str(item.get("zone_name") or spec.get("zone_name") or zone_id),
+        "zone_type": str(item.get("zone_type") or spec.get("zone_type") or "unknown"),
+        "count": _safe_int(item.get("count")),
+        "track_ids": [
+            _safe_int(track_id)
+            for track_id in track_ids
+            if track_id is not None
+        ] if isinstance(track_ids, list) else [],
+        "global_track_ids": [
+            str(global_id)
+            for global_id in global_track_ids
+            if global_id is not None
+        ] if isinstance(global_track_ids, list) else [],
+    }
 
 
 def _line_crossings_from_sources(
@@ -663,7 +767,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "reader_drop_count": reader_drop_count,
             "detections": detections,
             "heatmap_points": _heatmap_points(heatmap_cells),
-            "zone_counts": _zone_counts_from_sources(frame, media_metadata),
+            "zone_counts": _zone_counts_from_sources(frame, media_metadata, client, camera_id, cameras),
             "line_crossings": _line_crossings_from_sources(frame, media_metadata),
         },
         "stats": {

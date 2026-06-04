@@ -121,6 +121,7 @@ class RetailZoneRuntime:
             zone_counts.append(
                 {
                     "zone_id": spec.zone_id,
+                    "zone_name": spec.zone_name,
                     "zone_type": spec.zone_type,
                     "count": int(sum(bool(v) for v in mask)),
                     "track_ids": track_ids,

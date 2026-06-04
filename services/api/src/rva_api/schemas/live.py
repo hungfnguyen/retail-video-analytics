@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Store(BaseModel):
@@ -35,8 +35,11 @@ class Detection(BaseModel):
 
 class ZoneCount(BaseModel):
     zone_id: str
+    zone_name: str | None = None
     zone_type: str
     count: int
+    track_ids: list[int] = Field(default_factory=list)
+    global_track_ids: list[str] = Field(default_factory=list)
 
 
 class LineCrossing(BaseModel):
