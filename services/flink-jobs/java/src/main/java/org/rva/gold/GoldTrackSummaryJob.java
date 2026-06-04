@@ -2,6 +2,7 @@ package org.rva.gold;
 
 import org.apache.flink.table.api.EnvironmentSettings;
 import org.apache.flink.table.api.TableEnvironment;
+import org.apache.flink.table.api.StatementSet;
 
 import java.util.LinkedHashMap;
 import java.util.Map;
@@ -65,6 +66,30 @@ public class GoldTrackSummaryJob {
                 ")");
         tEnv.executeSql(createGold);
 
+        String createGoldV2 = String.join("\n",
+                "CREATE TABLE IF NOT EXISTS rva.gold_track_summary_v2 (",
+                "  store_id             STRING,",
+                "  camera_id            STRING,",
+                "  pipeline_run_id      STRING,",
+                "  global_track_id      STRING,",
+                "  visit_date           DATE,",
+                "  enter_ts             TIMESTAMP_LTZ(3),",
+                "  exit_ts              TIMESTAMP_LTZ(3),",
+                "  duration_sec         BIGINT,",
+                "  frames               BIGINT,",
+                "  raw_track_id_count   BIGINT,",
+                "  predicted_frames     BIGINT,",
+                "  representative_zone_id   STRING,",
+                "  representative_zone_type STRING,",
+                "  PRIMARY KEY (store_id, camera_id, pipeline_run_id, global_track_id) NOT ENFORCED",
+                ") WITH (",
+                "  'format-version' = '2',",
+                "  'write.format.default' = 'parquet',",
+                "  'partitioning' = 'store_id,bucket(16, camera_id),days(visit_date)',",
+                "  'write.upsert.enabled' = 'true'",
+                ")");
+        tEnv.executeSql(createGoldV2);
+
         String insertSql = String.join("\n",
                 "INSERT INTO rva.gold_track_summary",
                 "SELECT",
@@ -85,7 +110,34 @@ public class GoldTrackSummaryJob {
                 "  AND capture_ts IS NOT NULL",
                 "GROUP BY store_id, camera_id, pipeline_run_id, track_id");
 
-        tEnv.executeSql(insertSql);
+        String insertV2Sql = String.join("\n",
+                "INSERT INTO rva.gold_track_summary_v2",
+                "SELECT",
+                "  store_id,",
+                "  camera_id,",
+                "  pipeline_run_id,",
+                "  global_track_id,",
+                "  CAST(MIN(capture_ts) AS DATE) AS visit_date,",
+                "  MIN(capture_ts) AS enter_ts,",
+                "  MAX(capture_ts) AS exit_ts,",
+                "  TIMESTAMPDIFF(SECOND, MIN(capture_ts), MAX(capture_ts)) AS duration_sec,",
+                "  COUNT(DISTINCT frame_index) AS frames,",
+                "  COUNT(DISTINCT raw_track_id) AS raw_track_id_count,",
+                "  SUM(CASE WHEN is_predicted THEN 1 ELSE 0 END) AS predicted_frames,",
+                "  MIN(primary_zone_id) AS representative_zone_id,",
+                "  MIN(primary_zone_type) AS representative_zone_type",
+                "FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s') */",
+                "WHERE store_id IS NOT NULL",
+                "  AND camera_id IS NOT NULL",
+                "  AND pipeline_run_id IS NOT NULL",
+                "  AND global_track_id IS NOT NULL",
+                "  AND capture_ts IS NOT NULL",
+                "GROUP BY store_id, camera_id, pipeline_run_id, global_track_id");
+
+        StatementSet statements = tEnv.createStatementSet();
+        statements.addInsertSql(insertSql);
+        statements.addInsertSql(insertV2Sql);
+        statements.execute();
     }
 
     private static String getenv(String k, String def) {

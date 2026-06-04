@@ -37,8 +37,8 @@ class Settings:
         else _out_jsonl_raw
     )
 
-    TRACKER_TYPE = os.getenv("TRACKER_TYPE", "botsort")
-    CONF_THRES = float(os.getenv("CONF_THRES", "0.25"))
+    TRACKER_TYPE = os.getenv("TRACKER_TYPE", "roboflow_bytetrack")
+    CONF_THRES = float(os.getenv("CONF_THRES", "0.15"))
 
     PULSAR_SERVICE_URL = os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
     PULSAR_TOPIC = os.getenv("PULSAR_TOPIC", "persistent://retail/metadata/events")

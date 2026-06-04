@@ -101,13 +101,6 @@ class DetectionsSmootherAdapter:
 
 def create_supervision_tracker(tracker_name: str, global_cfg: dict[str, Any]):
     tracker = (tracker_name or "roboflow_bytetrack").lower().strip()
-    if tracker in {"botsort", "yolo_botsort", "yolo_bytetrack"}:
-        logger.warning(
-            "tracker_type=%s is a legacy Ultralytics tracker name; "
-            "using Roboflow ByteTrack in the rebuilt pipeline",
-            tracker_name,
-        )
-        tracker = "roboflow_bytetrack"
     if tracker in {"roboflow_bytetrack", "bytetrack", "byte_track"}:
         return RoboflowByteTrackAdapter(
             track_activation_threshold=_float(global_cfg, "track_activation_threshold", 0.20),
