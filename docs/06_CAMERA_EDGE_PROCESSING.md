@@ -24,13 +24,15 @@ The Vision service is the edge processing layer. It converts camera/video frames
 ## Processing Loop
 
 ```text
-VideoFileReader -> queue(size=1) -> YOLO track -> normalize detections
-                                      |-- publish Pulsar event
-                                      |-- write latest annotated JPEG
-                                      |-- optional sampled media upload
+VideoFileReader -> tracking_safe queue -> YOLO predict -> sv.Detections
+  -> Roboflow ByteTrack -> smoothing -> TrackMemory global_track_id
+  -> bottom-center anchors -> PolygonZone / LineZone facts
+  |-- publish Pulsar event
+  |-- write latest annotated JPEG
+  |-- optional sampled media upload
 ```
 
-The queue intentionally drops old frames under pressure. For realtime video analytics, a fresh frame is more valuable than preserving every frame in the edge buffer.
+The default `tracking_safe` frame policy keeps a short queue so tracker state sees a more continuous sequence while still dropping under sustained backlog.
 
 ## Current Model Settings
 
@@ -38,10 +40,15 @@ Configured in `configs/cameras.yaml`:
 
 ```yaml
 model_name: yolo11l.pt
-tracker_type: botsort
-conf_thres: 0.25
+detector_type: ultralytics_yolo
+tracker_type: roboflow_bytetrack
+conf_thres: 0.15
 class_filter: [0]
-frame_queue_size: 1
+frame_policy:
+  mode: tracking_safe
+  max_queue_size: 4
+publish_vision_facts: true
+zones_config_path: configs/zones.yaml
 live_media_fps: 15
 live_media_jpeg_quality: 75
 ```
@@ -50,7 +57,7 @@ live_media_jpeg_quality: 75
 
 ## GPU/CPU
 
-The Vision worker uses the tracker/model device selected by Ultralytics and project configuration. On machines with CUDA correctly installed, the model can run on GPU. On CPU, the pipeline still runs but with lower FPS.
+The Vision worker uses the detector device selected by Ultralytics and then runs Roboflow Trackers over `sv.Detections`. On machines with CUDA correctly installed, the model can run on GPU. On CPU, the pipeline still runs but with lower FPS.
 
 ## Failure Handling
 

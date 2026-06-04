@@ -1,0 +1,74 @@
+version: "zones-2026-06-supervision-v1"
+
+stores:
+  store_001:
+    cameras:
+      cam_01:
+        resolution:
+          width: 1920
+          height: 1080
+        zones:
+          - zone_id: checkout_queue_01
+            zone_name: Checkout Queue 01
+            zone_type: queue
+            priority: 100
+            trigger_anchor: bottom_center
+            polygon_norm:
+              - [0.34063, 0.16481]
+              - [0.41354, 0.17593]
+              - [0.36563, 0.88889]
+              - [0.23646, 0.86481]
+          - zone_id: checkout_queue_02
+            zone_name: Checkout Queue 02
+            zone_type: queue
+            priority: 90
+            trigger_anchor: bottom_center
+            polygon_norm:
+              - [0.53906, 0.12593]
+              - [0.61719, 0.12222]
+              - [0.73073, 0.85926]
+              - [0.57031, 0.88241]
+          - zone_id: checkout_queue_03
+            zone_name: Checkout Queue 03
+            zone_type: queue
+            priority: 80
+            trigger_anchor: bottom_center
+            polygon_norm:
+              - [0.91563, 0.79722]
+              - [0.75677, 0.08519]
+              - [0.86458, 0.05463]
+              - [0.99635, 0.59630]
+        lines: []
+
+      cam_02:
+        resolution:
+          width: 1280
+          height: 720
+        zones:
+          - zone_id: aisle_01
+            zone_name: Aisle 01
+            zone_type: aisle
+            priority: 70
+            trigger_anchor: bottom_center
+            polygon_norm:
+              - [0.08, 0.32]
+              - [0.42, 0.30]
+              - [0.48, 0.92]
+              - [0.04, 0.94]
+          - zone_id: promo_area_02
+            zone_name: Promotion Area 02
+            zone_type: dwell
+            priority: 50
+            trigger_anchor: bottom_center
+            polygon_norm:
+              - [0.50, 0.35]
+              - [0.90, 0.34]
+              - [0.94, 0.88]
+              - [0.46, 0.90]
+        lines:
+          - line_id: aisle_crossing_01
+            line_name: Aisle Crossing 01
+            line_type: aisle_transition
+            start_norm: [0.45, 0.50]
+            end_norm: [0.90, 0.50]
+            direction_in: left_to_right

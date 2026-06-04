@@ -48,6 +48,11 @@ class Runtime(BaseModel):
     tracker_type: str
     conf_thres: float | None = None
     class_filter: list[int] | None = None
+    detector_type: str | None = None
+    supervision_version: str | None = None
+    trackers_version: str | None = None
+    zone_config_version: str | None = None
+    track_id_semantics: str | None = None
 
 
 class DetectionObject(BaseModel):
@@ -64,21 +69,33 @@ class DetectionObject(BaseModel):
     measurement_source: str | None = None
     missed_frames: int | None = None
     is_predicted: bool | None = None
+    raw_track_id: int | None = None
+    global_track_id: str | None = None
+    anchor: dict[str, Any] | None = None
+    zones: list[dict[str, Any]] | None = None
+    queue: dict[str, Any] | None = None
+    quality: dict[str, Any] | None = None
 
     model_config = {"populate_by_name": True}
 
 
 class DetectionFrameEvent(BaseModel):
     schema_version: str = "1.0"
+    event_type: str | None = None
     pipeline_run_id: str
     source: Source
     frame_index: int
+    source_frame_index: int | None = None
     capture_ts: str
+    ingest_ts: str | None = None
     event_id: str = Field(default="")
     image_size: ImageSize
     detections: list[DetectionObject]
     runtime: Runtime | None = None
     source_uri: str | None = None
+    frame_metrics: dict[str, Any] | None = None
+    zone_counts: list[dict[str, Any]] | None = None
+    line_crossings: list[dict[str, Any]] | None = None
 
     @model_validator(mode="after")
     def generate_event_id(self):

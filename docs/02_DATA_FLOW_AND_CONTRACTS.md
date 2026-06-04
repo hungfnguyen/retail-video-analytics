@@ -37,16 +37,26 @@ Vision publishes JSON events with this shape:
       "class_id": 0,
       "conf": 0.86,
       "track_id": 42,
+      "raw_track_id": 18,
+      "global_track_id": "cam_01_g_000042",
       "bbox": {"x1": 100, "y1": 120, "x2": 220, "y2": 420},
       "bbox_norm": {"x": 0.078, "y": 0.166, "w": 0.093, "h": 0.416},
       "centroid": {"x": 160, "y": 270},
-      "centroid_norm": {"x": 0.125, "y": 0.375}
+      "centroid_norm": {"x": 0.125, "y": 0.375},
+      "anchor": {"type": "bottom_center", "x": 160, "y": 420, "x_norm": 0.125, "y_norm": 0.583},
+      "zones": [{"zone_id": "checkout_queue_01", "zone_type": "queue", "is_primary": true}],
+      "queue": {"in_queue": true, "queue_zone_id": "checkout_queue_01"}
     }
   ],
   "runtime": {
     "model_name": "yolo11l.pt",
-    "tracker_type": "botsort"
-  }
+    "detector_type": "ultralytics_yolo",
+    "tracker_type": "roboflow_bytetrack",
+    "supervision_version": "0.28.0",
+    "trackers_version": "2.4.0"
+  },
+  "zone_counts": [{"zone_id": "checkout_queue_01", "zone_type": "queue", "count": 1}],
+  "line_crossings": []
 }
 ```
 
@@ -59,7 +69,9 @@ Vision publishes JSON events with this shape:
 | `source.camera_id` | Camera scope for ordering and serving |
 | `source.store_id` | Store grouping key |
 | `frame_index` | Frame number within the Vision run |
-| `track_id` | Tracker-generated identity scoped to a camera/run |
+| `track_id` | Application-stabilized integer identity scoped to a camera/run |
+| `raw_track_id` | Native ID emitted by Roboflow Trackers |
+| `global_track_id` | Stable string identity used by realtime/lakehouse business metrics |
 
 ## Storage Contracts
 
@@ -69,15 +81,17 @@ Vision publishes JSON events with this shape:
 stats:count:{camera_id}                 current person count, short TTL
 live:frame:{camera_id}                  latest parsed frame metadata, short TTL
 heatmap:live:{camera_id}                sorted set of grid cells
-track:active:{camera_id}:{track_id}     hash with bbox/grid/last_seen/confidence
+track:active:{camera_id}:{global_track_id} hash with bbox/grid/last_seen/confidence/zone
 ```
 
 ### Iceberg
 
 ```text
 lakehouse.rva.bronze_raw
-lakehouse.rva.silver_detections
-lakehouse.rva.gold_track_summary
+lakehouse.rva.silver_detections          legacy-compatible detection rows
+lakehouse.rva.silver_detections_v2       Supervision/global-id/zone detection rows
+lakehouse.rva.gold_track_summary         legacy-compatible track summary
+lakehouse.rva.gold_track_summary_v2      global_track_id-based track summary
 ```
 
 ### AWS S3 Media

@@ -78,7 +78,7 @@ sequenceDiagram
   },
   "runtime": {
     "model_name": "yolo11n.pt",
-    "tracker_type": "botsort"
+    "tracker_type": "roboflow_bytetrack"
   },
   "detections": [
     {

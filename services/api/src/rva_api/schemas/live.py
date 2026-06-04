@@ -1,6 +1,6 @@
 from typing import Literal
 
-from pydantic import BaseModel
+from pydantic import BaseModel, Field
 
 
 class Store(BaseModel):
@@ -30,6 +30,24 @@ class Detection(BaseModel):
     label: Literal["person"]
     confidence: float
     bbox_norm: BboxNorm
+    global_track_id: str | None = None
+
+
+class ZoneCount(BaseModel):
+    zone_id: str
+    zone_name: str | None = None
+    zone_type: str
+    count: int
+    track_ids: list[int] = Field(default_factory=list)
+    global_track_ids: list[str] = Field(default_factory=list)
+
+
+class LineCrossing(BaseModel):
+    line_id: str
+    line_type: str
+    direction: str
+    track_id: int | None = None
+    global_track_id: str | None = None
 
 
 class HeatmapPoint(BaseModel):
@@ -66,6 +84,8 @@ class LiveFrame(BaseModel):
     reader_drop_count: int
     detections: list[Detection]
     heatmap_points: list[HeatmapPoint]
+    zone_counts: list[ZoneCount] = []
+    line_crossings: list[LineCrossing] = []
 
 
 class LiveStats(BaseModel):

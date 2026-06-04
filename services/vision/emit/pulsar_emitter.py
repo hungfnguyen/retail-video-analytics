@@ -140,7 +140,14 @@ class PulsarEmitter:
         image_size: Dict[str, int],
         detections: List[Dict[str, Any]],
         runtime: Optional[Dict[str, Any]] = None,
-        source_uri: Optional[str] = None
+        source_uri: Optional[str] = None,
+        schema_version: str = "1.0",
+        event_type: Optional[str] = None,
+        source_frame_index: Optional[int] = None,
+        ingest_ts: Optional[str] = None,
+        frame_metrics: Optional[Dict[str, Any]] = None,
+        zone_counts: Optional[List[Dict[str, Any]]] = None,
+        line_crossings: Optional[List[Dict[str, Any]]] = None,
     ) -> bool:
         """
         Gửi frame metadata lên Pulsar topic.
@@ -160,15 +167,22 @@ class PulsarEmitter:
         """
         try:
             event = DetectionFrameEvent(
+                schema_version=schema_version,
+                event_type=event_type,
                 pipeline_run_id=pipeline_run_id,
                 source=source,
                 frame_index=frame_index,
+                source_frame_index=source_frame_index,
                 capture_ts=capture_ts_iso or self._now_iso(),
+                ingest_ts=ingest_ts,
                 event_id=event_id or "",
                 image_size=image_size,
                 detections=detections,
                 runtime=runtime,
                 source_uri=source_uri,
+                frame_metrics=frame_metrics,
+                zone_counts=zone_counts,
+                line_crossings=line_crossings,
             )
             payload = event.to_pulsar_payload()
 

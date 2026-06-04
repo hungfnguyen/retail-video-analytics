@@ -28,6 +28,7 @@ class TrackMemoryConfig:
 class TrackState:
     canonical_id: int
     detector_ids: set[int] = field(default_factory=set)
+    raw_track_id: int | None = None
     bbox: BBox = field(default_factory=list)
     velocity: BBox = field(default_factory=lambda: [0.0, 0.0, 0.0, 0.0])
     cls: int = 0
@@ -156,6 +157,7 @@ class TrackMemory:
             state.velocity = [0.0, 0.0, 0.0, 0.0]
 
         state.detector_ids.add(detector_id)
+        state.raw_track_id = detector_id
         state.cls = int(obj.get("cls", 0))
         state.label = str(obj.get("label", "person"))
         state.conf = float(obj.get("conf", 0.0))
@@ -196,6 +198,7 @@ class TrackMemory:
 
         return {
             "id": state.canonical_id,
+            "raw_track_id": state.raw_track_id,
             "bbox": [float(v) for v in state.bbox],
             "cls": state.cls,
             "label": state.label,
@@ -265,6 +268,7 @@ class TrackMemory:
         frame_index: int,
     ) -> dict[str, Any]:
         result = dict(obj)
+        result.setdefault("raw_track_id", result.get("id"))
         result.setdefault("track_state", "matched")
         result.setdefault("measurement_source", "full_body")
         result.setdefault("missed_frames", 0)
