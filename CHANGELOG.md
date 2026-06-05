@@ -2,6 +2,10 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2026-06-05
+
+- **2026-06-05: Add Live recent alerts, camera overview, and alert history storage at frontend/src/features/live, services/api/src/rva_api/api/v1/live*.py, services/flink-jobs/java/src/main/java/org/rva/realtime/RealtimeMetricsJob.java, and services/flink-jobs/java/src/main/java/org/rva/gold/GoldDashboardAggregateJob.java - Live reads recent Redis alerts, RealtimeMetricsJob writes density alerts with cooldown, Gold stores density alert history, and the Live page keeps a selected primary camera with lightweight camera overview and richer alert details (completed).**
+
 ## 2026-06-03
 
 - **2026-06-03: Add Gold dashboard aggregate tables and Analytics API reads at services/flink-jobs/java/src/main/java/org/rva/gold/GoldDashboardAggregateJob.java, infrastructure/flink/scripts/submit-jobs.sh, services/api/src/rva_api/api/v1/analytics*.py, frontend/src/features/analytics - Added hourly, daily, and dwell Gold aggregate tables, submitted the new Flink job, switched dashboard queries away from Silver/track-level scans, and surfaced unique tracks, active-day rate, confidence, and real daily dwell fields (completed).**

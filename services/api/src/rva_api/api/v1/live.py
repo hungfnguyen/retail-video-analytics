@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 
 from core.settings import load_yaml_config
+from rva_api.api.v1.live_alerts import read_recent_alerts
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
 
@@ -626,7 +627,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "status": status,
             "updated_at": count_updated_at or now.isoformat(),
         },
-        "alerts": [],
+        "alerts": read_recent_alerts(client, camera_id, store["store_id"]),
         "traffic": _empty_traffic(),
         "traffic_summary": {
             "total_in": 0,

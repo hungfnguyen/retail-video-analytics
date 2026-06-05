@@ -18,7 +18,7 @@ def _query_timeout() -> float:
 
 
 def _max_query_wait() -> float:
-    return float(os.getenv("TRINO_QUERY_MAX_WAIT_SEC", "20"))
+    return float(os.getenv("TRINO_QUERY_MAX_WAIT_SEC", "60"))
 
 
 def _headers() -> dict[str, str]:

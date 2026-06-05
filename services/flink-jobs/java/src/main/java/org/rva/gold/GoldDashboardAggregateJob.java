@@ -49,11 +49,13 @@ public class GoldDashboardAggregateJob {
         tEnv.executeSql(createHourlyMetricsSql());
         tEnv.executeSql(createDailyMetricsSql());
         tEnv.executeSql(createDailyDwellSql());
+        tEnv.executeSql(createAlertEventsSql());
 
         StatementSet statements = tEnv.createStatementSet();
         statements.addInsertSql(insertHourlyMetricsSql());
         statements.addInsertSql(insertDailyMetricsSql());
         statements.addInsertSql(insertDailyDwellSql());
+        statements.addInsertSql(insertAlertEventsSql());
         statements.execute();
     }
 
@@ -116,6 +118,29 @@ public class GoldDashboardAggregateJob {
                 ")");
     }
 
+    private static String createAlertEventsSql() {
+        return String.join("\n",
+                "CREATE TABLE IF NOT EXISTS rva.gold_alert_events (",
+                "  alert_id       STRING,",
+                "  store_id       STRING,",
+                "  camera_id      STRING,",
+                "  alert_type     STRING,",
+                "  severity       STRING,",
+                "  event_ts       TIMESTAMP(3),",
+                "  event_date     DATE,",
+                "  trigger_value  INT,",
+                "  threshold      INT,",
+                "  status         STRING,",
+                "  clip_s3_uri    STRING,",
+                "  PRIMARY KEY (alert_id) NOT ENFORCED",
+                ") WITH (",
+                "  'format-version' = '2',",
+                "  'write.format.default' = 'parquet',",
+                "  'partitioning' = 'store_id,bucket(16, camera_id),days(event_date)',",
+                "  'write.upsert.enabled' = 'true'",
+                ")");
+    }
+
     private static String insertHourlyMetricsSql() {
         return String.join("\n",
                 "INSERT INTO rva.gold_camera_hourly_metrics",
@@ -173,6 +198,40 @@ public class GoldDashboardAggregateJob {
                 "  AND visit_date IS NOT NULL",
                 "  AND duration_sec >= 0",
                 "GROUP BY store_id, camera_id, visit_date");
+    }
+
+    private static String insertAlertEventsSql() {
+        String threshold = getenv("ALERT_DENSITY_THRESHOLD", "10");
+        return String.join("\n",
+                "INSERT INTO rva.gold_alert_events",
+                "SELECT",
+                "  CONCAT(camera_id, '_', CAST(frame_index AS STRING), '_density_high') AS alert_id,",
+                "  store_id,",
+                "  camera_id,",
+                "  'density_high' AS alert_type,",
+                "  'high' AS severity,",
+                "  capture_ts AS event_ts,",
+                "  CAST(capture_ts AS DATE) AS event_date,",
+                "  person_count AS trigger_value,",
+                "  " + threshold + " AS threshold,",
+                "  'new' AS status,",
+                "  CAST(NULL AS STRING) AS clip_s3_uri",
+                "FROM (",
+                "  SELECT",
+                "    store_id,",
+                "    camera_id,",
+                "    frame_index,",
+                "    capture_ts,",
+                "    CAST(COUNT(*) AS INT) AS person_count",
+                "  FROM rva.silver_detections /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s') */",
+                "  WHERE store_id IS NOT NULL",
+                "    AND camera_id IS NOT NULL",
+                "    AND frame_index IS NOT NULL",
+                "    AND capture_ts IS NOT NULL",
+                "    AND class_id = 0",
+                "  GROUP BY store_id, camera_id, frame_index, capture_ts",
+                ")",
+                "WHERE person_count > " + threshold);
     }
 
     private static String getenv(String k, String def) {

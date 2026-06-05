@@ -33,8 +33,16 @@ FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media en
 - media FPS and media latency;
 - metadata freshness;
 - heatmap points and zone heatmap;
-- empty arrays for alerts/traffic until those features are backed by real endpoints;
+- recent alerts from Redis keys `alerts:recent:{camera_id}` and `alerts:recent:store:{store_id}`;
+- empty traffic arrays until traffic direction events are backed by real endpoints;
 - simple pipeline health for Redis/FastAPI.
+
+Realtime density alerts are written by `RealtimeMetricsJob` when the per-frame
+people count exceeds `ALERT_DENSITY_THRESHOLD`. Redis keeps only recent alert
+state with TTL and cooldown; historical alert events are written to
+`rva.gold_alert_events` for audit and analytics. Video clips stay outside Redis
+and are linked through optional `clip_s3_uri` metadata when clip extraction is
+enabled.
 
 ## Media Serving
 
@@ -63,5 +71,5 @@ VITE_LIVE_VIDEO_TRANSPORT=mjpeg
 - Add narrower analytics endpoints for drill-down and exports.
 - Add historical heatmap and minute-level Gold tables when those panels return to the main dashboard.
 - Add system health endpoints for Pulsar, Flink, Trino, S3, Redis, and API.
-- Replace placeholder traffic/alerts with real data contracts.
+- Replace placeholder traffic with real entry/exit data contracts.
 - Add cache and query limits for analytical endpoints.

@@ -22,8 +22,8 @@ Implemented now:
 - Multi-camera Vision worker from `configs/cameras.yaml`.
 - Detection and tracking with YOLO11 + BoTSORT/ByteTrack.
 - Pulsar metadata ingestion.
-- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`, and dashboard Gold aggregate tables.
-- Flink realtime path: Redis count, active tracks, heatmap, latest frame snapshot, DLQ.
+- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`, dashboard Gold aggregate tables, and `gold_alert_events`.
+- Flink realtime path: Redis count, active tracks, heatmap, latest frame snapshot, recent alerts, DLQ.
 - AWS S3 storage for Iceberg tables and optional sampled frames/clips.
 - Trino SQL query over Iceberg.
 - FastAPI live dashboard and media serving endpoints.
@@ -58,7 +58,7 @@ Pulsar events
 
 bronze_raw -> SilverJob -> lakehouse.rva.silver_detections
 silver_detections -> GoldTrackSummaryJob -> lakehouse.rva.gold_track_summary
-silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables
+silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables + alert history
 
 Trino queries compact Gold aggregate tables for the Analytics dashboard.
 FastAPI reads Redis/live frames/Trino-facing data and serves the React frontend.
@@ -161,6 +161,7 @@ Redis realtime state:
 docker exec redis redis-cli GET stats:count:cam_01
 docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
 docker exec redis redis-cli KEYS 'track:active:cam_01:*'
+docker exec redis redis-cli LRANGE alerts:recent:cam_01 0 5
 ```
 
 Iceberg tables through Trino:
@@ -173,6 +174,7 @@ docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_hourly_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_dwell"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_alert_events"
 ```
 
 AWS S3 layout:

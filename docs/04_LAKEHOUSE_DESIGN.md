@@ -27,6 +27,7 @@ lakehouse.rva.gold_track_summary
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
+lakehouse.rva.gold_alert_events
 ```
 
 ## Bronze: `bronze_raw`
@@ -144,9 +145,24 @@ Daily camera dwell metrics from `gold_track_summary`:
 
 Primary key: `(store_id, camera_id, metric_date)` not enforced.
 
+### `gold_alert_events`
+
+Historical alert events derived from compact Silver frame counts:
+
+| Column | Notes |
+|---|---|
+| `alert_id` | Stable alert id matching the clip alert id pattern |
+| `store_id`, `camera_id` | Query dimensions |
+| `alert_type`, `severity`, `status` | Alert classification and workflow state |
+| `event_ts`, `event_date` | Alert trigger time and date partition helper |
+| `trigger_value`, `threshold` | Count and threshold that triggered the alert |
+| `clip_s3_uri` | Optional video evidence link when clip extraction is enabled |
+
+Primary key: `alert_id` not enforced.
+
 ## Current Analytical Limits
 
-The current Gold layer now includes dashboard aggregates for hourly traffic, daily camera metrics, and daily dwell metrics. It still does not include minute traffic, historical zone heatmap, alert history, or export-specific drill-down tables.
+The current Gold layer now includes dashboard aggregates for hourly traffic, daily camera metrics, daily dwell metrics, and density alert history. It still does not include minute traffic, historical zone heatmap, or export-specific drill-down tables.
 
 ## Query Examples
 

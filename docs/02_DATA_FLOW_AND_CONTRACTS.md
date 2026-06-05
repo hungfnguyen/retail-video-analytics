@@ -70,6 +70,9 @@ stats:count:{camera_id}                 current person count, short TTL
 live:frame:{camera_id}                  latest parsed frame metadata, short TTL
 heatmap:live:{camera_id}                sorted set of grid cells
 track:active:{camera_id}:{track_id}     hash with bbox/grid/last_seen/confidence
+alerts:recent:{camera_id}               recent alert JSON list for one camera
+alerts:recent:store:{store_id}          recent alert JSON list for one store
+alerts:cooldown:{camera_id}:{alert_type} short TTL key to prevent alert spam
 ```
 
 ### Iceberg
@@ -78,7 +81,14 @@ track:active:{camera_id}:{track_id}     hash with bbox/grid/last_seen/confidence
 lakehouse.rva.bronze_raw
 lakehouse.rva.silver_detections
 lakehouse.rva.gold_track_summary
+lakehouse.rva.gold_camera_hourly_metrics
+lakehouse.rva.gold_camera_daily_metrics
+lakehouse.rva.gold_camera_daily_dwell
+lakehouse.rva.gold_alert_events
 ```
+
+`gold_alert_events` stores alert metadata only. Video evidence remains in S3 and
+is linked through `clip_s3_uri` when clip extraction is enabled.
 
 ### AWS S3 Media
 

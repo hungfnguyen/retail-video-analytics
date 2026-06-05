@@ -54,6 +54,7 @@ lakehouse.rva.gold_track_summary
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
+lakehouse.rva.gold_alert_events
 ```
 
 ## Implemented Realtime Redis Keys
@@ -63,4 +64,7 @@ stats:count:{camera_id}
 live:frame:{camera_id}
 heatmap:live:{camera_id}
 track:active:{camera_id}:{track_id}
+alerts:recent:{camera_id}
+alerts:recent:store:{store_id}
+alerts:cooldown:{camera_id}:{alert_type}
 ```

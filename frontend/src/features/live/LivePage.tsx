@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Video } from 'lucide-react'
 import { useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
 import { AlertList } from './components/AlertList'
@@ -28,6 +28,12 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
 
   const selectedCamera = data.cameras.find(
     (camera) => camera.camera_id === data.selected_camera_id,
+  )
+  const highAlertCameraIds = new Set(
+    data.alerts.filter((alert) => alert.severity === 'high').map((alert) => alert.camera_id),
+  )
+  const activeAlertCameraIds = new Set(
+    data.alerts.filter((alert) => alert.status === 'new').map((alert) => alert.camera_id),
   )
   const statusBadge = selectedCamera?.status === 'online'
     ? { label: 'Running', className: 'border-emerald-200 bg-emerald-50 text-emerald-700' }
@@ -93,6 +99,57 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
       {/* Primary live monitoring area */}
       <div className="grid gap-5">
         <LiveMetricCards stats={data.stats} />
+
+        <section className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3" aria-label="Camera overview">
+          {data.cameras.map((camera) => {
+            const isSelected = camera.camera_id === data.selected_camera_id
+            const hasHighAlert = highAlertCameraIds.has(camera.camera_id)
+            const hasActiveAlert = activeAlertCameraIds.has(camera.camera_id)
+
+            return (
+              <button
+                className={`min-h-24 rounded-lg border bg-white p-3 text-left shadow-sm transition hover:border-blue-300 ${
+                  isSelected ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'
+                }`}
+                key={camera.camera_id}
+                onClick={() => switchCamera(camera.camera_id)}
+                type="button"
+              >
+                <div className="flex items-start justify-between gap-3">
+                  <span className="flex min-w-0 items-center gap-2">
+                    <Video className="shrink-0 text-slate-500" size={16} />
+                    <span className="truncate font-bold text-slate-950">
+                      {camera.name ?? camera.camera_id}
+                    </span>
+                  </span>
+
+                  <span
+                    className={`h-2.5 w-2.5 shrink-0 rounded-full ${
+                      camera.status === 'online' ? 'bg-emerald-500' : 'bg-amber-500'
+                    }`}
+                    title={camera.status}
+                  />
+                </div>
+
+                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
+                  <span>{camera.zone}</span>
+                  {isSelected && <span>{data.stats.current_count} people</span>}
+                  {hasActiveAlert && (
+                    <span
+                      className={`inline-flex items-center gap-1 rounded-full px-2 py-1 font-bold ${
+                        hasHighAlert ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
+                      }`}
+                    >
+                      <AlertTriangle size={12} />
+                      Alert
+                    </span>
+                  )}
+                </div>
+              </button>
+            )
+          })}
+        </section>
+
         <VideoPanel frame={data.frame} />
       </div>
 

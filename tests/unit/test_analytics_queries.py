@@ -8,7 +8,7 @@ def test_trino_query_timeout_defaults(monkeypatch):
     monkeypatch.delenv("TRINO_QUERY_MAX_WAIT_SEC", raising=False)
 
     assert analytics_queries._query_timeout() == 5
-    assert analytics_queries._max_query_wait() == 20
+    assert analytics_queries._max_query_wait() == 60
 
 
 def test_dashboard_queries_filter_by_metric_date():
