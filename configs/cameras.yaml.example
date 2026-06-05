@@ -20,16 +20,37 @@ cameras:
 
 settings:
   model_name: yolo11l.pt
-  tracker_type: botsort
-  conf_thres: 0.25
+  detector_type: ultralytics_yolo
+  detector_iou: 0.70
+  detector_imgsz: 1280
+  detector_half: true
+  tracker_type: roboflow_bytetrack
+  conf_thres: 0.15
   class_filter: [0]
-  frame_queue_size: 1
+  event_schema_version: "1.0"
+  publish_vision_facts: true
+
+  frame_policy:
+    mode: tracking_safe
+    max_queue_size: 4
+    allow_drop: true
+    max_consecutive_drops: 3
+  frame_queue_size: 4
+
+  track_activation_threshold: 0.20
+  lost_track_buffer: 60
+  minimum_consecutive_frames: 2
+  minimum_iou_threshold: 0.20
+  high_conf_det_threshold: 0.50
+  track_smoothing_enabled: true
+  track_smoothing_length: 5
+  zones_config_path: configs/zones.yaml
 
   # Short-term track memory bridges brief retail occlusions so live count and
   # overlays do not flicker when a shopper is hidden for a few frames.
   track_memory_enabled: true
-  track_lost_ttl_ms: 1000
-  track_lost_ttl_frames: 15
+  track_lost_ttl_ms: 2000
+  track_lost_ttl_frames: 30
   track_min_hits: 1
   track_smooth_alpha: 0.65
   track_publish_predicted: true

@@ -51,6 +51,37 @@ class TestDetectionFrameEvent:
         payload = event.to_pulsar_payload()
         assert b'"track_id":7' in payload
 
+    def test_event_preserves_optional_rebuilt_vision_fields(self):
+        event = DetectionFrameEvent(
+            pipeline_run_id="run_vision_v2",
+            source=Source(store_id="s1", camera_id="c1", stream_id="c1_stream"),
+            frame_index=1,
+            capture_ts="2026-06-03T10:30:00Z",
+            image_size=ImageSize(width=1280, height=720),
+            detections=[
+                {
+                    "det_id": "1-0",
+                    "class": "person",
+                    "class_id": 0,
+                    "conf": 0.9,
+                    "bbox": {"x1": 10, "y1": 20, "x2": 50, "y2": 100},
+                    "bbox_norm": {"x": 0.01, "y": 0.02, "w": 0.03, "h": 0.11},
+                    "centroid": {"x": 30, "y": 60},
+                    "centroid_norm": {"x": 0.02, "y": 0.08},
+                    "track_id": 7,
+                    "raw_track_id": 99,
+                    "global_track_id": "c1_g_000007",
+                    "anchor": {"type": "bottom_center", "x": 30, "y": 100},
+                }
+            ],
+            frame_metrics={"people_count": 1},
+            zone_counts=[{"zone_id": "checkout", "count": 1}],
+        )
+
+        payload = event.to_pulsar_payload()
+        assert b'"global_track_id":"c1_g_000007"' in payload
+        assert b'"zone_counts"' in payload
+
 
 class TestBBox:
     def test_bbox_validation(self):

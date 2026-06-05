@@ -2,10 +2,23 @@ import queue
 import time
 import logging
 import threading
+from dataclasses import dataclass
 
 import cv2
+import numpy as np
 
 logger = logging.getLogger(__name__)
+
+
+@dataclass(frozen=True)
+class FramePacket:
+    frame: np.ndarray
+    source_frame_index: int
+    read_index: int
+    source_fps: float
+    dropped_before_enqueue: int
+    total_dropped: int
+    monotonic_ts: float
 
 
 class VideoFileReader:
@@ -82,15 +95,27 @@ class VideoFileReader:
                 if due > now:
                     time.sleep(due - now)
 
-            # Drop frame cũ nhất nếu queue đầy
-            if self.queue.full():
+            # Drop frame cũ nhất nếu queue đầy. The packet keeps enough
+            # metadata for the tracker-quality logs to explain ID breaks.
+            dropped_before_enqueue = 0
+            while self.queue.full():
                 try:
                     self.queue.get_nowait()
                     self.drop_count += 1
+                    dropped_before_enqueue += 1
                 except queue.Empty:
-                    pass
+                    break
 
-            self.queue.put(frame)
+            packet = FramePacket(
+                frame=frame,
+                source_frame_index=seq,
+                read_index=self.total_read,
+                source_fps=float(fps),
+                dropped_before_enqueue=dropped_before_enqueue,
+                total_dropped=self.drop_count,
+                monotonic_ts=time.perf_counter(),
+            )
+            self.queue.put(packet)
             self.total_read += 1
             seq += 1
 

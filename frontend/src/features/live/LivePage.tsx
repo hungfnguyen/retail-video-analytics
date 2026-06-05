@@ -6,6 +6,7 @@ import { LiveMetricCards } from './components/LiveMetricCards'
 import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
 import { ZoneHeatmap } from './components/ZoneHeatmap'
+import { ZoneRuntimePanel } from './components/ZoneRuntimePanel'
 import { useLiveData } from './hooks/useLiveData'
 import type { AppPage } from '../../shared/components/AppShell'
 
@@ -153,14 +154,21 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
         <VideoPanel frame={data.frame} />
       </div>
 
+      <div className="mt-5 grid grid-cols-[1.35fr_0.75fr] gap-5">
+        <ZoneRuntimePanel
+          lineCrossings={data.frame.line_crossings}
+          zoneCounts={data.frame.zone_counts}
+        />
+        <AlertList alerts={data.alerts} />
+      </div>
+
       {/* Supporting live analytics */}
-      <div className="mt-5 grid grid-cols-[1.2fr_0.85fr_0.95fr] gap-5">
+      <div className="mt-5 grid grid-cols-[1.25fr_0.85fr] gap-5">
         <TrafficChart
           summary={data.traffic_summary}
           traffic={data.traffic}
         />
         <ZoneHeatmap cells={data.zone_heatmap} />
-        <AlertList alerts={data.alerts} />
       </div>
     </AppShell>
   )
