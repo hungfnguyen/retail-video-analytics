@@ -22,7 +22,7 @@ Implemented now:
 - Multi-camera Vision worker from `configs/cameras.yaml`.
 - Detection and tracking with YOLO11 + BoTSORT/ByteTrack.
 - Pulsar metadata ingestion.
-- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`.
+- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`, and dashboard Gold aggregate tables.
 - Flink realtime path: Redis count, active tracks, heatmap, latest frame snapshot, DLQ.
 - AWS S3 storage for Iceberg tables and optional sampled frames/clips.
 - Trino SQL query over Iceberg.
@@ -58,8 +58,9 @@ Pulsar events
 
 bronze_raw -> SilverJob -> lakehouse.rva.silver_detections
 silver_detections -> GoldTrackSummaryJob -> lakehouse.rva.gold_track_summary
+silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables
 
-Trino queries Iceberg tables.
+Trino queries compact Gold aggregate tables for the Analytics dashboard.
 FastAPI reads Redis/live frames/Trino-facing data and serves the React frontend.
 ```
 
@@ -169,6 +170,9 @@ docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_metrics"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_hourly_metrics"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_dwell"
 ```
 
 AWS S3 layout:

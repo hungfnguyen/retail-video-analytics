@@ -11,7 +11,7 @@ import {
   YAxis,
 } from 'recharts'
 import { Activity, Camera, Clock, TrendingUp, Users } from 'lucide-react'
-import type { AnalyticsDashboardData, AnalyticsKpi, HeatmapCell } from '../types'
+import type { AnalyticsDashboardData, AnalyticsKpi } from '../types'
 
 const toneClasses = {
   blue: {
@@ -45,6 +45,10 @@ function formatDuration(seconds: number) {
   return minutes > 0 ? `${minutes}m ${remaining.toString().padStart(2, '0')}s` : `${remaining}s`
 }
 
+function formatPercent(value: number) {
+  return `${(value * 100).toFixed(1)}%`
+}
+
 function KpiCard({ kpi, index }: { kpi: AnalyticsKpi; index: number }) {
   const Icon = kpiIcons[index] ?? Activity
   const classes = toneClasses[kpi.tone]
@@ -66,56 +70,10 @@ function KpiCard({ kpi, index }: { kpi: AnalyticsKpi; index: number }) {
   )
 }
 
-function heatmapValue(cells: HeatmapCell[], row: number, col: number) {
-  return cells.find((cell) => cell.row === row && cell.col === col)?.value ?? 0
-}
-
-function heatmapColor(value: number, max: number) {
-  if (!value || !max) return 'rgba(226, 232, 240, 0.72)'
-  const intensity = value / max
-  if (intensity > 0.8) return '#ef4444'
-  if (intensity > 0.55) return '#f59e0b'
-  if (intensity > 0.32) return '#22c55e'
-  return '#bfdbfe'
-}
-
-function DensityHeatmap({ cells }: { cells: HeatmapCell[] }) {
-  const max = Math.max(...cells.map((cell) => cell.value), 0)
-  const rows = Array.from({ length: 6 }, (_, index) => index)
-  const cols = Array.from({ length: 8 }, (_, index) => index)
-
-  return (
-    <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_14px_36px_rgba(15,23,42,0.06)]">
-      <div className="mb-3 flex items-center justify-between">
-        <h2 className="m-0 text-[17px] font-bold text-slate-950">Frame density</h2>
-        <span className="rounded-md bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">bbox center</span>
-      </div>
-
-      <div className="grid aspect-[4/3] grid-cols-8 gap-1 rounded-lg bg-slate-950 p-2">
-        {rows.flatMap((row) =>
-          cols.map((col) => {
-            const value = heatmapValue(cells, row, col)
-            return (
-              <span
-                className="grid place-items-center rounded-[5px] text-[11px] font-bold text-slate-950"
-                key={`${row}-${col}`}
-                style={{ backgroundColor: heatmapColor(value, max) }}
-                title={`${formatNumber(value)} detections`}
-              >
-                {value > 0 ? formatNumber(value) : ''}
-              </span>
-            )
-          }),
-        )}
-      </div>
-    </section>
-  )
-}
-
 export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
   return (
     <>
-      <section className="grid grid-cols-4 gap-3">
+      <section className="grid grid-cols-3 gap-3">
         {data.kpis.map((kpi, index) => (
           <KpiCard index={index} key={kpi.label} kpi={kpi} />
         ))}
@@ -166,38 +124,22 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
         </section>
       </div>
 
-      <div className="mt-3 grid grid-cols-[0.92fr_0.82fr_1.12fr] gap-3">
-        <DensityHeatmap cells={data.heatmap} />
-
+      <div className="mt-3">
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_14px_36px_rgba(15,23,42,0.06)]">
-          <div className="mb-4 flex items-center justify-between">
-            <h2 className="m-0 text-[17px] font-bold text-slate-950">Dwell bands</h2>
-            <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Gold tracks</span>
+          <div className="flex items-center justify-between">
+            <h2 className="m-0 text-[17px] font-bold text-slate-950">Daily summary</h2>
+            <span className="rounded-md bg-emerald-50 px-2.5 py-1 text-xs font-bold text-emerald-700">Gold daily aggregates</span>
           </div>
-
-          <div className="grid gap-3">
-            {data.dwell_bands.map((band) => (
-              <div className="grid grid-cols-[76px_1fr_46px] items-center gap-3 text-sm" key={band.label}>
-                <span className="font-semibold text-slate-600">{band.label}</span>
-                <span className="h-4 rounded-full bg-slate-100">
-                  <span className="block h-4 rounded-full bg-emerald-500" style={{ width: `${Math.min(100, band.value)}%` }} />
-                </span>
-                <span className="text-right font-semibold text-slate-600">{band.value}%</span>
-              </div>
-            ))}
-          </div>
-        </section>
-
-        <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_14px_36px_rgba(15,23,42,0.06)]">
-          <h2 className="m-0 text-[17px] font-bold text-slate-950">Daily summary</h2>
 
           <table className="mt-4 w-full border-collapse text-sm">
             <thead>
               <tr className="border border-slate-200 bg-slate-50 text-slate-600">
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-right">Detections</th>
+                <th className="px-3 py-2 text-right">Tracks</th>
                 <th className="px-3 py-2 text-right">Peak</th>
                 <th className="px-3 py-2 text-right">Avg dwell</th>
+                <th className="px-3 py-2 text-right">Avg conf</th>
               </tr>
             </thead>
             <tbody>
@@ -205,8 +147,10 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
                 <tr className="border border-slate-200" key={row.date}>
                   <td className="px-3 py-2 font-semibold text-blue-700">{row.date}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.detections)}</td>
+                  <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.unique_tracks)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{row.peak}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatDuration(row.avg_dwell_sec)}</td>
+                  <td className="px-3 py-2 text-right text-slate-700">{formatPercent(row.avg_confidence)}</td>
                 </tr>
               ))}
             </tbody>

@@ -24,6 +24,9 @@ lakehouse.rva
 lakehouse.rva.bronze_raw
 lakehouse.rva.silver_detections
 lakehouse.rva.gold_track_summary
+lakehouse.rva.gold_camera_hourly_metrics
+lakehouse.rva.gold_camera_daily_metrics
+lakehouse.rva.gold_camera_daily_dwell
 ```
 
 ## Bronze: `bronze_raw`
@@ -92,9 +95,58 @@ Primary key: `(store_id, camera_id, pipeline_run_id, track_id)` not enforced.
 
 The table is configured with Iceberg format v2 and upsert enabled.
 
+## Gold: Dashboard aggregate tables
+
+Purpose: pre-aggregate dashboard metrics so FastAPI can query compact Gold tables instead of scanning Silver and track-level Gold tables on every Analytics page load.
+
+### `gold_camera_hourly_metrics`
+
+Hourly traffic metrics by store, camera, date, and hour:
+
+| Column | Notes |
+|---|---|
+| `store_id`, `camera_id` | Query dimensions |
+| `metric_date` | Date partition helper |
+| `hour_of_day` | 0-23 local table hour |
+| `detections` | Detection rows counted from Silver |
+| `unique_tracks` | Distinct camera-scoped tracks in that hour |
+| `avg_conf` | Average detection confidence |
+
+Primary key: `(store_id, camera_id, metric_date, hour_of_day)` not enforced.
+
+### `gold_camera_daily_metrics`
+
+Daily camera quality and traffic metrics:
+
+| Column | Notes |
+|---|---|
+| `store_id`, `camera_id` | Query dimensions |
+| `metric_date` | Date partition helper |
+| `detections` | Daily detection rows counted from Silver |
+| `unique_tracks` | Distinct camera-scoped tracks |
+| `avg_conf` | Weighted by Silver detections in downstream dashboard queries |
+| `first_seen_ts`, `last_seen_ts` | Data coverage timestamps |
+
+Primary key: `(store_id, camera_id, metric_date)` not enforced.
+
+### `gold_camera_daily_dwell`
+
+Daily camera dwell metrics from `gold_track_summary`:
+
+| Column | Notes |
+|---|---|
+| `store_id`, `camera_id` | Query dimensions |
+| `metric_date` | Date partition helper |
+| `track_count` | Track rows in Gold |
+| `avg_dwell_sec`, `total_dwell_sec` | Dwell duration metrics |
+| `short_dwell_tracks` | Tracks shorter than 30 seconds |
+| `long_dwell_tracks` | Tracks at least 120 seconds |
+
+Primary key: `(store_id, camera_id, metric_date)` not enforced.
+
 ## Current Analytical Limits
 
-The current Gold layer is track-summary focused. It does not yet include minute traffic, hourly heatmap, or daily KPI tables. Those should be added as explicit future tables when analytics requirements are implemented.
+The current Gold layer now includes dashboard aggregates for hourly traffic, daily camera metrics, and daily dwell metrics. It still does not include minute traffic, historical zone heatmap, alert history, or export-specific drill-down tables.
 
 ## Query Examples
 

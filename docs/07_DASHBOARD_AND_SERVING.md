@@ -7,7 +7,7 @@ Redis live state ----\
                      FastAPI -> React frontend
 Latest JPEG files ---/
 
-Iceberg tables -> Trino -> future analytics API endpoints -> React analytics page
+Gold aggregate Iceberg tables -> Trino -> FastAPI analytics endpoint -> React analytics page
 ```
 
 FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media endpoints.
@@ -18,7 +18,7 @@ FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media en
 |---|---|
 | `GET /health` | API health |
 | `GET /api/v1/live/{camera_id}/dashboard` | Live dashboard data from Redis and live media metadata |
-| `GET /api/v1/analytics/dashboard` | Historical analytics from Trino over Iceberg Silver/Gold tables |
+| `GET /api/v1/analytics/dashboard` | Historical analytics from Trino over compact Gold aggregate tables |
 | `GET /media/live/{camera_id}/snapshot.jpg` | Latest JPEG snapshot |
 | `GET /media/live/{camera_id}/stream` | MJPEG fallback stream |
 | `POST /media/live/{camera_id}/webrtc/offer` | WebRTC offer/answer endpoint |
@@ -55,12 +55,13 @@ VITE_LIVE_VIDEO_TRANSPORT=mjpeg
 | Page | Status |
 |---|---|
 | Live | Connected to FastAPI realtime endpoint and media stream |
-| Analytics | Connected to FastAPI analytics endpoint backed by Trino |
+| Analytics | Connected to FastAPI analytics endpoint backed by Trino and Gold aggregate tables |
 | System | UI exists; service cards partially use live API; deeper system metrics are pending |
 
 ## Next Serving Work
 
 - Add narrower analytics endpoints for drill-down and exports.
+- Add historical heatmap and minute-level Gold tables when those panels return to the main dashboard.
 - Add system health endpoints for Pulsar, Flink, Trino, S3, Redis, and API.
 - Replace placeholder traffic/alerts with real data contracts.
 - Add cache and query limits for analytical endpoints.

@@ -2,6 +2,10 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2026-06-03
+
+- **2026-06-03: Add Gold dashboard aggregate tables and Analytics API reads at services/flink-jobs/java/src/main/java/org/rva/gold/GoldDashboardAggregateJob.java, infrastructure/flink/scripts/submit-jobs.sh, services/api/src/rva_api/api/v1/analytics*.py, frontend/src/features/analytics - Added hourly, daily, and dwell Gold aggregate tables, submitted the new Flink job, switched dashboard queries away from Silver/track-level scans, and surfaced unique tracks, active-day rate, confidence, and real daily dwell fields (completed).**
+
 ## 2026-01-02
 
 - **2026-01-02: Fix critical security vulnerabilities (issues #1, #4, #5) - Remove .env files (root và vision/) khỏi Git tracking, tạo .env.example templates đầy đủ, add .env và *.pt vào .gitignore. Move note.txt thành docs/cli-examples.md. Ngăn chặn rủi ro lộ credentials khi push lên public repo (completed)**
