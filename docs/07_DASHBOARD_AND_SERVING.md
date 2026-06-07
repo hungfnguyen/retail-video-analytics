@@ -32,7 +32,7 @@ FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media en
 - current count and active track count;
 - media FPS and media latency;
 - metadata freshness;
-- heatmap points and zone heatmap;
+- heatmap points, zone heatmap, zone occupancy, and queue-zone wait summaries;
 - recent alerts from Redis keys `alerts:recent:{camera_id}` and `alerts:recent:store:{store_id}`;
 - empty traffic arrays until traffic direction events are backed by real endpoints;
 - simple pipeline health for Redis/FastAPI.

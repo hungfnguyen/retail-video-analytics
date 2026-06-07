@@ -31,6 +31,16 @@ class FakeRedis:
                     "grid_y": 36,
                 }
             ],
+            "zone_counts": [
+                {
+                    "zone_id": "checkout_queue_01",
+                    "zone_name": "Checkout Queue 01",
+                    "zone_type": "queue",
+                    "count": 1,
+                    "track_ids": [42],
+                    "global_track_ids": ["cam_01_g_000042"],
+                }
+            ],
         }
         self.values = {
             "live:frame:cam_01": json.dumps(frame),
@@ -96,6 +106,15 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
             "publish_interval_ms": 80,
             "reader_queue_size": 1,
             "reader_drop_count": 7,
+            "zone_counts": [
+                {
+                    "zone_id": "checkout_queue_01",
+                    "zone_type": "queue",
+                    "count": 1,
+                    "avg_wait_seconds": 12.5,
+                    "max_wait_seconds": 18,
+                }
+            ],
         },
     )
 
@@ -123,6 +142,9 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.jpeg_size_bytes == 123456
     assert data.frame.reader_queue_size == 1
     assert data.frame.reader_drop_count == 7
+    assert data.frame.zone_counts[0].zone_id == "checkout_queue_01"
+    assert data.frame.zone_counts[0].avg_wait_seconds == 12.5
+    assert data.frame.zone_counts[0].max_wait_seconds == 18
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0

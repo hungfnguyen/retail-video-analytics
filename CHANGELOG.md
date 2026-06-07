@@ -2,6 +2,10 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2026-06-07
+
+- **2026-06-07: Add queue wait summaries and focus the Live UI on operational metrics at services/vision/worker.py, services/api/src/rva_api/api/v1/live.py, services/api/src/rva_api/schemas/live.py, and frontend/src/features/live - Vision now publishes per-queue average and maximum wait seconds, FastAPI preserves the fields in the Live dashboard contract, and the Live page prioritizes count, queue, wait, alert, zone, and density views while removing main-screen health/debug metrics (completed).**
+
 ## 2026-06-05
 
 - **2026-06-05: Add Live recent alerts, camera overview, and alert history storage at frontend/src/features/live, services/api/src/rva_api/api/v1/live*.py, services/flink-jobs/java/src/main/java/org/rva/realtime/RealtimeMetricsJob.java, and services/flink-jobs/java/src/main/java/org/rva/gold/GoldDashboardAggregateJob.java - Live reads recent Redis alerts, RealtimeMetricsJob writes density alerts with cooldown, Gold stores density alert history, and the Live page keeps a selected primary camera with lightweight camera overview and richer alert details (completed).**

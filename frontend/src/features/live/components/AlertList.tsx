@@ -54,7 +54,7 @@ export function AlertList({ alerts }: AlertListProps) {
           <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center">
             <strong className="block text-sm text-slate-700">No active alerts</strong>
             <span className="mt-1 block text-[13px] text-slate-500">
-              Recent density, dwell, and camera health alerts will appear here.
+              Recent density, dwell, and queue alerts will appear here.
             </span>
           </div>
         )}

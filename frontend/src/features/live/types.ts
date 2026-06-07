@@ -39,6 +39,8 @@ export type ZoneCount = {
   count: number
   track_ids?: number[]
   global_track_ids?: string[]
+  avg_wait_seconds?: number
+  max_wait_seconds?: number
 }
 
 export type LineCrossing = {
