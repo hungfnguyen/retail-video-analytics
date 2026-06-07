@@ -29,6 +29,9 @@ METADATA_STALE_MS = 5_000
 HEALTH_CHECK_TIMEOUT_SECONDS = 0.1
 
 _redis_client: Any | None = None
+_health_cache: list[dict[str, Any]] = []
+_health_cache_ts: float = 0.0
+HEALTH_CACHE_TTL = 10.0  # seconds — TCP checks are expensive, cache for 10s
 
 
 def _redis_config() -> RedisClientConfig:
@@ -44,11 +47,7 @@ def _get_redis_client() -> Any:
     global _redis_client
 
     if _redis_client is not None:
-        try:
-            _redis_client.ping()
-            return _redis_client
-        except Exception:
-            _redis_client = None
+        return _redis_client
 
     _redis_client = create_redis_client(_redis_config())
     if _redis_client is None:
@@ -506,18 +505,24 @@ def _enrich_zone_counts_with_wait(
     zone_counts: list[dict[str, Any]], client: Any, camera_id: str
 ) -> None:
     """Read avg/max wait_ms from per-queue Redis hashes and merge into zone_counts in-place."""
-    for zc in zone_counts:
-        if zc.get("zone_type") != "queue":
-            continue
-        zone_id = zc.get("zone_id")
-        if not zone_id:
-            continue
-        try:
-            q = client.hgetall(f"queue:live:{camera_id}:{zone_id}")
-        except Exception:
-            q = {}
-        zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms", b"0"))) or 0
-        zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms", b"0"))) or 0
+    queue_entries = [
+        (idx, zc)
+        for idx, zc in enumerate(zone_counts)
+        if zc.get("zone_type") == "queue" and zc.get("zone_id")
+    ]
+    if not queue_entries:
+        return
+    try:
+        pipe = client.pipeline(transaction=False)
+        for _, zc in queue_entries:
+            pipe.hgetall(f"queue:live:{camera_id}:{zc['zone_id']}")
+        results = pipe.execute()
+    except Exception:
+        results = [{} for _ in queue_entries]
+    for (_idx, zc), q in zip(queue_entries, results):
+        q = q or {}
+        zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms") or q.get(b"avg_wait_ms") or "0")) or 0
+        zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms") or q.get(b"max_wait_ms") or "0")) or 0
 
 
 def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]) -> dict[str, Any]:
@@ -592,24 +597,30 @@ def _traffic_from_redis(
     """Read per-minute line crossing buckets from Redis → traffic chart + summary.
 
     Flink writes: HINCRBY line:hist:{camera_id}:{YYYYMMDDHHMM} {direction}_count 1
-    We read the last `window_minutes` buckets and return one point per minute.
+    We read the last `window_minutes` buckets in a single pipeline round-trip.
     """
     now_utc = datetime.now(timezone.utc)
+    bucket_times = [
+        now_utc - timedelta(minutes=delta)
+        for delta in range(window_minutes - 1, -1, -1)
+    ]
+    try:
+        pipe = client.pipeline(transaction=False)
+        for bt in bucket_times:
+            pipe.hgetall(f"line:hist:{camera_id}:{bt.strftime('%Y%m%d%H%M')}")
+        raw_results = pipe.execute()
+    except Exception:
+        raw_results = [{} for _ in bucket_times]
+
     points: list[dict[str, Any]] = []
     total_in = total_out = 0
     peak_count = 0
     peak_time = now_utc.strftime("%H:%M")
 
-    for delta in range(window_minutes - 1, -1, -1):
-        bucket_dt = now_utc - timedelta(minutes=delta)
-        bucket_key = f"line:hist:{camera_id}:{bucket_dt.strftime('%Y%m%d%H%M')}"
-        try:
-            raw = client.hgetall(bucket_key)
-        except Exception:
-            raw = {}
-
-        people_in = _safe_int(_decode_redis_value(raw.get(b"in_count") or raw.get("in_count"))) or 0
-        people_out = _safe_int(_decode_redis_value(raw.get(b"out_count") or raw.get("out_count"))) or 0
+    for bucket_dt, raw in zip(bucket_times, raw_results):
+        raw = raw or {}
+        people_in = _safe_int(_decode_redis_value(raw.get(b"in_count") or raw.get("in_count") or "0")) or 0
+        people_out = _safe_int(_decode_redis_value(raw.get(b"out_count") or raw.get("out_count") or "0")) or 0
         combined = people_in + people_out
 
         total_in += people_in
@@ -625,14 +636,13 @@ def _traffic_from_redis(
             "current_count": 0,
         })
 
-    summary = {
+    return points, {
         "total_in": total_in,
         "total_out": total_out,
         "current_total": total_in,
         "peak_count": peak_count,
         "peak_time": peak_time,
     }
-    return points, summary
 
 
 def _health_endpoint(raw: str) -> tuple[str, int] | None:
@@ -696,6 +706,22 @@ def _pipeline_health(
     frame_status: str,
     redis_status: str = "ok",
 ) -> list[dict[str, Any]]:
+    global _health_cache, _health_cache_ts
+
+    fastapi_status = "ok" if frame_status == "stable" else "warning"
+
+    # TCP checks are expensive (4 network round-trips). Cache for HEALTH_CACHE_TTL seconds.
+    if _health_cache and (time.perf_counter() - _health_cache_ts) < HEALTH_CACHE_TTL:
+        result = []
+        for entry in _health_cache:
+            if entry["service"] == "redis":
+                result.append({**entry, "latency_ms": redis_latency_ms, "status": redis_status, "last_check_ts": now.isoformat()})
+            elif entry["service"] == "fastapi":
+                result.append({**entry, "status": fastapi_status, "last_check_ts": now.isoformat()})
+            else:
+                result.append(entry)
+        return result
+
     pulsar_status, pulsar_latency_ms = _tcp_health(
         os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
     )
@@ -709,31 +735,17 @@ def _pipeline_health(
         os.getenv("TRINO_URL", "http://localhost:8083")
     )
 
-    return [
-        _service_health_entry(
-            "pulsar", "Pulsar", "Event Stream", pulsar_status, now, pulsar_latency_ms
-        ),
-        _service_health_entry(
-            "flink", "Flink", "Stream Processing", flink_status, now, flink_latency_ms
-        ),
-        _service_health_entry(
-            "redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms
-        ),
-        _service_health_entry(
-            "s3", "S3", "Object Storage", s3_status, now, s3_latency_ms
-        ),
-        _service_health_entry(
-            "trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms
-        ),
-        _service_health_entry(
-            "fastapi",
-            "FastAPI",
-            "Serving API",
-            "ok" if frame_status == "stable" else "warning",
-            now,
-            0,
-        ),
+    result = [
+        _service_health_entry("pulsar", "Pulsar", "Event Stream", pulsar_status, now, pulsar_latency_ms),
+        _service_health_entry("flink", "Flink", "Stream Processing", flink_status, now, flink_latency_ms),
+        _service_health_entry("redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms),
+        _service_health_entry("s3", "S3", "Object Storage", s3_status, now, s3_latency_ms),
+        _service_health_entry("trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms),
+        _service_health_entry("fastapi", "FastAPI", "Serving API", fastapi_status, now, 0),
     ]
+    _health_cache = result
+    _health_cache_ts = time.perf_counter()
+    return result
 
 
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
