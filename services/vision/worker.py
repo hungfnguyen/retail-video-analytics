@@ -349,6 +349,20 @@ def run_worker(
                     track.pop("queue_wait_seconds", None)
                     if isinstance(track_id, int):
                         queue_entered_ms_by_track.pop(track_id, None)
+            # Roll up per-track wait_ms into zone_counts so Flink/Redis gets aggregate stats
+            zone_wait_ms_by_id: dict[str, list[int]] = {}
+            for track in stable_tracks:
+                if track.get("primary_zone_type") == "queue":
+                    zid = track.get("primary_zone_id")
+                    wms = track.get("queue_wait_ms", 0)
+                    if zid:
+                        zone_wait_ms_by_id.setdefault(zid, []).append(wms)
+            for zc in zone_counts:
+                if zc.get("zone_type") == "queue":
+                    waits = zone_wait_ms_by_id.get(zc["zone_id"], [])
+                    zc["avg_wait_ms"] = int(sum(waits) / len(waits)) if waits else 0
+                    zc["max_wait_ms"] = max(waits) if waits else 0
+
             queue_entered_ms_by_track = {
                 track_id: entered_ms
                 for track_id, entered_ms in queue_entered_ms_by_track.items()

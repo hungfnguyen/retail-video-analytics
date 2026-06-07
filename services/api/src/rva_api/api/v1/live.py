@@ -4,7 +4,7 @@ import json
 import os
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -470,7 +470,9 @@ def _zone_counts_from_sources(
             for item in raw
             if isinstance(item, dict)
         ]
-        return [item for item in result if item.get("zone_id")]
+        result = [item for item in result if item.get("zone_id")]
+        _enrich_zone_counts_with_wait(result, client, camera_id)
+        return result
 
     try:
         redis_counts = client.hgetall(f"zone:count:{camera_id}")
@@ -491,9 +493,31 @@ def _zone_counts_from_sources(
                 "count": _safe_int(_decode_redis_value(raw_count)),
                 "track_ids": [],
                 "global_track_ids": [],
+                "avg_wait_ms": 0,
+                "max_wait_ms": 0,
             }
         )
-    return sorted(result, key=lambda item: str(item.get("zone_id", "")))
+    result = sorted(result, key=lambda item: str(item.get("zone_id", "")))
+    _enrich_zone_counts_with_wait(result, client, camera_id)
+    return result
+
+
+def _enrich_zone_counts_with_wait(
+    zone_counts: list[dict[str, Any]], client: Any, camera_id: str
+) -> None:
+    """Read avg/max wait_ms from per-queue Redis hashes and merge into zone_counts in-place."""
+    for zc in zone_counts:
+        if zc.get("zone_type") != "queue":
+            continue
+        zone_id = zc.get("zone_id")
+        if not zone_id:
+            continue
+        try:
+            q = client.hgetall(f"queue:live:{camera_id}:{zone_id}")
+        except Exception:
+            q = {}
+        zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms", b"0"))) or 0
+        zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms", b"0"))) or 0
 
 
 def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]) -> dict[str, Any]:
@@ -518,6 +542,8 @@ def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]
             for global_id in global_track_ids
             if global_id is not None
         ] if isinstance(global_track_ids, list) else [],
+        "avg_wait_ms": _safe_int(item.get("avg_wait_ms")) or 0,
+        "max_wait_ms": _safe_int(item.get("max_wait_ms")) or 0,
     }
 
 
@@ -558,8 +584,55 @@ def _count_detections_in_frame(frame: dict[str, Any] | None) -> int:
     return sum(1 for det in detections if isinstance(det, dict))
 
 
-def _empty_traffic() -> list[dict[str, int | str]]:
-    return []
+def _traffic_from_redis(
+    client: Any,
+    camera_id: str,
+    window_minutes: int = 60,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Read per-minute line crossing buckets from Redis → traffic chart + summary.
+
+    Flink writes: HINCRBY line:hist:{camera_id}:{YYYYMMDDHHMM} {direction}_count 1
+    We read the last `window_minutes` buckets and return one point per minute.
+    """
+    now_utc = datetime.now(timezone.utc)
+    points: list[dict[str, Any]] = []
+    total_in = total_out = 0
+    peak_count = 0
+    peak_time = now_utc.strftime("%H:%M")
+
+    for delta in range(window_minutes - 1, -1, -1):
+        bucket_dt = now_utc - timedelta(minutes=delta)
+        bucket_key = f"line:hist:{camera_id}:{bucket_dt.strftime('%Y%m%d%H%M')}"
+        try:
+            raw = client.hgetall(bucket_key)
+        except Exception:
+            raw = {}
+
+        people_in = _safe_int(_decode_redis_value(raw.get(b"in_count") or raw.get("in_count"))) or 0
+        people_out = _safe_int(_decode_redis_value(raw.get(b"out_count") or raw.get("out_count"))) or 0
+        combined = people_in + people_out
+
+        total_in += people_in
+        total_out += people_out
+        if combined > peak_count:
+            peak_count = combined
+            peak_time = bucket_dt.strftime("%H:%M")
+
+        points.append({
+            "time": bucket_dt.strftime("%H:%M"),
+            "people_in": people_in,
+            "people_out": people_out,
+            "current_count": 0,
+        })
+
+    summary = {
+        "total_in": total_in,
+        "total_out": total_out,
+        "current_total": total_in,
+        "peak_count": peak_count,
+        "peak_time": peak_time,
+    }
+    return points, summary
 
 
 def _health_endpoint(raw: str) -> tuple[str, int] | None:
@@ -733,6 +806,8 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         else {}
     )
 
+    traffic_points, traffic_summary = _traffic_from_redis(client, camera_id)
+
     data = {
         "store": store,
         "cameras": _build_cameras(cameras, camera_id, frame, latency_ms),
@@ -787,14 +862,8 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "updated_at": count_updated_at or now.isoformat(),
         },
         "alerts": [],
-        "traffic": _empty_traffic(),
-        "traffic_summary": {
-            "total_in": 0,
-            "total_out": 0,
-            "current_total": current_count,
-            "peak_count": current_count,
-            "peak_time": now.strftime("%H:%M"),
-        },
+        "traffic": traffic_points,
+        "traffic_summary": {**traffic_summary, "current_total": current_count},
         "zone_heatmap": _zone_heatmap(heatmap_cells),
         "pipeline_health": _pipeline_health(now, redis_latency_ms, status),
     }

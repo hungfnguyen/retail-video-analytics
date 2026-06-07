@@ -30,6 +30,14 @@ function displayZoneName(zone: ZoneCount) {
   return zone.zone_name || zone.zone_id.replace(/_/g, ' ')
 }
 
+function formatWait(ms: number | undefined): string | null {
+  if (!ms || ms <= 0) return null
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
+}
+
 export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanelProps) {
   const totalInZones = zoneCounts.reduce((sum, zone) => sum + Math.max(0, zone.count), 0)
   const sortedZones = [...zoneCounts].sort((a, b) => {
@@ -69,6 +77,16 @@ export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanel
                     ? zone.global_track_ids.join(', ')
                     : zone.zone_id}
                 </div>
+                {zone.zone_type === 'queue' && (zone.avg_wait_ms ?? 0) > 0 && (
+                  <div className="mt-1 flex gap-3 text-xs">
+                    <span className="text-amber-600">
+                      avg wait: <strong>{formatWait(zone.avg_wait_ms)}</strong>
+                    </span>
+                    <span className="text-rose-500">
+                      max: <strong>{formatWait(zone.max_wait_ms)}</strong>
+                    </span>
+                  </div>
+                )}
               </div>
               <strong className="min-w-10 text-right text-2xl leading-none text-blue-600">{zone.count}</strong>
             </div>

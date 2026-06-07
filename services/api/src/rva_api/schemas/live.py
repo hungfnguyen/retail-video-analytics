@@ -40,6 +40,8 @@ class ZoneCount(BaseModel):
     count: int
     track_ids: list[int] = Field(default_factory=list)
     global_track_ids: list[str] = Field(default_factory=list)
+    avg_wait_ms: int = 0
+    max_wait_ms: int = 0
 
 
 class LineCrossing(BaseModel):
