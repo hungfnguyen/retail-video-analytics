@@ -2,7 +2,9 @@ import { useState } from 'react'
 import { CalendarDays, Database, RefreshCw } from 'lucide-react'
 import { AppShell, type AppPage } from '../../shared/components/AppShell'
 import { AnalyticsPanels } from './components/AnalyticsPanels'
+import { QueueAnalyticsPanels } from './components/QueueAnalyticsPanels'
 import { useAnalyticsData } from './hooks/useAnalyticsData'
+import { useQueueData } from './hooks/useQueueData'
 
 type AnalyticsPageProps = {
   activePage: AppPage
@@ -28,6 +30,7 @@ function StatusPanel({ title, detail }: { title: string; detail: string }) {
 export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) {
   const [days, setDays] = useState(7)
   const { data, error, refresh } = useAnalyticsData(days)
+  const { data: queueData } = useQueueData(days)
 
   const statusTitle = error
     ? 'Analytics API is unavailable'
@@ -82,7 +85,10 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
       {!data && !error ? (
         <StatusPanel detail="Loading Trino-backed dashboard data." title="Loading analytics" />
       ) : data?.data_status === 'ready' ? (
-        <AnalyticsPanels data={data} />
+        <>
+          <AnalyticsPanels data={data} />
+          {queueData && <QueueAnalyticsPanels data={queueData} />}
+        </>
       ) : (
         <StatusPanel detail={statusDetail} title={statusTitle} />
       )}
