@@ -109,6 +109,7 @@ class LiveStats(BaseModel):
 
 class Alert(BaseModel):
     alert_id: str
+    store_id: str = ""
     camera_id: str
     alert_type: str
     title: str
@@ -118,7 +119,10 @@ class Alert(BaseModel):
     track_id: int | None = None
     event_ts: str
     status: Literal["new", "acknowledged", "resolved"]
+    trigger_value: int | None = None
+    threshold: int | None = None
     clip_s3_key: str | None = None
+    clip_s3_uri: str | None = None
     snapshot_key: str | None = None
 
 

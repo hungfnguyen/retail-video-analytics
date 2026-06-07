@@ -368,6 +368,7 @@ def run_worker(
                 for track_id, entered_ms in queue_entered_ms_by_track.items()
                 if track_id in queue_track_ids_this_frame
             }
+            _attach_queue_wait_stats(zone_counts, stable_tracks)
             line_crossings = zone_runtime.trigger_lines(stable_tracks, width, height)
             zone_ms = max(0, int((time.perf_counter() - zone_started) * 1000))
 

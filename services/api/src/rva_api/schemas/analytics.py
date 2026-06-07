@@ -13,6 +13,7 @@ class AnalyticsKpi(BaseModel):
 class HourlyTrafficPoint(BaseModel):
     hour: str
     detections: int
+    unique_tracks: int
     average: int
 
 
@@ -20,6 +21,8 @@ class CameraComparisonPoint(BaseModel):
     camera_id: str
     detections: int
     share: float
+    unique_tracks: int
+    avg_confidence: float
 
 
 class HeatmapCell(BaseModel):
@@ -36,8 +39,10 @@ class DwellBand(BaseModel):
 class DailySummaryRow(BaseModel):
     date: str
     detections: int
+    unique_tracks: int
     peak: str
     avg_dwell_sec: float
+    avg_confidence: float
 
 
 class AnalyticsDashboardData(BaseModel):

@@ -1,8 +1,10 @@
-import { Activity, Clock, Footprints, Users } from 'lucide-react'
-import type { LiveStats } from '../types'
+import { Activity, AlertTriangle, Clock, Users } from 'lucide-react'
+import type { Alert, LiveStats, ZoneCount } from '../types'
 
 type LiveMetricCardsProps = {
+  alerts: Alert[]
   stats: LiveStats
+  zoneCounts: ZoneCount[]
 }
 
 function formatUpdatedAt(value: string) {
@@ -12,7 +14,7 @@ function formatUpdatedAt(value: string) {
 
   const updatedAt = new Date(value)
   if (Number.isNaN(updatedAt.getTime())) {
-    return 'Updated from Redis'
+    return 'Updated from realtime state'
   }
 
   return `Updated ${updatedAt.toLocaleTimeString([], {
@@ -22,65 +24,63 @@ function formatUpdatedAt(value: string) {
   })}`
 }
 
-function formatCountSource(source: LiveStats['count_source']) {
-  if (source === 'camera_realtime') {
-    return 'Camera realtime'
+function formatDuration(totalSeconds = 0) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
   }
 
-  if (source === 'redis') {
-    return 'Redis count'
-  }
-
-  if (source === 'live_frame_fallback') {
-    return 'Frame fallback'
-  }
-
-  return 'Count missing'
+  return `${seconds}s`
 }
 
-function formatMetadataStatus(status: LiveStats['metadata_status']) {
-  if (status === 'fresh') {
-    return 'Fresh metadata'
+function zoneOccupancyCount(zoneCounts: ZoneCount[]) {
+  const uniqueGlobalIds = new Set(
+    zoneCounts.flatMap((zone) => zone.global_track_ids ?? []),
+  )
+  if (uniqueGlobalIds.size > 0) {
+    return uniqueGlobalIds.size
   }
 
-  if (status === 'lagging') {
-    return 'Lagging metadata'
-  }
-
-  if (status === 'stale') {
-    return 'Stale metadata'
-  }
-
-  return 'Missing metadata'
+  return zoneCounts.reduce((sum, zone) => sum + Math.max(0, zone.count), 0)
 }
 
-export function LiveMetricCards({ stats }: LiveMetricCardsProps) {
-  const freshnessLabel = formatMetadataStatus(stats.metadata_status)
+export function LiveMetricCards({ alerts, stats, zoneCounts }: LiveMetricCardsProps) {
+  const queueZones = zoneCounts.filter((zone) => zone.zone_type === 'queue')
+  const queueLength = queueZones.reduce((sum, zone) => sum + Math.max(0, zone.count), 0)
+  const currentCount = Math.max(stats.current_count, zoneOccupancyCount(zoneCounts))
+  const longestWaitSeconds = Math.max(
+    0,
+    ...queueZones.map((zone) => Math.max(0, zone.max_wait_seconds ?? 0)),
+  )
+  const activeAlertCount = alerts.filter((alert) => alert.status === 'new').length
 
   const metrics = [
     {
       label: 'Current count',
-      value: stats.current_count,
-      meta: formatCountSource(stats.count_source) + ' | ' + formatUpdatedAt(stats.updated_at),
+      value: currentCount,
+      meta: formatUpdatedAt(stats.updated_at),
       icon: Users,
     },
     {
-      label: 'Active tracks',
-      value: stats.active_tracks,
-      meta: 'Redis active track keys',
-      icon: Footprints,
-    },
-    {
-      label: 'Media FPS',
-      value: stats.media_fps > 0 ? stats.media_fps.toFixed(1) : 'N/A',
-      meta: stats.media_fps > 0 ? 'Published video frames' : 'Not measured yet',
+      label: 'Queue length',
+      value: queueLength,
+      meta: 'People in queue zones',
       icon: Activity,
     },
     {
-      label: 'Metadata lag',
-      value: `${stats.metadata_latency_ms} ms`,
-      meta: freshnessLabel,
+      label: 'Longest wait',
+      value: formatDuration(longestWaitSeconds),
+      meta: 'Max queue wait',
       icon: Clock,
+    },
+    {
+      label: 'Active alerts',
+      value: activeAlertCount,
+      meta: activeAlertCount > 0 ? 'Needs review' : 'No active alerts',
+      icon: AlertTriangle,
     },
   ]
 

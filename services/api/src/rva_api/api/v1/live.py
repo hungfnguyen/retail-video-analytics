@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 
 from core.settings import load_yaml_config
+from rva_api.api.v1.live_alerts import read_recent_alerts
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
 
@@ -462,6 +463,7 @@ def _zone_counts_from_sources(
     raw = (frame or {}).get("zone_counts")
     if not isinstance(raw, list) or not raw:
         raw = media_metadata.get("zone_counts")
+    wait_fields = _queue_wait_fields_from_sources(frame, media_metadata)
 
     if isinstance(raw, list) and raw:
         result = [
@@ -523,6 +525,79 @@ def _enrich_zone_counts_with_wait(
         q = q or {}
         zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms") or q.get(b"avg_wait_ms") or "0")) or 0
         zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms") or q.get(b"max_wait_ms") or "0")) or 0
+
+
+def _queue_wait_fields_from_sources(
+    frame: dict[str, Any] | None,
+    media_metadata: dict[str, Any],
+) -> dict[str, dict[str, float | int]]:
+    result = _zone_wait_fields_by_id(media_metadata.get("zone_counts"))
+    result.update(_queue_wait_fields_from_detections((frame or {}).get("detections")))
+    return result
+
+
+def _zone_wait_fields_by_id(raw_zones: Any) -> dict[str, dict[str, float | int]]:
+    if not isinstance(raw_zones, list):
+        return {}
+
+    result: dict[str, dict[str, float | int]] = {}
+    for raw_zone in raw_zones:
+        if not isinstance(raw_zone, dict):
+            continue
+
+        zone_id = str(raw_zone.get("zone_id") or "")
+        if not zone_id:
+            continue
+
+        result[zone_id] = {
+            "avg_wait_seconds": _safe_float(raw_zone.get("avg_wait_seconds")),
+            "max_wait_seconds": _safe_int(raw_zone.get("max_wait_seconds")),
+        }
+    return result
+
+
+def _queue_wait_fields_from_detections(
+    raw_detections: Any,
+) -> dict[str, dict[str, float | int]]:
+    if not isinstance(raw_detections, list):
+        return {}
+
+    waits_by_zone: dict[str, list[int]] = {}
+    for detection in raw_detections:
+        if not isinstance(detection, dict):
+            continue
+
+        queue = detection.get("queue")
+        if not isinstance(queue, dict) or not queue.get("in_queue"):
+            continue
+
+        zone_id = str(queue.get("queue_zone_id") or "")
+        if not zone_id:
+            continue
+
+        waits_by_zone.setdefault(zone_id, []).append(
+            max(0, _safe_int(queue.get("wait_seconds")))
+        )
+
+    return {
+        zone_id: {
+            "avg_wait_seconds": round(sum(waits) / len(waits), 1),
+            "max_wait_seconds": max(waits),
+        }
+        for zone_id, waits in waits_by_zone.items()
+        if waits
+    }
+
+
+def _merge_zone_wait_fields(
+    zone: dict[str, Any],
+    wait_fields: dict[str, dict[str, float | int]],
+) -> dict[str, Any]:
+    fields = wait_fields.get(str(zone.get("zone_id") or ""), {})
+    if fields:
+        zone["avg_wait_seconds"] = fields["avg_wait_seconds"]
+        zone["max_wait_seconds"] = fields["max_wait_seconds"]
+    return zone
 
 
 def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]) -> dict[str, Any]:

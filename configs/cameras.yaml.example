@@ -88,6 +88,7 @@ settings:
 
   # Clip extraction is implemented but disabled by default because it encodes
   # every frame into a small pre-buffer. Enable it when testing alert replay.
+  # Density alerts are emitted when current people count exceeds this threshold.
   alert_clip_enabled: false
   alert_density_threshold: 10
   alert_pre_buffer_sec: 5

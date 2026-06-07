@@ -361,6 +361,7 @@ public class RealtimeMetricsJob {
         private static final int COUNT_EXPIRE_SEC = 5;
         private static final int FRAME_EXPIRE_SEC = 10;
         private static final int TRACK_EXPIRE_SEC = 30;
+        private static final int ALERT_RECENT_LIMIT = 20;
         private static final int ZONE_EXPIRE_SEC = 10;
         private static final int QUEUE_EXPIRE_SEC = 10;
         private static final int LINE_EXPIRE_SEC = 300;
@@ -368,12 +369,18 @@ public class RealtimeMetricsJob {
         private static final DateTimeFormatter MINUTE_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
         private transient JedisPool pool;
+        private int densityThreshold;
+        private int alertCooldownSec;
+        private int alertRecentTtlSec;
 
         @Override
         public void open(Configuration parameters) {
             String host = getenv("REDIS_HOST", "redis");
             int port = Integer.parseInt(getenv("REDIS_PORT", "6379"));
             String password = getenv("REDIS_PASSWORD", "");
+            densityThreshold = Integer.parseInt(getenv("ALERT_DENSITY_THRESHOLD", "10"));
+            alertCooldownSec = Integer.parseInt(getenv("ALERT_COOLDOWN_SEC", "30"));
+            alertRecentTtlSec = Integer.parseInt(getenv("ALERT_RECENT_TTL_SEC", "3600"));
 
             JedisPoolConfig cfg = new JedisPoolConfig();
             cfg.setMaxTotal(8);
@@ -433,6 +440,8 @@ public class RealtimeMetricsJob {
                     jedis.hset(trackKey, fields);
                     jedis.expire(trackKey, TRACK_EXPIRE_SEC);
                 }
+
+                writeDensityAlertIfNeeded(jedis, evt, ts);
 
                 writeZoneCounts(jedis, evt, ts);
                 writeLineCrossings(jedis, evt);
@@ -549,6 +558,52 @@ public class RealtimeMetricsJob {
             frame.put("zone_counts", evt.zoneCounts == null ? List.of() : evt.zoneCounts);
             frame.put("line_crossings", evt.lineCrossings == null ? List.of() : evt.lineCrossings);
             return MAPPER.writeValueAsString(frame);
+        }
+
+        private void writeDensityAlertIfNeeded(Jedis jedis, ParsedEvent evt, String captureTs) throws Exception {
+            if (evt.personCount <= densityThreshold) {
+                return;
+            }
+
+            String alertType = "density_high";
+            String cooldownKey = "alerts:cooldown:" + evt.cameraId + ":" + alertType;
+            Long shouldCreate = jedis.setnx(cooldownKey, evt.eventId);
+            if (shouldCreate == null || shouldCreate == 0L) {
+                return;
+            }
+            jedis.expire(cooldownKey, alertCooldownSec);
+
+            String alertId = evt.cameraId + "_" + evt.frameIndex + "_" + alertType;
+            Map<String, Object> alert = new LinkedHashMap<>();
+            alert.put("schema_version", "1.0");
+            alert.put("event_type", "alert_created");
+            alert.put("alert_id", alertId);
+            alert.put("store_id", evt.storeId);
+            alert.put("camera_id", evt.cameraId);
+            alert.put("alert_type", alertType);
+            alert.put("title", "High density detected");
+            alert.put(
+                    "description",
+                    "Current count " + evt.personCount + " exceeded threshold " + densityThreshold + "."
+            );
+            alert.put("severity", "high");
+            alert.put("zone", "camera");
+            alert.put("event_ts", captureTs);
+            alert.put("status", "new");
+            alert.put("trigger_value", evt.personCount);
+            alert.put("threshold", densityThreshold);
+
+            String payload = MAPPER.writeValueAsString(alert);
+            writeRecentAlert(jedis, "alerts:recent:" + evt.cameraId, payload);
+            if (evt.storeId != null && !evt.storeId.isEmpty()) {
+                writeRecentAlert(jedis, "alerts:recent:store:" + evt.storeId, payload);
+            }
+        }
+
+        private void writeRecentAlert(Jedis jedis, String key, String payload) {
+            jedis.lpush(key, payload);
+            jedis.ltrim(key, 0, ALERT_RECENT_LIMIT - 1);
+            jedis.expire(key, alertRecentTtlSec);
         }
     }
 
