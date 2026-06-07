@@ -4,6 +4,8 @@ Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail V
 
 ## 2026-06-07
 
+- **2026-06-07: Fix Vision CI import verification at .github/workflows/test.yml - Updated the pull request import smoke test to use the current rva-vision modules instead of removed legacy tracker, detector, and ingest imports (completed).**
+
 - **2026-06-07: Add queue wait summaries and focus the Live UI on operational metrics at services/vision/worker.py, services/api/src/rva_api/api/v1/live.py, services/api/src/rva_api/schemas/live.py, and frontend/src/features/live - Vision now publishes per-queue average and maximum wait seconds, FastAPI preserves the fields in the Live dashboard contract, and the Live page prioritizes count, queue, wait, alert, zone, and density views while removing main-screen health/debug metrics (completed).**
 
 ## 2026-06-05
