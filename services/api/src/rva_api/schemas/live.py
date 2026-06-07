@@ -118,6 +118,8 @@ class Alert(BaseModel):
     track_id: int | None = None
     event_ts: str
     status: Literal["new", "acknowledged", "resolved"]
+    clip_s3_key: str | None = None
+    snapshot_key: str | None = None
 
 
 class TrafficPoint(BaseModel):

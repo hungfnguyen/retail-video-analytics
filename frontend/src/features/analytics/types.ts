@@ -73,3 +73,24 @@ export type QueueAnalyticsData = {
   zone_stats: QueueZoneStat[]
   wait_trend: QueueWaitTrendPoint[]
 }
+
+export type AlertHistoryRecord = {
+  alert_id: string
+  camera_id: string
+  store_id: string
+  alert_type: string
+  severity: 'low' | 'medium' | 'high'
+  title: string
+  description: string
+  zone: string
+  event_ts: string
+  clip_s3_key: string | null
+}
+
+export type AlertHistoryData = {
+  generated_at: string
+  range_label: string
+  data_status: 'ready' | 'empty' | 'error'
+  error_message: string | null
+  records: AlertHistoryRecord[]
+}

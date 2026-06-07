@@ -75,3 +75,24 @@ class QueueAnalyticsData(BaseModel):
     kpis: list[AnalyticsKpi]
     zone_stats: list[QueueZoneStat]
     wait_trend: list[QueueWaitTrendPoint]
+
+
+class AlertHistoryRecord(BaseModel):
+    alert_id: str
+    camera_id: str
+    store_id: str
+    alert_type: str
+    severity: Literal["low", "medium", "high"]
+    title: str
+    description: str
+    zone: str
+    event_ts: str
+    clip_s3_key: str | None = None
+
+
+class AlertHistoryData(BaseModel):
+    generated_at: str
+    range_label: str
+    data_status: Literal["ready", "empty", "error"]
+    error_message: str | None = None
+    records: list[AlertHistoryRecord]

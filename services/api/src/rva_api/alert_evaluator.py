@@ -176,6 +176,82 @@ def _evaluate_once(client: Any, camera_ids: list[str], settings: dict[str, Any])
         _check_queue_zones(client, cam, overcrowded, long_wait, cooldown)
 
 
+def _write_clip_alert(client: Any, event: dict[str, Any]) -> None:
+    source = event.get("source") or {}
+    cam = source.get("camera_id", "")
+    if not cam:
+        return
+    alert_id = event.get("alert_id", "")
+    if not cam or not alert_id:
+        return
+
+    cooldown_key = f"alert:cooldown:{cam}:clip:{alert_id}"
+    if client.exists(cooldown_key):
+        return
+
+    alert_type = event.get("alert_type", "density_high")
+    now = datetime.now(timezone.utc)
+    ts_ms = int(now.timestamp() * 1000)
+    duration = event.get("clip_duration_sec") or 0
+    record: dict[str, str] = {
+        "alert_id": alert_id,
+        "camera_id": cam,
+        "alert_type": alert_type,
+        "severity": "high",
+        "title": f"Incident clip — {alert_type.replace('_', ' ')}",
+        "description": f"Camera {cam} — {duration:.0f}s clip recorded",
+        "zone": source.get("store_id", "unknown"),
+        "event_ts": event.get("trigger_ts", now.isoformat()),
+        "status": "new",
+        "track_id": "",
+        "clip_s3_key": event.get("clip_s3_key", ""),
+        "snapshot_key": "",
+    }
+
+    pipe = client.pipeline()
+    pipe.hset(f"alert:item:{alert_id}", mapping=record)
+    pipe.expire(f"alert:item:{alert_id}", ALERT_STORE_TTL)
+    pipe.zadd(f"alert:live:{cam}", {alert_id: float(ts_ms)})
+    pipe.expire(f"alert:live:{cam}", ALERT_STORE_TTL)
+    pipe.zremrangebyrank(f"alert:live:{cam}", 0, -(ALERT_STORE_MAX + 1))
+    pipe.set(cooldown_key, 1, ex=3600)
+    pipe.execute()
+    log.info("clip alert written: %s", alert_id)
+
+
+def _media_consumer_loop(client: Any) -> None:
+    """Daemon thread: consume clip_created events from Pulsar media-events."""
+    pulsar_url = os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
+    topic = "persistent://retail/metadata/media-events"
+    subscription = "alert-evaluator-media-sub"
+
+    try:
+        from messaging.pulsar import PulsarConsumer
+        consumer = PulsarConsumer(
+            service_url=pulsar_url,
+            topic=topic,
+            subscription=subscription,
+        )
+    except Exception:
+        log.warning("alert media consumer: Pulsar unavailable — clip alerts disabled")
+        return
+
+    log.info("alert media consumer: subscribed to %s", topic)
+    try:
+        while True:
+            try:
+                event = consumer.receive(timeout_millis=5000)
+                if event and event.get("event_type") == "clip_created":
+                    _write_clip_alert(client, event)
+            except Exception:
+                log.exception("alert media consumer: error processing event (continuing)")
+    finally:
+        try:
+            consumer.close()
+        except Exception:
+            pass
+
+
 async def run_alert_evaluator() -> None:
     """Async background loop — starts with the API lifespan, runs until cancelled."""
     try:
@@ -194,6 +270,15 @@ async def run_alert_evaluator() -> None:
     if client is None:
         log.warning("alert evaluator: Redis unavailable, not starting")
         return
+
+    import threading
+    media_thread = threading.Thread(
+        target=_media_consumer_loop,
+        args=(client,),
+        daemon=True,
+        name="alert-media-consumer",
+    )
+    media_thread.start()
 
     while True:
         try:

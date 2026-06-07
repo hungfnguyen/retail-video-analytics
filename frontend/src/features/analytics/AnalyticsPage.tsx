@@ -1,8 +1,10 @@
 import { useState } from 'react'
 import { CalendarDays, Database, RefreshCw } from 'lucide-react'
 import { AppShell, type AppPage } from '../../shared/components/AppShell'
+import { AlertHistoryPanel } from './components/AlertHistoryPanel'
 import { AnalyticsPanels } from './components/AnalyticsPanels'
 import { QueueAnalyticsPanels } from './components/QueueAnalyticsPanels'
+import { useAlertHistoryData } from './hooks/useAlertHistoryData'
 import { useAnalyticsData } from './hooks/useAnalyticsData'
 import { useQueueData } from './hooks/useQueueData'
 
@@ -31,6 +33,7 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
   const [days, setDays] = useState(7)
   const { data, error, refresh } = useAnalyticsData(days)
   const { data: queueData } = useQueueData(days)
+  const { data: alertHistoryData } = useAlertHistoryData(days)
 
   const statusTitle = error
     ? 'Analytics API is unavailable'
@@ -88,6 +91,7 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
         <>
           <AnalyticsPanels data={data} />
           {queueData && <QueueAnalyticsPanels data={queueData} />}
+          {alertHistoryData && <AlertHistoryPanel data={alertHistoryData} />}
         </>
       ) : (
         <StatusPanel detail={statusDetail} title={statusTitle} />

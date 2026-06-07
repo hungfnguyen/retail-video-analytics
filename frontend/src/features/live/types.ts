@@ -109,6 +109,8 @@ export type Alert = {
   track_id?: number
   event_ts: string
   status: 'new' | 'acknowledged' | 'resolved'
+  clip_s3_key?: string | null
+  snapshot_key?: string | null
 }
 
 export type TrafficPoint = {

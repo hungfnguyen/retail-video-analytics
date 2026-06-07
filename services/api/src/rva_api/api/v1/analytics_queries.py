@@ -198,6 +198,26 @@ def queue_zone_summary_sql(days: int) -> str:
     """
 
 
+def alerts_history_sql(days: int) -> str:
+    return f"""
+        SELECT
+          alert_id,
+          camera_id,
+          store_id,
+          alert_type,
+          severity,
+          title,
+          description,
+          zone,
+          CAST(event_ts AS varchar) AS event_ts,
+          clip_s3_key
+        FROM lakehouse.rva.gold_alerts
+        WHERE event_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+        ORDER BY event_ts DESC
+        LIMIT 100
+    """
+
+
 def queue_wait_trend_sql(days: int) -> str:
     return f"""
         SELECT

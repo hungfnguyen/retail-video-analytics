@@ -2,6 +2,7 @@ import type { Alert } from '../types'
 
 type AlertListProps = {
   alerts: Alert[]
+  onAlertClick?: (alert: Alert) => void
 }
 
 const severityLabels = {
@@ -18,11 +19,18 @@ function formatRelativeTime(iso: string): string {
   return `${Math.floor(min / 60)}h ago`
 }
 
-export function AlertList({ alerts }: AlertListProps) {
+export function AlertList({ alerts, onAlertClick }: AlertListProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
       <div className="mb-3.5 flex items-center justify-between">
-        <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
+        <div className="flex items-center gap-2">
+          <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
+          {alerts.length > 0 && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+              {alerts.length}
+            </span>
+          )}
+        </div>
         <button className="border-0 bg-transparent font-bold text-blue-600" type="button">View all</button>
       </div>
 
@@ -34,8 +42,11 @@ export function AlertList({ alerts }: AlertListProps) {
         <div className="grid gap-2.5">
           {alerts.map((alert) => (
             <article
-              className="grid grid-cols-[1fr_auto] items-start gap-3 rounded-lg border border-slate-200 p-3"
+              className={`grid grid-cols-[1fr_auto] items-start gap-3 rounded-lg border border-slate-200 p-3 ${
+                onAlertClick ? 'cursor-pointer hover:bg-slate-50 transition-colors' : ''
+              }`}
               key={alert.alert_id}
+              onClick={() => onAlertClick?.(alert)}
             >
               <div className="min-w-0">
                 <strong className="block text-slate-950">{alert.title}</strong>

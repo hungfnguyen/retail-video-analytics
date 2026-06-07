@@ -9,6 +9,7 @@ from fastapi import APIRouter, Query
 
 from rva_api.api.v1.analytics_queries import (
     MAX_DAYS,
+    alerts_history_sql,
     avg_dwell_sql,
     camera_sql,
     daily_sql,
@@ -19,7 +20,7 @@ from rva_api.api.v1.analytics_queries import (
     queue_zone_summary_sql,
     trino_query,
 )
-from rva_api.schemas.analytics import AnalyticsDashboardData, QueueAnalyticsData
+from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -98,6 +99,54 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
                 rows[name] = []
 
     return rows, errors
+
+
+@router.get("/alerts", response_model=AlertHistoryData)
+def get_alert_history(
+    days: int = Query(default=7, ge=1, le=MAX_DAYS),
+) -> AlertHistoryData:
+    now = datetime.now(timezone.utc)
+    try:
+        rows = trino_query(alerts_history_sql(days), 10.0)
+    except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
+        return AlertHistoryData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "error",
+            "error_message": str(exc),
+            "records": [],
+        })
+
+    if not rows:
+        return AlertHistoryData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "empty",
+            "error_message": None,
+            "records": [],
+        })
+
+    return AlertHistoryData.model_validate({
+        "generated_at": now.isoformat(),
+        "range_label": f"Last {days} days",
+        "data_status": "ready",
+        "error_message": None,
+        "records": [
+            {
+                "alert_id": str(r[0]),
+                "camera_id": str(r[1]),
+                "store_id": str(r[2]),
+                "alert_type": str(r[3]),
+                "severity": str(r[4]),
+                "title": str(r[5]),
+                "description": str(r[6]),
+                "zone": str(r[7]),
+                "event_ts": str(r[8]),
+                "clip_s3_key": r[9] if r[9] else None,
+            }
+            for r in rows
+        ],
+    })
 
 
 @router.get("/queue", response_model=QueueAnalyticsData)

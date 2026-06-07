@@ -1,4 +1,4 @@
-import type { AnalyticsDashboardData, QueueAnalyticsData } from '../types'
+import type { AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const REQUEST_TIMEOUT_MS = 60_000
@@ -19,4 +19,8 @@ export function getAnalyticsDashboardData(days = 7): Promise<AnalyticsDashboardD
 
 export function getQueueAnalyticsData(days = 7): Promise<QueueAnalyticsData> {
   return fetchJson(`${API_BASE_URL}/api/v1/analytics/queue?days=${encodeURIComponent(days)}`)
+}
+
+export function getAlertHistoryData(days = 7): Promise<AlertHistoryData> {
+  return fetchJson(`${API_BASE_URL}/api/v1/analytics/alerts?days=${encodeURIComponent(days)}`)
 }

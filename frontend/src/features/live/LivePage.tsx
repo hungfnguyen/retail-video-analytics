@@ -1,6 +1,7 @@
 import { ChevronDown } from 'lucide-react'
-import { useState } from 'react'
+import { useEffect, useRef, useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
+import { AlertDetail } from './components/AlertDetail'
 import { AlertList } from './components/AlertList'
 import { LiveMetricCards } from './components/LiveMetricCards'
 import { TrafficChart } from './components/TrafficChart'
@@ -9,6 +10,7 @@ import { ZoneHeatmap } from './components/ZoneHeatmap'
 import { ZoneRuntimePanel } from './components/ZoneRuntimePanel'
 import { useLiveData } from './hooks/useLiveData'
 import type { AppPage } from '../../shared/components/AppShell'
+import type { Alert } from './types'
 
 type LivePageProps = {
   activePage: AppPage
@@ -18,6 +20,26 @@ type LivePageProps = {
 export function LivePage({ activePage, onPageChange }: LivePageProps) {
   const { data, error, switchCamera } = useLiveData()
   const [cameraMenuOpen, setCameraMenuOpen] = useState(false)
+  const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
+  const [toast, setToast] = useState<string | null>(null)
+  const prevAlertIds = useRef<Set<string>>(new Set())
+  const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
+
+  // Detect new HIGH alerts and show a toast
+  useEffect(() => {
+    if (!data?.alerts) return
+    const current = data.alerts
+    const newHigh = current.filter(
+      (a) => a.severity === 'high' && !prevAlertIds.current.has(a.alert_id),
+    )
+    prevAlertIds.current = new Set(current.map((a) => a.alert_id))
+
+    if (newHigh.length > 0) {
+      setToast(newHigh[0].title)
+      if (toastTimeout.current) clearTimeout(toastTimeout.current)
+      toastTimeout.current = setTimeout(() => setToast(null), 5000)
+    }
+  }, [data?.alerts])
 
   if (error) {
     return <div className="grid min-h-screen place-items-center">{error}</div>
@@ -36,6 +58,21 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
 
   return (
     <AppShell activePage={activePage} onPageChange={onPageChange}>
+      {/* HIGH alert toast */}
+      {toast && (
+        <div className="fixed right-5 top-5 z-40 flex items-center gap-3 rounded-lg border border-red-200 bg-white px-4 py-3 shadow-lg">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+          <span className="text-sm font-semibold text-slate-900">{toast}</span>
+          <button
+            className="ml-2 text-slate-400 hover:text-slate-600"
+            onClick={() => setToast(null)}
+            type="button"
+          >
+            ×
+          </button>
+        </div>
+      )}
+
       {/* Page header */}
       <header className="mb-5 flex items-center justify-between">
         <h1 className="m-0 text-[26px] font-bold leading-tight text-slate-950">Live Store Monitor</h1>
@@ -102,7 +139,7 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
           lineCrossings={data.frame.line_crossings}
           zoneCounts={data.frame.zone_counts}
         />
-        <AlertList alerts={data.alerts} />
+        <AlertList alerts={data.alerts} onAlertClick={setSelectedAlert} />
       </div>
 
       {/* Supporting live analytics */}
@@ -113,6 +150,10 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
         />
         <ZoneHeatmap cells={data.zone_heatmap} />
       </div>
+
+      {selectedAlert && (
+        <AlertDetail alert={selectedAlert} onClose={() => setSelectedAlert(null)} />
+      )}
     </AppShell>
   )
 }
