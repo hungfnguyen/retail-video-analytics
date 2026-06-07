@@ -195,6 +195,9 @@ class AlertClipExtractor:
         fd, tmp_path = tempfile.mkstemp(prefix=f"{metadata['alert_id']}_", suffix=".mp4")
         os.close(fd)
 
+        fd2, h264_path = tempfile.mkstemp(prefix=f"{metadata['alert_id']}_h264_", suffix=".mp4")
+        os.close(fd2)
+
         try:
             writer = cv2.VideoWriter(tmp_path, cv2.VideoWriter_fourcc(*"mp4v"), self.fps, (width, height))
             if not writer.isOpened():
@@ -208,7 +211,22 @@ class AlertClipExtractor:
             finally:
                 writer.release()
 
-            with open(tmp_path, "rb") as f:
+            # Transcode mp4v → H.264 so browsers can play the clip natively.
+            # mp4v (MPEG-4 Part 2) is not supported by Chrome/Firefox/Safari.
+            import subprocess
+            result = subprocess.run(
+                ["ffmpeg", "-y", "-i", tmp_path,
+                 "-c:v", "libx264", "-preset", "fast", "-pix_fmt", "yuv420p",
+                 h264_path],
+                capture_output=True,
+            )
+            if result.returncode != 0:
+                logger.warning("ffmpeg transcode failed, uploading mp4v fallback: %s", result.stderr[-300:])
+                upload_path = tmp_path
+            else:
+                upload_path = h264_path
+
+            with open(upload_path, "rb") as f:
                 body = f.read()
 
             key = self._build_clip_key(metadata["trigger_ts"], metadata["alert_id"])
@@ -240,10 +258,11 @@ class AlertClipExtractor:
                 byte_size=len(body),
             )
         finally:
-            try:
-                os.remove(tmp_path)
-            except OSError:
-                logger.warning("Unable to remove temp clip file: %s", tmp_path)
+            for path in (tmp_path, h264_path):
+                try:
+                    os.remove(path)
+                except OSError:
+                    pass
 
     def _build_clip_key(self, trigger_ts: datetime, alert_id: str) -> str:
         ts = ensure_utc(trigger_ts)

@@ -136,6 +136,11 @@ main() {
     echo "[submit-jobs] WARN: RealtimeMetrics failed, continuing anyway."
   fi
 
+  echo "[submit-jobs] === Submitting Gold Alerts Job ==="
+  if ! submit_job "org.rva.gold.GoldAlertsJob" "${USR_LIB}/gold-jobs.jar" "GoldAlertsJob"; then
+    echo "[submit-jobs] WARN: GoldAlertsJob failed, continuing anyway."
+  fi
+
   echo "[submit-jobs] Job submission complete."
   echo "[submit-jobs] Check Flink UI at http://localhost:8081 for job status"
 }

@@ -26,7 +26,7 @@ STALE_FRAME_MS = 10_000
 MEDIA_STALE_MS = 3_000
 METADATA_FRESH_MS = 1_500
 METADATA_STALE_MS = 5_000
-HEALTH_CHECK_TIMEOUT_SECONDS = 0.1
+HEALTH_CHECK_TIMEOUT_SECONDS = 1.0
 
 _redis_client: Any | None = None
 _health_cache: list[dict[str, Any]] = []
