@@ -10,7 +10,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { Clock3, Container, Database, RefreshCw, Server, Settings2 } from 'lucide-react'
+import { Activity, Clock3, Container, Database, RefreshCw, Server, Settings2 } from 'lucide-react'
 import { AppShell, type AppPage } from '../../shared/components/AppShell'
 import type { ServiceHealth } from '../live/types'
 import { useSystemData } from './hooks/useSystemData'
@@ -48,11 +48,16 @@ function formatGeneratedAt(value?: string) {
   return parsed.toLocaleString()
 }
 
+function formatPercent(value: number) {
+  return `${Math.round(value * 100)}%`
+}
+
 export function SystemPage({ activePage, onPageChange }: SystemPageProps) {
   const { data, error, refresh } = useSystemData()
   const services = data?.pipeline_health ?? []
   const throughput = data?.throughput ?? []
   const lagData = data?.lag ?? []
+  const visionRuntime = data?.vision_runtime ?? []
   const containers = data?.containers ?? []
   const logs = data?.logs ?? []
   const flow = data?.flow ?? []
@@ -107,6 +112,61 @@ export function SystemPage({ activePage, onPageChange }: SystemPageProps) {
             <small className="mt-3 block text-slate-500">{service.latency_ms}ms check latency</small>
           </article>
         ))}
+      </section>
+
+
+
+      <section className="mt-3 rounded-lg border border-slate-200 bg-white p-4 shadow-[0_12px_34px_rgba(15,23,42,0.06)]">
+        <div className="mb-3 flex items-center justify-between">
+          <h2 className="m-0 flex items-center gap-2 text-[17px] font-bold text-slate-950">
+            <Activity className="text-blue-600" size={18} />
+            Vision runtime
+          </h2>
+          <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-700">Per camera</span>
+        </div>
+        {visionRuntime.length > 0 ? (
+          <div className="overflow-x-auto">
+            <table className="w-full min-w-[980px] border-collapse text-sm">
+              <thead>
+                <tr className="border-b border-slate-200 text-left text-xs uppercase text-slate-500">
+                  <th className="py-2 pr-3">Camera</th>
+                  <th className="py-2 pr-3 text-right">FPS</th>
+                  <th className="py-2 pr-3 text-right">Target</th>
+                  <th className="py-2 pr-3 text-right">Infer</th>
+                  <th className="py-2 pr-3 text-right">Track</th>
+                  <th className="py-2 pr-3 text-right">Zone</th>
+                  <th className="py-2 pr-3 text-right">Queue</th>
+                  <th className="py-2 pr-3 text-right">Drops</th>
+                  <th className="py-2 pr-3 text-right">GPU free</th>
+                  <th className="py-2 pr-3 text-right">Stable</th>
+                  <th className="py-2 pr-3 text-right">Pred</th>
+                  <th className="py-2 text-right">Zones</th>
+                </tr>
+              </thead>
+              <tbody>
+                {visionRuntime.map((runtime) => (
+                  <tr className="border-b border-slate-100 last:border-b-0" key={runtime.camera_id}>
+                    <td className="py-2 pr-3">
+                      <strong className="block text-slate-900">{runtime.camera_name}</strong>
+                      <span className="text-xs text-slate-500">{runtime.camera_id}</span>
+                    </td>
+                    <td className="py-2 pr-3 text-right font-semibold text-slate-800">{runtime.processing_fps.toFixed(1)}</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.detector_fps_target.toFixed(1)}</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.inference_ms}ms</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.tracking_ms}ms</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.zone_ms}ms</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.reader_queue_size}</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.dropped_frames_since_last}/{runtime.reader_drop_count}</td>
+                    <td className="py-2 pr-3 text-right font-semibold text-emerald-700">{formatPercent(runtime.gpu_free_ratio)}</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.stable_track_count}</td>
+                    <td className="py-2 pr-3 text-right text-slate-600">{runtime.predicted_tracks_count}</td>
+                    <td className="py-2 text-right text-slate-600">{runtime.zone_count_total}</td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
+        ) : emptyState('No Vision runtime metadata yet')}
       </section>
 
       <div className="mt-3 grid grid-cols-2 gap-3">

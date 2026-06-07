@@ -162,9 +162,6 @@ public class RealtimeMetricsJob {
                     }
 
                     double conf = det.path("conf").asDouble(0.0);
-                    if (conf < 0.4) {
-                        continue;
-                    }
 
                     JsonNode cn = det.path("centroid_norm");
                     double nx = clampDouble(cn.path("x").asDouble(0.0), 0.0, 1.0);

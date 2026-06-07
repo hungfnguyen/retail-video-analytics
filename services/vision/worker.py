@@ -7,6 +7,7 @@ from datetime import datetime, timezone
 from typing import Any, Dict
 
 from detect.supervision_yolo_detector import SupervisionYoloDetector
+from inference.shared_yolo import SharedInferenceClient
 from emit.pulsar_emitter import PulsarEmitter
 from emit.s3_client import S3ClientConfig, create_s3_client
 from emit.frame_sampler import FrameSampler
@@ -92,7 +93,12 @@ def _frame_from_packet(packet: Any) -> tuple[Any, int | None, float | None, int,
     return packet, None, None, 0, 0
 
 
-def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
+def run_worker(
+    camera_cfg: Dict[str, Any],
+    global_cfg: Dict[str, Any],
+    shared_inference_request_queue: Any | None = None,
+    shared_inference_response_queue: Any | None = None,
+) -> None:
     """CameraWorker: chạy pipeline cho 1 camera trong process riêng."""
     global _emitter, _reader
 
@@ -112,20 +118,35 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
 
     class_filter = global_cfg.get("class_filter", [0])
 
-    # 1. Load detector + explicit tracker state once per camera worker.
+    # 1. Load tracker state once per camera worker. YOLO can run either inside
+    # this process or in the manager-owned shared inference process.
     logger.info(
-        "Loading rebuilt Vision pipeline: model=%s tracker=%s",
+        "Loading rebuilt Vision pipeline: model=%s tracker=%s shared_inference=%s",
         global_cfg["model_name"],
         global_cfg["tracker_type"],
+        bool(global_cfg.get("shared_inference_enabled", False)),
     )
-    detector = SupervisionYoloDetector(
-        global_cfg["model_name"],
-        conf_thres=float(global_cfg.get("conf_thres", 0.15)),
-        class_filter=class_filter,
-        iou=float(global_cfg.get("detector_iou", 0.70)),
-        imgsz=global_cfg.get("detector_imgsz", 1280),
-        half=bool(global_cfg.get("detector_half", True)),
+    use_shared_inference = (
+        bool(global_cfg.get("shared_inference_enabled", False))
+        and shared_inference_request_queue is not None
+        and shared_inference_response_queue is not None
     )
+    if use_shared_inference:
+        detector = SharedInferenceClient(
+            camera_id=camera_id,
+            request_queue=shared_inference_request_queue,
+            response_queue=shared_inference_response_queue,
+            timeout_sec=float(global_cfg.get("shared_inference_timeout_sec", 30.0)),
+        )
+    else:
+        detector = SupervisionYoloDetector(
+            global_cfg["model_name"],
+            conf_thres=float(global_cfg.get("conf_thres", 0.15)),
+            class_filter=class_filter,
+            iou=float(global_cfg.get("detector_iou", 0.70)),
+            imgsz=global_cfg.get("detector_imgsz", 1280),
+            half=bool(global_cfg.get("detector_half", True)),
+        )
     tracker = create_supervision_tracker(global_cfg["tracker_type"], global_cfg)
     effective_tracker_type = getattr(tracker, "tracker_type", global_cfg["tracker_type"])
     smoother = create_detections_smoother(global_cfg)
@@ -419,6 +440,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                     "conf_thres": float(global_cfg.get("conf_thres", 0.15)),
                     "class_filter": class_filter,
                     "detector_type": detector.detector_type,
+                    "shared_inference_enabled": use_shared_inference,
                     "supervision_version": package_version("supervision"),
                     "trackers_version": package_version("trackers"),
                     "zone_config_version": zone_runtime.version,

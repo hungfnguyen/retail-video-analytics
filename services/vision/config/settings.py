@@ -123,6 +123,15 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "detector_iou": _get_float("detector_iou", global_settings, 0.70),
         "detector_imgsz": _get_int("detector_imgsz", global_settings, 1280),
         "detector_half": _get_bool("detector_half", global_settings, True),
+        "shared_inference_enabled": _get_bool(
+            "shared_inference_enabled", global_settings, False
+        ),
+        "shared_inference_queue_size": _get_int(
+            "shared_inference_queue_size", global_settings, max(4, len(enabled_cameras))
+        ),
+        "shared_inference_timeout_sec": _get_float(
+            "shared_inference_timeout_sec", global_settings, 30.0
+        ),
         "track_activation_threshold": _get_float(
             "track_activation_threshold", global_settings, 0.20
         ),
@@ -395,6 +404,9 @@ def _fallback_single_camera() -> Dict[str, Any]:
         "detector_iou": 0.70,
         "detector_imgsz": 1280,
         "detector_half": True,
+        "shared_inference_enabled": False,
+        "shared_inference_queue_size": 4,
+        "shared_inference_timeout_sec": 30.0,
         "track_activation_threshold": 0.20,
         "lost_track_buffer": 60,
         "minimum_consecutive_frames": 2,

@@ -24,6 +24,9 @@ settings:
   detector_iou: 0.70
   detector_imgsz: 1280
   detector_half: true
+  shared_inference_enabled: true
+  shared_inference_queue_size: 8
+  shared_inference_timeout_sec: 30
   tracker_type: roboflow_bytetrack
   conf_thres: 0.15
   class_filter: [0]
