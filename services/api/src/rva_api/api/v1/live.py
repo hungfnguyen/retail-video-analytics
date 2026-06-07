@@ -748,6 +748,16 @@ def _pipeline_health(
     return result
 
 
+def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str, Any]]:
+    alert_ids = client.zrevrange(f"alert:live:{camera_id}", 0, limit - 1)
+    if not alert_ids:
+        return []
+    pipe = client.pipeline(transaction=False)
+    for aid in alert_ids:
+        pipe.hgetall(f"alert:item:{aid}")
+    return [r for r in pipe.execute() if r]
+
+
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
 def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     client = _get_redis_client()
@@ -873,7 +883,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "status": status,
             "updated_at": count_updated_at or now.isoformat(),
         },
-        "alerts": [],
+        "alerts": _recent_alerts(client, camera_id),
         "traffic": traffic_points,
         "traffic_summary": {**traffic_summary, "current_total": current_count},
         "zone_heatmap": _zone_heatmap(heatmap_cells),

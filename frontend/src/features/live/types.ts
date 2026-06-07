@@ -101,6 +101,7 @@ export type LiveStats = {
 export type Alert = {
   alert_id: string
   camera_id: string
+  alert_type: string
   title: string
   description: string
   severity: 'low' | 'medium' | 'high'

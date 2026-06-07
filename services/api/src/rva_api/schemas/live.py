@@ -110,6 +110,7 @@ class LiveStats(BaseModel):
 class Alert(BaseModel):
     alert_id: str
     camera_id: str
+    alert_type: str
     title: str
     description: str
     severity: Literal["low", "medium", "high"]
