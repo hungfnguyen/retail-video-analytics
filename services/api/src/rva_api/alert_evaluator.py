@@ -282,7 +282,8 @@ async def run_alert_evaluator() -> None:
 
     while True:
         try:
-            _evaluate_once(client, camera_ids, settings)
+            # Run sync Redis calls in a thread so the async event loop is not blocked
+            await asyncio.to_thread(_evaluate_once, client, camera_ids, settings)
         except Exception:
             log.exception("alert evaluator: evaluation error (continuing)")
         try:

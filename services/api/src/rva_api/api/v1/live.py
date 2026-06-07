@@ -755,7 +755,17 @@ def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str
     pipe = client.pipeline(transaction=False)
     for aid in alert_ids:
         pipe.hgetall(f"alert:item:{aid}")
-    return [r for r in pipe.execute() if r]
+    cleaned = []
+    for r in pipe.execute():
+        if not r:
+            continue
+        # Strip empty strings for optional fields — Pydantic can't coerce "" to int|None
+        c = {k: v for k, v in r.items() if v != ""}
+        c.pop("track_id", None)
+        c.pop("clip_s3_key", None) if not c.get("clip_s3_key") else None
+        c.pop("snapshot_key", None) if not c.get("snapshot_key") else None
+        cleaned.append(c)
+    return cleaned
 
 
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
