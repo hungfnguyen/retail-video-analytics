@@ -11,8 +11,6 @@ export function VideoPanel({ frame }: VideoPanelProps) {
   const webRtcEnabled = Boolean(streamUrl) && LIVE_VIDEO_TRANSPORT !== 'mjpeg'
   const { fallbackRequired, videoRef } = useWebRtcVideo(frame.camera_id, webRtcEnabled)
   const renderMjpegFallback = Boolean(streamUrl) && (!webRtcEnabled || fallbackRequired)
-  const mediaFps = frame.media_fps > 0 ? frame.media_fps : frame.fps
-  const mediaLatencyMs = frame.media_latency_ms || frame.latency_ms
   const imageAspectRatio = frame.image_size.width > 0 && frame.image_size.height > 0
     ? `${frame.image_size.width} / ${frame.image_size.height}`
     : '16 / 9'
@@ -78,11 +76,7 @@ export function VideoPanel({ frame }: VideoPanelProps) {
 
       <div className="flex flex-wrap items-center justify-between gap-3 px-4 py-3.5 text-[13px] text-slate-500">
         <span>Camera: {frame.camera_id}</span>
-        <span>Media {mediaFps.toFixed(1)} FPS | Latency {mediaLatencyMs}ms | Infer {frame.inference_ms}ms</span>
-        <span>
-          Frame {frame.frame_id} | Proc {frame.processing_fps.toFixed(1)} FPS | Enc {frame.encode_ms}ms | Drops{' '}
-          {frame.reader_drop_count}
-        </span>
+        <span>Annotated live stream</span>
       </div>
     </section>
   )

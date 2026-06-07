@@ -31,11 +31,22 @@ class FakeRedis:
                     "grid_y": 36,
                 }
             ],
+            "zone_counts": [
+                {
+                    "zone_id": "checkout_queue_01",
+                    "zone_name": "Checkout Queue 01",
+                    "zone_type": "queue",
+                    "count": 1,
+                    "track_ids": [42],
+                    "global_track_ids": ["cam_01_g_000042"],
+                }
+            ],
         }
         self.values = {
             "live:frame:cam_01": json.dumps(frame),
             "stats:count:cam_01": "1",
         }
+        self.alerts = []
         self.track_keys = ["track:active:cam_01:42"]
         self.heatmap = [("35,36", 4.0), ("10,12", 2.0)]
 
@@ -52,6 +63,11 @@ class FakeRedis:
         assert key == "heatmap:live:cam_01"
         members = self.heatmap[start : end + 1]
         return members if withscores else [member for member, _ in members]
+
+    def lrange(self, key, start, end):
+        if key not in {"alerts:recent:cam_01", "alerts:recent:store:store_001"}:
+            return []
+        return self.alerts[start : end + 1]
 
 
 @pytest.fixture(autouse=True)
@@ -90,6 +106,15 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
             "publish_interval_ms": 80,
             "reader_queue_size": 1,
             "reader_drop_count": 7,
+            "zone_counts": [
+                {
+                    "zone_id": "checkout_queue_01",
+                    "zone_type": "queue",
+                    "count": 1,
+                    "avg_wait_seconds": 12.5,
+                    "max_wait_seconds": 18,
+                }
+            ],
         },
     )
 
@@ -117,6 +142,9 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.jpeg_size_bytes == 123456
     assert data.frame.reader_queue_size == 1
     assert data.frame.reader_drop_count == 7
+    assert data.frame.zone_counts[0].zone_id == "checkout_queue_01"
+    assert data.frame.zone_counts[0].avg_wait_seconds == 12.5
+    assert data.frame.zone_counts[0].max_wait_seconds == 18
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0
@@ -130,6 +158,61 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
         "trino",
         "fastapi",
     }
+
+
+def test_live_dashboard_maps_recent_alerts(monkeypatch):
+    fake_redis = FakeRedis()
+    fake_redis.alerts = [
+        json.dumps(
+            {
+                "alert_id": "cam_01_1500_density_high",
+                "store_id": "store_001",
+                "camera_id": "cam_01",
+                "alert_type": "density_high",
+                "title": "High density detected",
+                "description": "Current count 12 exceeded threshold 10.",
+                "severity": "high",
+                "zone": "Entrance",
+                "event_ts": datetime.now(timezone.utc).isoformat(),
+                "status": "new",
+                "trigger_value": 12,
+                "threshold": 10,
+                "clip_s3_uri": "s3://warehouse/clips/2026-06-05/store_001/cam_01/cam_01_1500_density_high.mp4",
+            }
+        )
+    ]
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(
+        live,
+        "_load_camera_config",
+        lambda: [
+            {
+                "camera_id": "cam_01",
+                "store_id": "store_001",
+                "name": "Entrance",
+                "source_type": "video_file",
+                "enabled": True,
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 12.5,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_01")
+
+    assert len(data.alerts) == 1
+    assert data.alerts[0].alert_id == "cam_01_1500_density_high"
+    assert data.alerts[0].alert_type == "density_high"
+    assert data.alerts[0].trigger_value == 12
+    assert data.alerts[0].threshold == 10
+    assert data.alerts[0].clip_s3_uri is not None
 
 
 def test_get_redis_client_raises_503_when_unavailable(monkeypatch):

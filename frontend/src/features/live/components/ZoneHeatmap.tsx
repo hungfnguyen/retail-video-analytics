@@ -17,7 +17,7 @@ export function ZoneHeatmap({ cells }: ZoneHeatmapProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
       <div className="mb-3.5 flex items-center justify-between">
-        <h2 className="m-0 text-[17px] font-bold text-slate-950">Zone heatmap</h2>
+        <h2 className="m-0 text-[17px] font-bold text-slate-950">Density heatmap</h2>
       </div>
 
       <div className="grid grid-cols-7 gap-1">

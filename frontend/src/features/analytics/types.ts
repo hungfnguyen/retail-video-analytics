@@ -10,6 +10,7 @@ export type AnalyticsKpi = {
 export type HourlyTrafficPoint = {
   hour: string
   detections: number
+  unique_tracks: number
   average: number
 }
 
@@ -17,6 +18,8 @@ export type CameraComparisonPoint = {
   camera_id: string
   detections: number
   share: number
+  unique_tracks: number
+  avg_confidence: number
 }
 
 export type HeatmapCell = {
@@ -33,8 +36,10 @@ export type DwellBand = {
 export type DailySummaryRow = {
   date: string
   detections: number
+  unique_tracks: number
   peak: string
   avg_dwell_sec: number
+  avg_confidence: number
 }
 
 export type AnalyticsDashboardData = {

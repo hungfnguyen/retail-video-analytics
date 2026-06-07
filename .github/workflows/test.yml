@@ -25,11 +25,11 @@ jobs:
       - name: Verify imports
         run: |
           uv run --package rva-vision python -c "
-          from track.tracker_factory import create_tracker
+          from track.roboflow_tracker import create_supervision_tracker
           from config.settings import settings
-          from detect.yolo_detector import YoloDetector
+          from detect.supervision_yolo_detector import SupervisionYoloDetector
           from emit.pulsar_emitter import PulsarEmitter
-          from ingest.CVSource import ingest_video
+          from reader import VideoFileReader
           print('All imports OK')
           "
 

@@ -19,6 +19,9 @@ stats:count:{camera_id}
 live:frame:{camera_id}
 heatmap:live:{camera_id}
 track:active:{camera_id}:{track_id}
+alerts:recent:{camera_id}
+alerts:recent:store:{store_id}
+alerts:cooldown:{camera_id}:{alert_type}
 ```
 
 Redis is not the historical source of truth. Keys expire so dashboard state naturally goes stale when a camera, Vision worker, or realtime job stops.
@@ -63,6 +66,10 @@ Current tables:
 lakehouse.rva.bronze_raw
 lakehouse.rva.silver_detections
 lakehouse.rva.gold_track_summary
+lakehouse.rva.gold_camera_hourly_metrics
+lakehouse.rva.gold_camera_daily_metrics
+lakehouse.rva.gold_camera_daily_dwell
+lakehouse.rva.gold_alert_events
 ```
 
 ## Serving Access Pattern
@@ -72,7 +79,10 @@ lakehouse.rva.gold_track_summary
 | Live count | Redis or live media metadata fallback |
 | Active tracks | Redis key scan |
 | Live heatmap | Redis sorted set |
+| Recent alerts | Redis recent alert lists |
 | Current video | Local latest JPEG served by FastAPI |
 | Historical detections | Trino over Iceberg |
 | Track summary analytics | Trino over `gold_track_summary` |
+| Alert history | Trino over `gold_alert_events` |
 | Sampled frame lookup | AWS S3 object paths |
+| Alert clip replay | AWS S3 object paths linked by alert metadata |

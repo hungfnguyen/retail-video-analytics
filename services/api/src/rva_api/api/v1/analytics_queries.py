@@ -7,8 +7,6 @@ from typing import Any
 from urllib.request import Request, urlopen
 
 MAX_DAYS = 31
-HEATMAP_ROWS = 6
-HEATMAP_COLS = 8
 
 
 def _trino_url() -> str:
@@ -20,7 +18,7 @@ def _query_timeout() -> float:
 
 
 def _max_query_wait() -> float:
-    return float(os.getenv("TRINO_QUERY_MAX_WAIT_SEC", "20"))
+    return float(os.getenv("TRINO_QUERY_MAX_WAIT_SEC", "60"))
 
 
 def _headers() -> dict[str, str]:
@@ -79,24 +77,60 @@ def trino_query(sql: str, max_wait: float | None = None) -> list[list[Any]]:
         payload = _read_json_response(next_uri)
 
 
+def summary_sql(days: int) -> str:
+    return f"""
+        WITH daily AS (
+          SELECT *
+          FROM lakehouse.rva.gold_camera_daily_metrics
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        ),
+        dwell AS (
+          SELECT *
+          FROM lakehouse.rva.gold_camera_daily_dwell
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        )
+        SELECT
+          COALESCE(SUM(daily.detections), 0) AS total_detections,
+          COALESCE(SUM(daily.unique_tracks), 0) AS unique_tracks,
+          COUNT(DISTINCT daily.metric_date) AS active_days,
+          COALESCE(SUM(daily.avg_conf * daily.detections) / NULLIF(SUM(daily.detections), 0), 0) AS avg_conf,
+          COALESCE(SUM(daily.detections) / NULLIF(COUNT(DISTINCT daily.metric_date), 0), 0) AS avg_detections_per_active_day,
+          COALESCE(SUM(dwell.total_dwell_sec) / NULLIF(SUM(dwell.track_count), 0), 0) AS avg_dwell_sec,
+          COALESCE(SUM(dwell.track_count), 0) AS track_count,
+          COALESCE(SUM(dwell.long_dwell_tracks), 0) AS long_dwell_tracks,
+          COALESCE(SUM(dwell.short_dwell_tracks), 0) AS short_dwell_tracks
+        FROM daily
+        LEFT JOIN dwell
+          ON daily.store_id = dwell.store_id
+         AND daily.camera_id = dwell.camera_id
+         AND daily.metric_date = dwell.metric_date
+    """
+
+
 def hourly_sql(days: int) -> str:
     return f"""
         SELECT
-          concat(lpad(CAST(hour(capture_ts) AS varchar), 2, '0'), ':00') AS hour_label,
-          COUNT(*) AS detections
-        FROM lakehouse.rva.silver_detections
-        WHERE capture_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
-        GROUP BY hour(capture_ts)
-        ORDER BY hour(capture_ts)
+          concat(lpad(CAST(hour_of_day AS varchar), 2, '0'), ':00') AS hour_label,
+          SUM(detections) AS detections,
+          SUM(unique_tracks) AS unique_tracks,
+          ROUND(SUM(detections) / NULLIF(COUNT(DISTINCT metric_date), 0)) AS average
+        FROM lakehouse.rva.gold_camera_hourly_metrics
+        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        GROUP BY hour_of_day
+        ORDER BY hour_of_day
     """
 
 
 def camera_sql(days: int) -> str:
     return f"""
         WITH camera_counts AS (
-          SELECT camera_id, COUNT(*) AS detections
-          FROM lakehouse.rva.silver_detections
-          WHERE capture_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+          SELECT
+            camera_id,
+            SUM(detections) AS detections,
+            SUM(unique_tracks) AS unique_tracks,
+            COALESCE(SUM(avg_conf * detections) / NULLIF(SUM(detections), 0), 0) AS avg_conf
+          FROM lakehouse.rva.gold_camera_daily_metrics
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
           GROUP BY camera_id
         ),
         total_counts AS (
@@ -105,78 +139,62 @@ def camera_sql(days: int) -> str:
         SELECT
           camera_id,
           detections,
-          ROUND(detections * 100.0 / NULLIF(total_detections, 0), 1) AS share
+          ROUND(detections * 100.0 / NULLIF(total_detections, 0), 1) AS share,
+          unique_tracks,
+          avg_conf
         FROM camera_counts CROSS JOIN total_counts
         ORDER BY detections DESC
     """
 
 
-def heatmap_sql(days: int) -> str:
-    return f"""
-        SELECT
-          LEAST({HEATMAP_ROWS - 1}, GREATEST(0, CAST(FLOOR((((bbox_y1 + bbox_y2) / 2.0) / img_h) * {HEATMAP_ROWS}) AS integer))) AS row_index,
-          LEAST({HEATMAP_COLS - 1}, GREATEST(0, CAST(FLOOR((((bbox_x1 + bbox_x2) / 2.0) / img_w) * {HEATMAP_COLS}) AS integer))) AS col_index,
-          COUNT(*) AS detections
-        FROM lakehouse.rva.silver_detections
-        WHERE capture_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
-          AND img_w > 0
-          AND img_h > 0
-        GROUP BY 1, 2
-        ORDER BY 1, 2
-    """
-
-
-def dwell_sql(days: int) -> str:
-    return f"""
-        SELECT
-          CASE
-            WHEN duration_sec < 30 THEN '< 30s'
-            WHEN duration_sec < 60 THEN '30s - 1m'
-            WHEN duration_sec < 120 THEN '1m - 2m'
-            WHEN duration_sec < 300 THEN '2m - 5m'
-            WHEN duration_sec < 600 THEN '5m - 10m'
-            ELSE '> 10m'
-          END AS band,
-          COUNT(*) AS tracks
-        FROM lakehouse.rva.gold_track_summary
-        WHERE visit_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-          AND duration_sec >= 0
-        GROUP BY 1
-    """
-
-
 def daily_sql(days: int) -> str:
     return f"""
-        WITH hourly AS (
-          SELECT CAST(capture_ts AS date) AS visit_date, hour(capture_ts) AS visit_hour, COUNT(*) AS detections
-          FROM lakehouse.rva.silver_detections
-          WHERE capture_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+        WITH daily AS (
+          SELECT
+            metric_date,
+            SUM(detections) AS total_detections,
+            SUM(unique_tracks) AS unique_tracks,
+            COALESCE(SUM(avg_conf * detections) / NULLIF(SUM(detections), 0), 0) AS avg_conf
+          FROM lakehouse.rva.gold_camera_daily_metrics
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          GROUP BY 1
+        ),
+        hourly AS (
+          SELECT metric_date, hour_of_day, SUM(detections) AS detections
+          FROM lakehouse.rva.gold_camera_hourly_metrics
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
           GROUP BY 1, 2
         ),
-        daily AS (
+        hourly_ranked AS (
           SELECT
-            visit_date,
-            SUM(detections) AS total_detections,
-            max_by(visit_hour, detections) AS peak_hour,
-            MAX(detections) AS peak_detections
+            metric_date,
+            hour_of_day,
+            detections,
+            ROW_NUMBER() OVER (PARTITION BY metric_date ORDER BY detections DESC, hour_of_day) AS rn
           FROM hourly
-          GROUP BY visit_date
+        ),
+        dwell AS (
+          SELECT
+            metric_date,
+            SUM(track_count) AS track_count,
+            COALESCE(SUM(total_dwell_sec) / NULLIF(SUM(track_count), 0), 0) AS avg_dwell_sec
+          FROM lakehouse.rva.gold_camera_daily_dwell
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          GROUP BY 1
         )
         SELECT
-          CAST(daily.visit_date AS varchar) AS date_label,
+          CAST(daily.metric_date AS varchar) AS date_label,
           daily.total_detections,
-          concat(lpad(CAST(daily.peak_hour AS varchar), 2, '0'), ':00 (', CAST(daily.peak_detections AS varchar), ')') AS peak,
-          0 AS avg_dwell_sec
+          daily.unique_tracks,
+          concat(lpad(CAST(hourly_ranked.hour_of_day AS varchar), 2, '0'), ':00 (', CAST(hourly_ranked.detections AS varchar), ')') AS peak,
+          COALESCE(dwell.avg_dwell_sec, 0) AS avg_dwell_sec,
+          daily.avg_conf
         FROM daily
-        ORDER BY daily.visit_date DESC
+        LEFT JOIN hourly_ranked
+          ON daily.metric_date = hourly_ranked.metric_date
+         AND hourly_ranked.rn = 1
+        LEFT JOIN dwell
+          ON daily.metric_date = dwell.metric_date
+        ORDER BY daily.metric_date DESC
         LIMIT 7
-    """
-
-
-def avg_dwell_sql(days: int) -> str:
-    return f"""
-        SELECT AVG(duration_sec) AS avg_dwell_sec, COUNT(*) AS tracks
-        FROM lakehouse.rva.gold_track_summary
-        WHERE visit_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-          AND duration_sec >= 0
     """

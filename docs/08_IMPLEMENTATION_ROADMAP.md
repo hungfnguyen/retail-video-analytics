@@ -9,6 +9,7 @@ Implemented:
 - Vision multi-camera processing.
 - Pulsar metadata topics.
 - Flink Bronze/Silver/Gold track-summary lakehouse path.
+- Flink Gold dashboard aggregate tables for hourly, daily, and dwell analytics.
 - Flink realtime Redis/DLQ path.
 - AWS S3-backed Iceberg warehouse.
 - Trino query access.
@@ -24,11 +25,11 @@ Implemented:
 
 ## Phase 2: Lakehouse Analytics Expansion
 
-Add analytical Gold tables based on clear dashboard needs:
+Remaining analytical Gold tables should be added based on clear dashboard needs:
 
 - camera minute metrics;
-- camera hourly heatmap;
-- daily store summary;
+- historical zone or camera heatmap;
+- store-level daily rollups across all cameras;
 - data quality daily summary.
 
 Each new table should include:

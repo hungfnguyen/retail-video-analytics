@@ -1,4 +1,4 @@
-import { ArrowLeftRight, MapPinned, Users } from 'lucide-react'
+import { ArrowLeftRight, Clock, MapPinned, Users } from 'lucide-react'
 import type { LineCrossing, ZoneCount } from '../types'
 
 type ZoneRuntimePanelProps = {
@@ -28,6 +28,22 @@ function zoneTone(zoneType: string) {
 
 function displayZoneName(zone: ZoneCount) {
   return zone.zone_name || zone.zone_id.replace(/_/g, ' ')
+}
+
+function formatDuration(totalSeconds = 0) {
+  const safeSeconds = Math.max(0, Math.round(totalSeconds))
+  const minutes = Math.floor(safeSeconds / 60)
+  const seconds = safeSeconds % 60
+
+  if (minutes > 0) {
+    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
+  }
+
+  return `${seconds}s`
+}
+
+function shouldShowQueueWait(zone: ZoneCount) {
+  return zone.zone_type === 'queue' && zone.count > 0
 }
 
 export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanelProps) {
@@ -69,6 +85,15 @@ export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanel
                     ? zone.global_track_ids.join(', ')
                     : zone.zone_id}
                 </div>
+                {shouldShowQueueWait(zone) && (
+                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-amber-700">
+                    <span className="inline-flex items-center gap-1">
+                      <Clock size={12} />
+                      Max wait {formatDuration(zone.max_wait_seconds)}
+                    </span>
+                    <span>Avg {formatDuration(zone.avg_wait_seconds)}</span>
+                  </div>
+                )}
               </div>
               <strong className="min-w-10 text-right text-2xl leading-none text-blue-600">{zone.count}</strong>
             </div>

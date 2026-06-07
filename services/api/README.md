@@ -37,6 +37,6 @@ uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000
 | `RVA_WEBRTC_VIDEO_FPS` or `LIVE_WEBRTC_VIDEO_FPS` | WebRTC pacing FPS |
 | `TRINO_URL` | Trino HTTP endpoint, defaults to `http://localhost:8083` |
 | `TRINO_QUERY_TIMEOUT_SEC` | Per-request Trino HTTP timeout in seconds, defaults to `5` |
-| `TRINO_QUERY_MAX_WAIT_SEC` | Maximum wait for one Trino query to finish, defaults to `20` |
+| `TRINO_QUERY_MAX_WAIT_SEC` | Maximum wait for one Trino query to finish, defaults to `60` |
 
 The analytics endpoint returns honest empty/error states when Trino is unavailable or the lakehouse has no rows.

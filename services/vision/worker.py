@@ -92,6 +92,37 @@ def _frame_from_packet(packet: Any) -> tuple[Any, int | None, float | None, int,
     return packet, None, None, 0, 0
 
 
+def _attach_queue_wait_stats(
+    zone_counts: list[dict[str, Any]],
+    tracks: list[dict[str, Any]],
+) -> None:
+    waits_by_zone: dict[str, list[int]] = {}
+    for track in tracks:
+        if track.get("primary_zone_type") != "queue":
+            continue
+
+        zone_id = track.get("primary_zone_id")
+        if not zone_id:
+            continue
+
+        try:
+            wait_seconds = max(0, int(track.get("queue_wait_seconds", 0) or 0))
+        except (TypeError, ValueError):
+            wait_seconds = 0
+
+        waits_by_zone.setdefault(str(zone_id), []).append(wait_seconds)
+
+    for zone in zone_counts:
+        if zone.get("zone_type") != "queue":
+            continue
+
+        waits = waits_by_zone.get(str(zone.get("zone_id")), [])
+        zone["avg_wait_seconds"] = (
+            round(sum(waits) / len(waits), 1) if waits else 0.0
+        )
+        zone["max_wait_seconds"] = max(waits, default=0)
+
+
 def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
     """CameraWorker: chạy pipeline cho 1 camera trong process riêng."""
     global _emitter, _reader
@@ -333,6 +364,7 @@ def run_worker(camera_cfg: Dict[str, Any], global_cfg: Dict[str, Any]) -> None:
                 for track_id, entered_ms in queue_entered_ms_by_track.items()
                 if track_id in queue_track_ids_this_frame
             }
+            _attach_queue_wait_stats(zone_counts, stable_tracks)
             line_crossings = zone_runtime.trigger_lines(stable_tracks, width, height)
             zone_ms = max(0, int((time.perf_counter() - zone_started) * 1000))
 
