@@ -41,7 +41,7 @@ export function AlertDetail({ alert, onClose }: AlertDetailProps) {
     setAckStatus('loading')
     try {
       await fetch(`${API_BASE_URL}/api/v1/alerts/${alert.alert_id}/ack`, { method: 'POST' })
-      setAckStatus('done')
+      onClose()
     } catch {
       setAckStatus('idle')
     }
@@ -49,6 +49,10 @@ export function AlertDetail({ alert, onClose }: AlertDetailProps) {
 
   const clipUrl = alert.clip_s3_key
     ? `${API_BASE_URL}/api/v1/alerts/${alert.alert_id}/clip`
+    : null
+
+  const snapshotUrl = !clipUrl && alert.snapshot_key
+    ? `${API_BASE_URL}/api/v1/alerts/${alert.alert_id}/snapshot`
     : null
 
   return (
@@ -74,13 +78,24 @@ export function AlertDetail({ alert, onClose }: AlertDetailProps) {
         </div>
 
         <div className="p-5">
-          {/* Clip player */}
+          {/* Clip player (high severity — video) */}
           {clipUrl && (
             <div className="mb-5 overflow-hidden rounded-lg bg-slate-950">
               <video
                 className="w-full"
                 controls
                 src={clipUrl}
+              />
+            </div>
+          )}
+
+          {/* Snapshot (medium severity — image) */}
+          {snapshotUrl && (
+            <div className="mb-5 overflow-hidden rounded-lg bg-slate-100">
+              <img
+                alt="Alert snapshot"
+                className="w-full object-cover"
+                src={snapshotUrl}
               />
             </div>
           )}

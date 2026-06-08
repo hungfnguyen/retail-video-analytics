@@ -20,6 +20,8 @@ ALERT_STORE_TTL = 86_400  # 24h
 ALERT_STORE_MAX = 25
 
 _evaluator_client: Any | None = None
+_s3_client: Any | None = None
+_s3_bucket: str = ""
 
 
 def _redis_config() -> RedisClientConfig:
@@ -36,6 +38,50 @@ def _get_client() -> Any:
     if _evaluator_client is None:
         _evaluator_client = create_redis_client(_redis_config())
     return _evaluator_client
+
+
+def _get_s3() -> tuple[Any, str] | tuple[None, str]:
+    global _s3_client, _s3_bucket
+    if _s3_client is not None:
+        return _s3_client, _s3_bucket
+    bucket = os.getenv("S3_BUCKET", "")
+    if not bucket:
+        return None, ""
+    try:
+        from storage import S3ClientConfig, create_s3_client
+        config = S3ClientConfig(
+            endpoint_url=os.getenv("S3_ENDPOINT") or None,
+            region_name=os.getenv("S3_REGION", "us-east-1"),
+            bucket=bucket,
+            access_key=os.getenv("S3_ACCESS_KEY") or None,
+            secret_key=os.getenv("S3_SECRET_KEY") or None,
+        )
+        _s3_client = create_s3_client(config)
+        _s3_bucket = bucket
+    except Exception:
+        log.warning("snapshot S3 client init failed")
+        return None, ""
+    return _s3_client, _s3_bucket
+
+
+def _upload_snapshot(cam: str, alert_id: str) -> str:
+    """Read the current live JPEG for cam and upload to S3. Returns S3 key or ''."""
+    live_frames_dir = os.getenv("LIVE_FRAMES_DIR", "runtime/live_frames")
+    frame_path = Path(live_frames_dir) / f"{cam}.jpg"
+    if not frame_path.exists():
+        return ""
+    s3, bucket = _get_s3()
+    if s3 is None:
+        return ""
+    key = f"snapshots/{cam}/{alert_id}.jpg"
+    try:
+        with open(frame_path, "rb") as f:
+            s3.put_object(Bucket=bucket, Key=key, Body=f.read(), ContentType="image/jpeg")
+        log.debug("snapshot uploaded: %s", key)
+        return key
+    except Exception:
+        log.warning("snapshot upload failed for %s / %s", cam, alert_id)
+        return ""
 
 
 def _load_alert_config() -> tuple[list[str], dict[str, Any]]:
@@ -64,10 +110,11 @@ def _maybe_emit(
     title: str,
     description: str,
     cooldown_sec: int,
-) -> None:
+) -> str | None:
+    """Emit alert if not on cooldown. Returns alert_id if emitted, None otherwise."""
     cooldown_key = f"alert:cooldown:{cam}:{zone}:{alert_type}"
     if client.exists(cooldown_key):
-        return
+        return None
 
     now = datetime.now(timezone.utc)
     ts_ms = int(now.timestamp() * 1000)
@@ -84,6 +131,7 @@ def _maybe_emit(
         "event_ts": now.isoformat(),
         "status": "new",
         "track_id": "",
+        "snapshot_key": "",
     }
 
     pipe = client.pipeline()
@@ -95,6 +143,7 @@ def _maybe_emit(
     pipe.set(cooldown_key, 1, ex=cooldown_sec)
     pipe.execute()
     log.info("alert emitted: %s", alert_id)
+    return alert_id
 
 
 def _check_pipeline_lag(client: Any, cam: str, lag_sec: float, cooldown_sec: int) -> None:
@@ -110,12 +159,16 @@ def _check_pipeline_lag(client: Any, cam: str, lag_sec: float, cooldown_sec: int
     except Exception:
         return
     if age > lag_sec:
-        _maybe_emit(
+        aid = _maybe_emit(
             client, cam, "camera", "pipeline_lag", "high",
             f"Pipeline lag — {cam}",
             f"Frame is {int(age)}s old — pipeline may be stalled",
             cooldown_sec,
         )
+        if aid:
+            snap = _upload_snapshot(cam, aid)
+            if snap:
+                client.hset(f"alert:item:{aid}", "snapshot_key", snap)
 
 
 def _check_queue_zones(
@@ -147,22 +200,30 @@ def _check_queue_zones(
         avg_wait = int(result.get("avg_wait_ms", 0) or 0)
 
         if count >= overcrowded_threshold:
-            _maybe_emit(
+            aid = _maybe_emit(
                 client, cam, zone_id, "queue_overcrowded", "high",
                 f"Queue overcrowded — {zone_id.replace('_', ' ')}",
                 f"{count} people waiting in queue",
                 cooldown_sec,
             )
+            if aid:
+                snap = _upload_snapshot(cam, aid)
+                if snap:
+                    client.hset(f"alert:item:{aid}", "snapshot_key", snap)
 
         if max_wait > long_wait_ms:
             max_m, max_s = divmod(max_wait // 1000, 60)
             avg_m, avg_s = divmod(avg_wait // 1000, 60)
-            _maybe_emit(
+            aid = _maybe_emit(
                 client, cam, zone_id, "long_wait", "medium",
                 f"Long wait — {zone_id.replace('_', ' ')}",
                 f"Max {max_m}m {max_s:02d}s, avg {avg_m}m {avg_s:02d}s",
                 cooldown_sec,
             )
+            if aid:
+                snap = _upload_snapshot(cam, aid)
+                if snap:
+                    client.hset(f"alert:item:{aid}", "snapshot_key", snap)
 
 
 def _evaluate_once(client: Any, camera_ids: list[str], settings: dict[str, Any]) -> None:

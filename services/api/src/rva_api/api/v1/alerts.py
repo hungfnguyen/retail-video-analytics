@@ -143,5 +143,10 @@ def acknowledge_alert(alert_id: str) -> dict[str, str]:
     key = f"alert:item:{alert_id}"
     if not client.exists(key):
         raise HTTPException(status_code=404, detail="Alert not found")
-    client.hset(key, "status", "acknowledged")
+    camera_id = client.hget(key, "camera_id") or ""
+    pipe = client.pipeline()
+    pipe.hset(key, "status", "acknowledged")
+    if camera_id:
+        pipe.zrem(f"alert:live:{camera_id}", alert_id)
+    pipe.execute()
     return {"status": "ok"}

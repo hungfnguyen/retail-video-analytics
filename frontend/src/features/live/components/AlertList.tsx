@@ -22,16 +22,13 @@ function formatRelativeTime(iso: string): string {
 export function AlertList({ alerts, onAlertClick }: AlertListProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
-      <div className="mb-3.5 flex items-center justify-between">
-        <div className="flex items-center gap-2">
-          <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
-          {alerts.length > 0 && (
-            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
-              {alerts.length}
-            </span>
-          )}
-        </div>
-        <button className="border-0 bg-transparent font-bold text-blue-600" type="button">View all</button>
+      <div className="mb-3.5 flex items-center gap-2">
+        <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
+        {alerts.length > 0 && (
+          <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+            {alerts.length}
+          </span>
+        )}
       </div>
 
       {alerts.length === 0 ? (
@@ -39,7 +36,7 @@ export function AlertList({ alerts, onAlertClick }: AlertListProps) {
           No active alerts
         </div>
       ) : (
-        <div className="grid gap-2.5">
+        <div className="grid max-h-[420px] gap-2.5 overflow-y-auto pr-1">
           {alerts.map((alert) => (
             <article
               className={`grid grid-cols-[1fr_auto] items-start gap-3 rounded-lg border border-slate-200 p-3 ${
