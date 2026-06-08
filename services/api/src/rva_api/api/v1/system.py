@@ -12,6 +12,7 @@ from rva_api.api.v1.live import (
     _active_track_count,
     _get_redis_client,
     _media_latency_ms,
+    _load_camera_config,
     _media_status,
     _pipeline_health,
     _read_media_metadata,
@@ -98,6 +99,55 @@ def _lag_points(
     ]
 
 
+def _gpu_free_ratio(media_metadata: dict[str, Any]) -> float:
+    gpu_memory = media_metadata.get("gpu_memory")
+    if not isinstance(gpu_memory, dict):
+        return 0.0
+    return _safe_float(gpu_memory.get("free_ratio"))
+
+
+def _zone_count_total(media_metadata: dict[str, Any]) -> int:
+    zone_counts = media_metadata.get("zone_counts")
+    if not isinstance(zone_counts, list):
+        return 0
+    return sum(
+        _safe_int(zone.get("count"))
+        for zone in zone_counts
+        if isinstance(zone, dict)
+    )
+
+
+def _vision_runtime_rows(cameras: list[dict[str, Any]], fallback_camera_id: str) -> list[dict[str, Any]]:
+    candidates = cameras or [{"camera_id": fallback_camera_id, "name": fallback_camera_id}]
+    rows: list[dict[str, Any]] = []
+    for camera in candidates:
+        camera_id = str(camera.get("camera_id") or "")
+        if not camera_id:
+            continue
+        metadata = _read_media_metadata(camera_id)
+        rows.append(
+            {
+                "camera_id": camera_id,
+                "camera_name": str(camera.get("name") or camera_id),
+                "processing_fps": _safe_float(metadata.get("processing_fps")),
+                "detector_fps_target": _safe_float(metadata.get("detector_fps_target")),
+                "inference_ms": _safe_int(metadata.get("inference_ms")),
+                "tracking_ms": _safe_int(metadata.get("tracking_ms")),
+                "zone_ms": _safe_int(metadata.get("zone_ms")),
+                "reader_queue_size": _safe_int(metadata.get("reader_queue_size")),
+                "reader_drop_count": _safe_int(metadata.get("reader_drop_count")),
+                "dropped_frames_since_last": _safe_int(metadata.get("dropped_frames_since_last")),
+                "gpu_free_ratio": _gpu_free_ratio(metadata),
+                "gpu_guard_skipped": _safe_int(metadata.get("gpu_guard_skipped")),
+                "stable_track_count": _safe_int(metadata.get("stable_track_count")),
+                "predicted_tracks_count": _safe_int(metadata.get("predicted_tracks_count")),
+                "id_switch_suspect_count": _safe_int(metadata.get("id_switch_suspect_count")),
+                "zone_count_total": _zone_count_total(metadata),
+            }
+        )
+    return rows
+
+
 def _container_rows(services: list[dict[str, Any]]) -> list[dict[str, str]]:
     return [
         {
@@ -182,6 +232,7 @@ def get_system_dashboard(camera_id: str = "cam_01") -> SystemDashboardData:
     now = datetime.now(timezone.utc)
     frame, current_count, active_tracks, redis_status = _live_snapshot(camera_id)
     media_metadata = _read_media_metadata(camera_id)
+    cameras = _load_camera_config()
     services = _pipeline_health(
         now, 0, "stable" if frame else "warning", redis_status=redis_status
     )
@@ -196,6 +247,7 @@ def get_system_dashboard(camera_id: str = "cam_01") -> SystemDashboardData:
             now, frame, media_metadata, current_count, active_tracks
         ),
         "lag": _lag_points(now, media_metadata, _safe_int(fastapi_health["latency_ms"])),
+        "vision_runtime": _vision_runtime_rows(cameras, camera_id),
         "containers": _container_rows(services),
         "logs": _recent_logs(),
         "flow": _flow(services),

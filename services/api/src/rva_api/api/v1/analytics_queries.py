@@ -198,3 +198,53 @@ def daily_sql(days: int) -> str:
         ORDER BY daily.metric_date DESC
         LIMIT 7
     """
+
+
+def queue_zone_summary_sql(days: int) -> str:
+    return f"""
+        SELECT
+          queue_zone_id,
+          COUNT(*) AS total_sessions,
+          ROUND(AVG(CAST(wait_time_sec AS double)), 1) AS avg_wait_sec,
+          MAX(wait_time_sec) AS max_wait_sec,
+          COUNT(DISTINCT global_track_id) AS unique_visitors
+        FROM lakehouse.rva.gold_queue_sessions
+        WHERE visit_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          AND wait_time_sec >= 0
+        GROUP BY queue_zone_id
+        ORDER BY avg_wait_sec DESC
+    """
+
+
+def alerts_history_sql(days: int) -> str:
+    return f"""
+        SELECT
+          alert_id,
+          camera_id,
+          store_id,
+          alert_type,
+          severity,
+          title,
+          description,
+          zone,
+          CAST(event_ts AS varchar) AS event_ts,
+          clip_s3_key
+        FROM lakehouse.rva.gold_alerts
+        WHERE event_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+        ORDER BY event_ts DESC
+        LIMIT 100
+    """
+
+
+def queue_wait_trend_sql(days: int) -> str:
+    return f"""
+        SELECT
+          concat(lpad(CAST(hour(enter_ts) AS varchar), 2, '0'), ':00') AS hour_label,
+          ROUND(AVG(CAST(wait_time_sec AS double)), 1) AS avg_wait_sec,
+          COUNT(*) AS sessions
+        FROM lakehouse.rva.gold_queue_sessions
+        WHERE visit_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          AND wait_time_sec >= 0
+        GROUP BY hour(enter_ts)
+        ORDER BY hour(enter_ts)
+    """

@@ -9,7 +9,7 @@ jobmanager.bind-host: 0.0.0.0
 jobmanager.memory.process.size: 800m
 
 taskmanager.bind-host: 0.0.0.0
-taskmanager.memory.process.size: 1600m
+taskmanager.memory.process.size: 3072m
 taskmanager.numberOfTaskSlots: 8
 
 # -- REST Interface (Web UI) --
@@ -18,7 +18,7 @@ rest.port: 8081
 rest.bind-address: 0.0.0.0
 
 # -- Parallelism & Timeouts --
-parallelism.default: 2
+parallelism.default: 1
 slot.request.timeout: 120000
 
 # -- Blob & Query Server --

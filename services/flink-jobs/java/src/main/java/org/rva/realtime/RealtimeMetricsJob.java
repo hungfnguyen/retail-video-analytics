@@ -33,6 +33,9 @@ import redis.clients.jedis.JedisPoolConfig;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
+import java.time.ZoneOffset;
+import java.time.ZonedDateTime;
+import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
 import java.util.ArrayList;
 import java.util.HashMap;
@@ -162,9 +165,6 @@ public class RealtimeMetricsJob {
                     }
 
                     double conf = det.path("conf").asDouble(0.0);
-                    if (conf < 0.4) {
-                        continue;
-                    }
 
                     JsonNode cn = det.path("centroid_norm");
                     double nx = clampDouble(cn.path("x").asDouble(0.0), 0.0, 1.0);
@@ -286,6 +286,8 @@ public class RealtimeMetricsJob {
                 item.put("zone_id", zoneId);
                 item.put("zone_type", zone.path("zone_type").asText("unknown"));
                 item.put("count", zone.path("count").asInt(0));
+                item.put("avg_wait_ms", zone.path("avg_wait_ms").asLong(0));
+                item.put("max_wait_ms", zone.path("max_wait_ms").asLong(0));
                 values.add(item);
             }
             return values;
@@ -363,6 +365,8 @@ public class RealtimeMetricsJob {
         private static final int ZONE_EXPIRE_SEC = 10;
         private static final int QUEUE_EXPIRE_SEC = 10;
         private static final int LINE_EXPIRE_SEC = 300;
+        private static final int LINE_HIST_EXPIRE_SEC = 5400; // 90 min — covers 60-min chart + buffer
+        private static final DateTimeFormatter MINUTE_FMT = DateTimeFormatter.ofPattern("yyyyMMddHHmm");
 
         private transient JedisPool pool;
         private int densityThreshold;
@@ -466,6 +470,8 @@ public class RealtimeMetricsJob {
                     queueFields.put("zone_id", zoneId);
                     queueFields.put("zone_type", zoneType);
                     queueFields.put("current_count", count);
+                    queueFields.put("avg_wait_ms", String.valueOf(zone.getOrDefault("avg_wait_ms", 0)));
+                    queueFields.put("max_wait_ms", String.valueOf(zone.getOrDefault("max_wait_ms", 0)));
                     queueFields.put("last_update_ts", ts);
                     jedis.hset(queueKey, queueFields);
                     jedis.expire(queueKey, QUEUE_EXPIRE_SEC);
@@ -488,9 +494,16 @@ public class RealtimeMetricsJob {
                         || direction == null || direction.isEmpty() || "null".equals(direction)) {
                     continue;
                 }
+                // Cumulative 5-minute counter (existing)
                 String lineKey = "line:count:" + evt.cameraId + ":" + lineId + ":5m";
                 jedis.hincrBy(lineKey, direction + "_count", 1L);
                 jedis.expire(lineKey, LINE_EXPIRE_SEC);
+
+                // Per-minute bucket for 60-min traffic chart: line:hist:{cam}:{YYYYMMDDHHMM}
+                String minuteBucket = ZonedDateTime.now(ZoneOffset.UTC).format(MINUTE_FMT);
+                String histKey = "line:hist:" + evt.cameraId + ":" + minuteBucket;
+                jedis.hincrBy(histKey, direction + "_count", 1L);
+                jedis.expire(histKey, LINE_HIST_EXPIRE_SEC);
             }
         }
 

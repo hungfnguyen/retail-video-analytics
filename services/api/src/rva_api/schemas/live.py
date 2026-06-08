@@ -40,8 +40,8 @@ class ZoneCount(BaseModel):
     count: int
     track_ids: list[int] = Field(default_factory=list)
     global_track_ids: list[str] = Field(default_factory=list)
-    avg_wait_seconds: float = 0.0
-    max_wait_seconds: int = 0
+    avg_wait_ms: int = 0
+    max_wait_ms: int = 0
 
 
 class LineCrossing(BaseModel):
@@ -111,7 +111,7 @@ class Alert(BaseModel):
     alert_id: str
     store_id: str = ""
     camera_id: str
-    alert_type: str = "alert"
+    alert_type: str
     title: str
     description: str
     severity: Literal["low", "medium", "high"]
@@ -123,6 +123,7 @@ class Alert(BaseModel):
     threshold: int | None = None
     clip_s3_key: str | None = None
     clip_s3_uri: str | None = None
+    snapshot_key: str | None = None
 
 
 class TrafficPoint(BaseModel):

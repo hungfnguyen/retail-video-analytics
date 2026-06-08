@@ -4,7 +4,7 @@ import json
 import os
 import socket
 import time
-from datetime import datetime, timezone
+from datetime import datetime, timedelta, timezone
 from pathlib import Path
 from typing import Any
 from urllib.parse import urlparse
@@ -27,9 +27,12 @@ STALE_FRAME_MS = 10_000
 MEDIA_STALE_MS = 3_000
 METADATA_FRESH_MS = 1_500
 METADATA_STALE_MS = 5_000
-HEALTH_CHECK_TIMEOUT_SECONDS = 0.1
+HEALTH_CHECK_TIMEOUT_SECONDS = 1.0
 
 _redis_client: Any | None = None
+_health_cache: list[dict[str, Any]] = []
+_health_cache_ts: float = 0.0
+HEALTH_CACHE_TTL = 10.0  # seconds — TCP checks are expensive, cache for 10s
 
 
 def _redis_config() -> RedisClientConfig:
@@ -45,11 +48,7 @@ def _get_redis_client() -> Any:
     global _redis_client
 
     if _redis_client is not None:
-        try:
-            _redis_client.ping()
-            return _redis_client
-        except Exception:
-            _redis_client = None
+        return _redis_client
 
     _redis_client = create_redis_client(_redis_config())
     if _redis_client is None:
@@ -472,11 +471,9 @@ def _zone_counts_from_sources(
             for item in raw
             if isinstance(item, dict)
         ]
-        return [
-            _merge_zone_wait_fields(item, wait_fields)
-            for item in result
-            if item.get("zone_id")
-        ]
+        result = [item for item in result if item.get("zone_id")]
+        _enrich_zone_counts_with_wait(result, client, camera_id)
+        return result
 
     try:
         redis_counts = client.hgetall(f"zone:count:{camera_id}")
@@ -497,11 +494,37 @@ def _zone_counts_from_sources(
                 "count": _safe_int(_decode_redis_value(raw_count)),
                 "track_ids": [],
                 "global_track_ids": [],
-                "avg_wait_seconds": 0.0,
-                "max_wait_seconds": 0,
+                "avg_wait_ms": 0,
+                "max_wait_ms": 0,
             }
         )
-    return sorted(result, key=lambda item: str(item.get("zone_id", "")))
+    result = sorted(result, key=lambda item: str(item.get("zone_id", "")))
+    _enrich_zone_counts_with_wait(result, client, camera_id)
+    return result
+
+
+def _enrich_zone_counts_with_wait(
+    zone_counts: list[dict[str, Any]], client: Any, camera_id: str
+) -> None:
+    """Read avg/max wait_ms from per-queue Redis hashes and merge into zone_counts in-place."""
+    queue_entries = [
+        (idx, zc)
+        for idx, zc in enumerate(zone_counts)
+        if zc.get("zone_type") == "queue" and zc.get("zone_id")
+    ]
+    if not queue_entries:
+        return
+    try:
+        pipe = client.pipeline(transaction=False)
+        for _, zc in queue_entries:
+            pipe.hgetall(f"queue:live:{camera_id}:{zc['zone_id']}")
+        results = pipe.execute()
+    except Exception:
+        results = [{} for _ in queue_entries]
+    for (_idx, zc), q in zip(queue_entries, results):
+        q = q or {}
+        zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms") or q.get(b"avg_wait_ms") or "0")) or 0
+        zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms") or q.get(b"max_wait_ms") or "0")) or 0
 
 
 def _queue_wait_fields_from_sources(
@@ -599,8 +622,8 @@ def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]
             for global_id in global_track_ids
             if global_id is not None
         ] if isinstance(global_track_ids, list) else [],
-        "avg_wait_seconds": _safe_float(item.get("avg_wait_seconds")),
-        "max_wait_seconds": _safe_int(item.get("max_wait_seconds")),
+        "avg_wait_ms": _safe_int(item.get("avg_wait_ms")) or 0,
+        "max_wait_ms": _safe_int(item.get("max_wait_ms")) or 0,
     }
 
 
@@ -641,8 +664,60 @@ def _count_detections_in_frame(frame: dict[str, Any] | None) -> int:
     return sum(1 for det in detections if isinstance(det, dict))
 
 
-def _empty_traffic() -> list[dict[str, int | str]]:
-    return []
+def _traffic_from_redis(
+    client: Any,
+    camera_id: str,
+    window_minutes: int = 60,
+) -> tuple[list[dict[str, Any]], dict[str, Any]]:
+    """Read per-minute line crossing buckets from Redis → traffic chart + summary.
+
+    Flink writes: HINCRBY line:hist:{camera_id}:{YYYYMMDDHHMM} {direction}_count 1
+    We read the last `window_minutes` buckets in a single pipeline round-trip.
+    """
+    now_utc = datetime.now(timezone.utc)
+    bucket_times = [
+        now_utc - timedelta(minutes=delta)
+        for delta in range(window_minutes - 1, -1, -1)
+    ]
+    try:
+        pipe = client.pipeline(transaction=False)
+        for bt in bucket_times:
+            pipe.hgetall(f"line:hist:{camera_id}:{bt.strftime('%Y%m%d%H%M')}")
+        raw_results = pipe.execute()
+    except Exception:
+        raw_results = [{} for _ in bucket_times]
+
+    points: list[dict[str, Any]] = []
+    total_in = total_out = 0
+    peak_count = 0
+    peak_time = now_utc.strftime("%H:%M")
+
+    for bucket_dt, raw in zip(bucket_times, raw_results):
+        raw = raw or {}
+        people_in = _safe_int(_decode_redis_value(raw.get(b"in_count") or raw.get("in_count") or "0")) or 0
+        people_out = _safe_int(_decode_redis_value(raw.get(b"out_count") or raw.get("out_count") or "0")) or 0
+        combined = people_in + people_out
+
+        total_in += people_in
+        total_out += people_out
+        if combined > peak_count:
+            peak_count = combined
+            peak_time = bucket_dt.strftime("%H:%M")
+
+        points.append({
+            "time": bucket_dt.strftime("%H:%M"),
+            "people_in": people_in,
+            "people_out": people_out,
+            "current_count": 0,
+        })
+
+    return points, {
+        "total_in": total_in,
+        "total_out": total_out,
+        "current_total": total_in,
+        "peak_count": peak_count,
+        "peak_time": peak_time,
+    }
 
 
 def _health_endpoint(raw: str) -> tuple[str, int] | None:
@@ -706,6 +781,22 @@ def _pipeline_health(
     frame_status: str,
     redis_status: str = "ok",
 ) -> list[dict[str, Any]]:
+    global _health_cache, _health_cache_ts
+
+    fastapi_status = "ok" if frame_status == "stable" else "warning"
+
+    # TCP checks are expensive (4 network round-trips). Cache for HEALTH_CACHE_TTL seconds.
+    if _health_cache and (time.perf_counter() - _health_cache_ts) < HEALTH_CACHE_TTL:
+        result = []
+        for entry in _health_cache:
+            if entry["service"] == "redis":
+                result.append({**entry, "latency_ms": redis_latency_ms, "status": redis_status, "last_check_ts": now.isoformat()})
+            elif entry["service"] == "fastapi":
+                result.append({**entry, "status": fastapi_status, "last_check_ts": now.isoformat()})
+            else:
+                result.append(entry)
+        return result
+
     pulsar_status, pulsar_latency_ms = _tcp_health(
         os.getenv("PULSAR_SERVICE_URL", "pulsar://localhost:6650")
     )
@@ -719,31 +810,37 @@ def _pipeline_health(
         os.getenv("TRINO_URL", "http://localhost:8083")
     )
 
-    return [
-        _service_health_entry(
-            "pulsar", "Pulsar", "Event Stream", pulsar_status, now, pulsar_latency_ms
-        ),
-        _service_health_entry(
-            "flink", "Flink", "Stream Processing", flink_status, now, flink_latency_ms
-        ),
-        _service_health_entry(
-            "redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms
-        ),
-        _service_health_entry(
-            "s3", "S3", "Object Storage", s3_status, now, s3_latency_ms
-        ),
-        _service_health_entry(
-            "trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms
-        ),
-        _service_health_entry(
-            "fastapi",
-            "FastAPI",
-            "Serving API",
-            "ok" if frame_status == "stable" else "warning",
-            now,
-            0,
-        ),
+    result = [
+        _service_health_entry("pulsar", "Pulsar", "Event Stream", pulsar_status, now, pulsar_latency_ms),
+        _service_health_entry("flink", "Flink", "Stream Processing", flink_status, now, flink_latency_ms),
+        _service_health_entry("redis", "Redis", "Realtime State", redis_status, now, redis_latency_ms),
+        _service_health_entry("s3", "S3", "Object Storage", s3_status, now, s3_latency_ms),
+        _service_health_entry("trino", "Trino", "SQL Query Engine", trino_status, now, trino_latency_ms),
+        _service_health_entry("fastapi", "FastAPI", "Serving API", fastapi_status, now, 0),
     ]
+    _health_cache = result
+    _health_cache_ts = time.perf_counter()
+    return result
+
+
+def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str, Any]]:
+    alert_ids = client.zrevrange(f"alert:live:{camera_id}", 0, limit - 1)
+    if not alert_ids:
+        return []
+    pipe = client.pipeline(transaction=False)
+    for aid in alert_ids:
+        pipe.hgetall(f"alert:item:{aid}")
+    cleaned = []
+    for r in pipe.execute():
+        if not r:
+            continue
+        # Strip empty strings for optional fields — Pydantic can't coerce "" to int|None
+        c = {k: v for k, v in r.items() if v != ""}
+        c.pop("track_id", None)
+        c.pop("clip_s3_key", None) if not c.get("clip_s3_key") else None
+        c.pop("snapshot_key", None) if not c.get("snapshot_key") else None
+        cleaned.append(c)
+    return cleaned
 
 
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
@@ -816,6 +913,8 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
         else {}
     )
 
+    traffic_points, traffic_summary = _traffic_from_redis(client, camera_id)
+
     data = {
         "store": store,
         "cameras": _build_cameras(cameras, camera_id, frame, latency_ms),
@@ -869,15 +968,9 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "status": status,
             "updated_at": count_updated_at or now.isoformat(),
         },
-        "alerts": read_recent_alerts(client, camera_id, store["store_id"]),
-        "traffic": _empty_traffic(),
-        "traffic_summary": {
-            "total_in": 0,
-            "total_out": 0,
-            "current_total": current_count,
-            "peak_count": current_count,
-            "peak_time": now.strftime("%H:%M"),
-        },
+        "alerts": _recent_alerts(client, camera_id),
+        "traffic": traffic_points,
+        "traffic_summary": {**traffic_summary, "current_total": current_count},
         "zone_heatmap": _zone_heatmap(heatmap_cells),
         "pipeline_health": _pipeline_health(now, redis_latency_ms, status),
     }

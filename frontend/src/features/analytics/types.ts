@@ -54,3 +54,48 @@ export type AnalyticsDashboardData = {
   dwell_bands: DwellBand[]
   daily_summary: DailySummaryRow[]
 }
+
+export type QueueZoneStat = {
+  zone_id: string
+  total_sessions: number
+  avg_wait_sec: number
+  max_wait_sec: number
+  unique_visitors: number
+}
+
+export type QueueWaitTrendPoint = {
+  hour: string
+  avg_wait_sec: number
+  sessions: number
+}
+
+export type QueueAnalyticsData = {
+  generated_at: string
+  range_label: string
+  data_status: 'ready' | 'empty' | 'error'
+  error_message: string | null
+  kpis: AnalyticsKpi[]
+  zone_stats: QueueZoneStat[]
+  wait_trend: QueueWaitTrendPoint[]
+}
+
+export type AlertHistoryRecord = {
+  alert_id: string
+  camera_id: string
+  store_id: string
+  alert_type: string
+  severity: 'low' | 'medium' | 'high'
+  title: string
+  description: string
+  zone: string
+  event_ts: string
+  clip_s3_key: string | null
+}
+
+export type AlertHistoryData = {
+  generated_at: string
+  range_label: string
+  data_status: 'ready' | 'empty' | 'error'
+  error_message: string | null
+  records: AlertHistoryRecord[]
+}

@@ -18,6 +18,7 @@ export function useLiveData() {
 
   useEffect(() => {
     let isMounted = true
+    let timeoutId: ReturnType<typeof setTimeout>
 
     async function fetchData() {
       try {
@@ -27,19 +28,22 @@ export function useLiveData() {
         }
       } catch {
         if (isMounted) {
-          setState({ data: null, error: 'Unable to load live dashboard data.' })
+          setState((prev) => ({ ...prev, error: 'Unable to load live dashboard data.' }))
+        }
+      } finally {
+        // Schedule next poll only after the current response arrives — prevents
+        // request pile-up when the API is slower than POLL_INTERVAL_MS.
+        if (isMounted) {
+          timeoutId = setTimeout(() => { void fetchData() }, POLL_INTERVAL_MS)
         }
       }
     }
 
     void fetchData()
-    const intervalId = window.setInterval(() => {
-      void fetchData()
-    }, POLL_INTERVAL_MS)
 
     return () => {
       isMounted = false
-      window.clearInterval(intervalId)
+      clearTimeout(timeoutId)
     }
   }, [cameraId])
 

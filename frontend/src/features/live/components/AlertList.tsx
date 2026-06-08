@@ -2,6 +2,7 @@ import type { Alert } from '../types'
 
 type AlertListProps = {
   alerts: Alert[]
+  onAlertClick?: (alert: Alert) => void
 }
 
 const severityLabels = {
@@ -10,91 +11,64 @@ const severityLabels = {
   low: 'Low',
 }
 
-function formatEventTime(value: string) {
-  const eventTime = new Date(value)
-  if (Number.isNaN(eventTime.getTime())) {
-    return 'Unknown time'
-  }
-
-  return eventTime.toLocaleTimeString([], {
-    hour: '2-digit',
-    minute: '2-digit',
-    second: '2-digit',
-  })
+function formatRelativeTime(iso: string): string {
+  const sec = Math.floor((Date.now() - new Date(iso).getTime()) / 1000)
+  if (sec < 60) return `${sec}s ago`
+  const min = Math.floor(sec / 60)
+  if (min < 60) return `${min}m ago`
+  return `${Math.floor(min / 60)}h ago`
 }
 
-function severityClassName(severity: Alert['severity']) {
-  if (severity === 'high') {
-    return 'bg-red-100 text-red-600'
-  }
-
-  if (severity === 'medium') {
-    return 'bg-orange-100 text-orange-700'
-  }
-
-  return 'bg-amber-100 text-amber-700'
-}
-
-export function AlertList({ alerts }: AlertListProps) {
-  const sortedAlerts = [...alerts].sort(
-    (a, b) => new Date(b.event_ts).getTime() - new Date(a.event_ts).getTime(),
-  )
-
+export function AlertList({ alerts, onAlertClick }: AlertListProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
       <div className="mb-3.5 flex items-center justify-between">
-        <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
-        <span className="rounded-full bg-slate-100 px-2.5 py-1 text-xs font-bold text-slate-600">
-          {alerts.length}
-        </span>
+        <div className="flex items-center gap-2">
+          <h2 className="m-0 text-[17px] font-bold text-slate-950">New alerts</h2>
+          {alerts.length > 0 && (
+            <span className="rounded-full bg-red-100 px-2 py-0.5 text-xs font-bold text-red-600">
+              {alerts.length}
+            </span>
+          )}
+        </div>
+        <button className="border-0 bg-transparent font-bold text-blue-600" type="button">View all</button>
       </div>
 
-      <div className="grid gap-2.5">
-        {sortedAlerts.length === 0 && (
-          <div className="rounded-lg border border-dashed border-slate-200 bg-slate-50 px-3 py-5 text-center">
-            <strong className="block text-sm text-slate-700">No active alerts</strong>
-            <span className="mt-1 block text-[13px] text-slate-500">
-              Recent density, dwell, and queue alerts will appear here.
-            </span>
-          </div>
-        )}
-
-        {sortedAlerts.map((alert) => (
-          <article
-            className="grid gap-2 rounded-lg border border-slate-200 p-3"
-            key={alert.alert_id}
-          >
-            <div className="flex items-start justify-between gap-3">
-              <div>
+      {alerts.length === 0 ? (
+        <div className="grid min-h-24 place-items-center rounded-lg border border-dashed border-slate-200 text-sm text-slate-400">
+          No active alerts
+        </div>
+      ) : (
+        <div className="grid gap-2.5">
+          {alerts.map((alert) => (
+            <article
+              className={`grid grid-cols-[1fr_auto] items-start gap-3 rounded-lg border border-slate-200 p-3 ${
+                onAlertClick ? 'cursor-pointer hover:bg-slate-50 transition-colors' : ''
+              }`}
+              key={alert.alert_id}
+              onClick={() => onAlertClick?.(alert)}
+            >
+              <div className="min-w-0">
                 <strong className="block text-slate-950">{alert.title}</strong>
                 <span className="block text-[13px] text-slate-500">{alert.description}</span>
+                <span className="block text-[12px] text-slate-400">{formatRelativeTime(alert.event_ts)}</span>
               </div>
 
               <span
-                className={`rounded-full px-2.5 py-1 text-xs font-bold ${severityClassName(alert.severity)}`}
+                className={
+                  alert.severity === 'high'
+                    ? 'rounded-full bg-red-100 px-2.5 py-1 text-xs font-bold text-red-600'
+                    : alert.severity === 'medium'
+                      ? 'rounded-full bg-orange-100 px-2.5 py-1 text-xs font-bold text-orange-700'
+                      : 'rounded-full bg-amber-100 px-2.5 py-1 text-xs font-bold text-amber-700'
+                }
               >
                 {severityLabels[alert.severity]}
               </span>
-            </div>
-
-            <div className="flex flex-wrap items-center gap-x-3 gap-y-1 text-[12px] text-slate-500">
-              <span>{alert.camera_id}</span>
-              <span>{alert.zone || 'camera'}</span>
-              <span>{formatEventTime(alert.event_ts)}</span>
-              {alert.trigger_value !== undefined && alert.threshold !== undefined && (
-                <span>
-                  {alert.trigger_value}/{alert.threshold}
-                </span>
-              )}
-              {alert.clip_s3_uri && (
-                <span className="font-bold text-blue-600" title={alert.clip_s3_uri}>
-                  Clip saved
-                </span>
-              )}
-            </div>
-          </article>
-        ))}
-      </div>
+            </article>
+          ))}
+        </div>
+      )}
     </section>
   )
 }

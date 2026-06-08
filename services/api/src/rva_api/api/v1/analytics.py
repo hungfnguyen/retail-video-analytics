@@ -9,13 +9,16 @@ from fastapi import APIRouter, Query
 
 from rva_api.api.v1.analytics_queries import (
     MAX_DAYS,
+    alerts_history_sql,
     camera_sql,
     daily_sql,
     hourly_sql,
+    queue_wait_trend_sql,
+    queue_zone_summary_sql,
     summary_sql,
     trino_query,
 )
-from rva_api.schemas.analytics import AnalyticsDashboardData
+from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -98,6 +101,160 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
                 rows[name] = []
 
     return rows, errors
+
+
+@router.get("/alerts", response_model=AlertHistoryData)
+def get_alert_history(
+    days: int = Query(default=7, ge=1, le=MAX_DAYS),
+) -> AlertHistoryData:
+    now = datetime.now(timezone.utc)
+    try:
+        rows = trino_query(alerts_history_sql(days), 10.0)
+    except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
+        return AlertHistoryData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "error",
+            "error_message": str(exc),
+            "records": [],
+        })
+
+    if not rows:
+        return AlertHistoryData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "empty",
+            "error_message": None,
+            "records": [],
+        })
+
+    return AlertHistoryData.model_validate({
+        "generated_at": now.isoformat(),
+        "range_label": f"Last {days} days",
+        "data_status": "ready",
+        "error_message": None,
+        "records": [
+            {
+                "alert_id": str(r[0]),
+                "camera_id": str(r[1]),
+                "store_id": str(r[2]),
+                "alert_type": str(r[3]),
+                "severity": str(r[4]),
+                "title": str(r[5]),
+                "description": str(r[6]),
+                "zone": str(r[7]),
+                "event_ts": str(r[8]),
+                "clip_s3_key": r[9] if r[9] else None,
+            }
+            for r in rows
+        ],
+    })
+
+
+@router.get("/queue", response_model=QueueAnalyticsData)
+def get_queue_analytics(
+    days: int = Query(default=7, ge=1, le=MAX_DAYS),
+) -> QueueAnalyticsData:
+    now = datetime.now(timezone.utc)
+    rows: dict[str, list[list[Any]]] = {}
+    errors: dict[str, str] = {}
+
+    with ThreadPoolExecutor(max_workers=2) as executor:
+        futures = {
+            executor.submit(trino_query, queue_zone_summary_sql(days), 10.0): "zone_summary",
+            executor.submit(trino_query, queue_wait_trend_sql(days), 10.0): "wait_trend",
+        }
+        for future in as_completed(futures):
+            name = futures[future]
+            try:
+                rows[name] = future.result()
+            except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
+                errors[name] = str(exc)
+                rows[name] = []
+
+    if errors:
+        empty_kpis = [
+            {"label": "Avg queue wait", "value": "--", "meta": "No data", "tone": "amber"},
+            {"label": "Max wait session", "value": "--", "meta": "No data", "tone": "violet"},
+            {"label": "Total sessions", "value": "0", "meta": "No data", "tone": "blue"},
+        ]
+        return QueueAnalyticsData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "error",
+            "error_message": "; ".join(errors.values()),
+            "kpis": empty_kpis,
+            "zone_stats": [],
+            "wait_trend": [],
+        })
+
+    zone_rows = rows["zone_summary"]
+    trend_rows = rows["wait_trend"]
+
+    if not zone_rows:
+        return QueueAnalyticsData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "data_status": "empty",
+            "error_message": None,
+            "kpis": [
+                {"label": "Avg queue wait", "value": "0s", "meta": "No queue sessions yet", "tone": "amber"},
+                {"label": "Max wait session", "value": "0s", "meta": "No queue sessions yet", "tone": "violet"},
+                {"label": "Total sessions", "value": "0", "meta": "No queue sessions yet", "tone": "blue"},
+            ],
+            "zone_stats": [],
+            "wait_trend": [],
+        })
+
+    total_sessions = sum(_safe_int(r[1]) for r in zone_rows)
+    overall_avg_wait = sum(_safe_float(r[2]) * _safe_int(r[1]) for r in zone_rows) / total_sessions if total_sessions else 0.0
+    max_wait = max((_safe_float(r[3]) for r in zone_rows), default=0.0)
+    busiest_zone = zone_rows[0][0] if zone_rows else "--"
+
+    return QueueAnalyticsData.model_validate({
+        "generated_at": now.isoformat(),
+        "range_label": f"Last {days} days",
+        "data_status": "ready",
+        "error_message": None,
+        "kpis": [
+            {
+                "label": "Avg queue wait",
+                "value": _fmt_duration(overall_avg_wait),
+                "meta": f"across {len(zone_rows)} zone(s)",
+                "tone": "amber",
+            },
+            {
+                "label": "Max wait session",
+                "value": _fmt_duration(max_wait),
+                "meta": f"slowest zone: {busiest_zone.replace('_', ' ')}",
+                "tone": "violet",
+            },
+            {
+                "label": "Total sessions",
+                "value": _fmt_int(total_sessions),
+                "meta": f"last {days} days",
+                "tone": "blue",
+            },
+        ],
+        "zone_stats": [
+            {
+                "zone_id": str(r[0]),
+                "total_sessions": _safe_int(r[1]),
+                "avg_wait_sec": _safe_float(r[2]),
+                "max_wait_sec": _safe_float(r[3]),
+                "unique_visitors": _safe_int(r[4]),
+            }
+            for r in zone_rows
+        ],
+        "wait_trend": [
+            {
+                "hour": str(r[0]),
+                "avg_wait_sec": _safe_float(r[1]),
+                "sessions": _safe_int(r[2]),
+            }
+            for r in trend_rows
+        ],
+    })
 
 
 @router.get("/dashboard", response_model=AnalyticsDashboardData)

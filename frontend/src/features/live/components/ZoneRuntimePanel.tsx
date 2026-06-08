@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Clock, MapPinned, Users } from 'lucide-react'
+import { ArrowLeftRight, MapPinned, Users } from 'lucide-react'
 import type { LineCrossing, ZoneCount } from '../types'
 
 type ZoneRuntimePanelProps = {
@@ -30,20 +30,12 @@ function displayZoneName(zone: ZoneCount) {
   return zone.zone_name || zone.zone_id.replace(/_/g, ' ')
 }
 
-function formatDuration(totalSeconds = 0) {
-  const safeSeconds = Math.max(0, Math.round(totalSeconds))
-  const minutes = Math.floor(safeSeconds / 60)
-  const seconds = safeSeconds % 60
-
-  if (minutes > 0) {
-    return `${minutes}m ${seconds.toString().padStart(2, '0')}s`
-  }
-
-  return `${seconds}s`
-}
-
-function shouldShowQueueWait(zone: ZoneCount) {
-  return zone.zone_type === 'queue' && zone.count > 0
+function formatWait(ms: number | undefined): string | null {
+  if (!ms || ms <= 0) return null
+  const totalSeconds = Math.floor(ms / 1000)
+  const minutes = Math.floor(totalSeconds / 60)
+  const seconds = totalSeconds % 60
+  return minutes > 0 ? `${minutes}m ${seconds}s` : `${seconds}s`
 }
 
 export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanelProps) {
@@ -85,13 +77,14 @@ export function ZoneRuntimePanel({ lineCrossings, zoneCounts }: ZoneRuntimePanel
                     ? zone.global_track_ids.join(', ')
                     : zone.zone_id}
                 </div>
-                {shouldShowQueueWait(zone) && (
-                  <div className="mt-2 flex flex-wrap items-center gap-x-3 gap-y-1 text-xs font-semibold text-amber-700">
-                    <span className="inline-flex items-center gap-1">
-                      <Clock size={12} />
-                      Max wait {formatDuration(zone.max_wait_seconds)}
+                {zone.zone_type === 'queue' && (zone.avg_wait_ms ?? 0) > 0 && (
+                  <div className="mt-1 flex gap-3 text-xs">
+                    <span className="text-amber-600">
+                      avg wait: <strong>{formatWait(zone.avg_wait_ms)}</strong>
                     </span>
-                    <span>Avg {formatDuration(zone.avg_wait_seconds)}</span>
+                    <span className="text-rose-500">
+                      max: <strong>{formatWait(zone.max_wait_ms)}</strong>
+                    </span>
                   </div>
                 )}
               </div>

@@ -1,4 +1,4 @@
-import type { CSSProperties } from 'react'
+import { memo, type CSSProperties } from 'react'
 import type { ZoneHeatmapCell } from '../types'
 
 type ZoneHeatmapProps = {
@@ -13,7 +13,7 @@ function getValue(cells: ZoneHeatmapCell[], row: string, col: number) {
     ?.value ?? 0
 }
 
-export function ZoneHeatmap({ cells }: ZoneHeatmapProps) {
+export const ZoneHeatmap = memo(function ZoneHeatmap({ cells }: ZoneHeatmapProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
       <div className="mb-3.5 flex items-center justify-between">
@@ -47,4 +47,4 @@ export function ZoneHeatmap({ cells }: ZoneHeatmapProps) {
       </div>
     </section>
   )
-}
+})

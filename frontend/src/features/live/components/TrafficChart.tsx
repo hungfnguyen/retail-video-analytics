@@ -1,3 +1,4 @@
+import { memo } from 'react'
 import {
   Line,
   LineChart,
@@ -13,7 +14,7 @@ type TrafficChartProps = {
   summary: TrafficSummary
 }
 
-export function TrafficChart({ traffic, summary }: TrafficChartProps) {
+export const TrafficChart = memo(function TrafficChart({ traffic, summary }: TrafficChartProps) {
   return (
     <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_18px_45px_rgba(15,23,42,0.08)]">
       <div className="mb-3.5 flex items-center justify-between">
@@ -23,12 +24,13 @@ export function TrafficChart({ traffic, summary }: TrafficChartProps) {
       <div className="h-47">
         <ResponsiveContainer height={180} width="100%">
           <LineChart data={traffic}>
-            <XAxis dataKey="time" tickLine={false} />
+            <XAxis dataKey="time" tickLine={false} interval={9} />
             <YAxis tickLine={false} width={32} />
-            <Tooltip />
+            <Tooltip isAnimationActive={false} />
             <Line
               dataKey="people_in"
               dot={false}
+              isAnimationActive={false}
               name="People in"
               stroke="#2563eb"
               strokeWidth={2.5}
@@ -36,6 +38,7 @@ export function TrafficChart({ traffic, summary }: TrafficChartProps) {
             <Line
               dataKey="people_out"
               dot={false}
+              isAnimationActive={false}
               name="People out"
               stroke="#16a34a"
               strokeWidth={2.5}
@@ -51,4 +54,4 @@ export function TrafficChart({ traffic, summary }: TrafficChartProps) {
       </div>
     </section>
   )
-}
+})

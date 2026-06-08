@@ -126,13 +126,19 @@ main() {
     echo "[submit-jobs] WARN: Gold-TrackSummary failed, continuing anyway."
   fi
 
-  if ! submit_job "org.rva.gold.GoldDashboardAggregateJob" "${USR_LIB}/gold-jobs.jar" "Gold-DashboardAggregates"; then
-    echo "[submit-jobs] WARN: Gold-DashboardAggregates failed, continuing anyway."
+  echo "[submit-jobs] === Submitting Queue Analytics Gold Layer ==="
+  if ! submit_job "org.rva.gold.QueueAnalyticsJob" "${USR_LIB}/gold-jobs.jar" "Gold-QueueAnalytics"; then
+    echo "[submit-jobs] WARN: Gold-QueueAnalytics failed, continuing anyway."
   fi
 
   echo "[submit-jobs] === Submitting RealtimeMetrics Job ==="
   if ! submit_job "org.rva.realtime.RealtimeMetricsJob" "${USR_LIB}/realtime-job.jar" "RealtimeMetrics"; then
     echo "[submit-jobs] WARN: RealtimeMetrics failed, continuing anyway."
+  fi
+
+  echo "[submit-jobs] === Submitting Gold Alerts Job ==="
+  if ! submit_job "org.rva.gold.GoldAlertsJob" "${USR_LIB}/gold-jobs.jar" "GoldAlertsJob"; then
+    echo "[submit-jobs] WARN: GoldAlertsJob failed, continuing anyway."
   fi
 
   echo "[submit-jobs] Job submission complete."

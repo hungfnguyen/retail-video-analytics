@@ -39,8 +39,8 @@ export type ZoneCount = {
   count: number
   track_ids?: number[]
   global_track_ids?: string[]
-  avg_wait_seconds?: number
-  max_wait_seconds?: number
+  avg_wait_ms?: number
+  max_wait_ms?: number
 }
 
 export type LineCrossing = {
@@ -102,7 +102,7 @@ export type Alert = {
   alert_id: string
   store_id?: string
   camera_id: string
-  alert_type?: string
+  alert_type: string
   title: string
   description: string
   severity: 'low' | 'medium' | 'high'
@@ -112,8 +112,9 @@ export type Alert = {
   status: 'new' | 'acknowledged' | 'resolved'
   trigger_value?: number
   threshold?: number
-  clip_s3_key?: string
-  clip_s3_uri?: string
+  clip_s3_key?: string | null
+  clip_s3_uri?: string | null
+  snapshot_key?: string | null
 }
 
 export type TrafficPoint = {
