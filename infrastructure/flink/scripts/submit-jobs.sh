@@ -141,6 +141,11 @@ main() {
     echo "[submit-jobs] WARN: GoldAlertsJob failed, continuing anyway."
   fi
 
+  echo "[submit-jobs] === Submitting Gold Dashboard Aggregate Job ==="
+  if ! submit_job "org.rva.gold.GoldDashboardAggregateJob" "${USR_LIB}/gold-jobs.jar" "Gold-DashboardAggregate"; then
+    echo "[submit-jobs] WARN: Gold-DashboardAggregate failed, continuing anyway."
+  fi
+
   echo "[submit-jobs] Job submission complete."
   echo "[submit-jobs] Check Flink UI at http://localhost:8081 for job status"
 }
