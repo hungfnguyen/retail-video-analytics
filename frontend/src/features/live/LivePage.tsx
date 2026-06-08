@@ -1,4 +1,4 @@
-import { ChevronDown } from 'lucide-react'
+import { AlertTriangle, ChevronDown, Video } from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
 import { AlertDetail } from './components/AlertDetail'

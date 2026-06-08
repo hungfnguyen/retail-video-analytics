@@ -103,7 +103,7 @@ function WaitTrendChart({ data }: { data: QueueAnalyticsData['wait_trend'] }) {
             <YAxis tickLine={false} width={36} tick={{ fontSize: 11 }} unit="m" />
             <Tooltip
               isAnimationActive={false}
-              formatter={(value: number) => [`${value}m`, 'Avg wait']}
+              formatter={(value) => [String(Number(value ?? 0)) + "m", "Avg wait"]}
             />
             <Bar dataKey="avg_wait_min" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false} />
           </BarChart>

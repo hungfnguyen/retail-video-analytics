@@ -1,4 +1,4 @@
-import { ArrowLeftRight, Clock, MapPinned, Users } from 'lucide-react'
+import { ArrowLeftRight, MapPinned, Users } from 'lucide-react'
 import type { LineCrossing, ZoneCount } from '../types'
 
 type ZoneRuntimePanelProps = {

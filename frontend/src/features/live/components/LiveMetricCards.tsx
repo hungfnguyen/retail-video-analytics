@@ -53,7 +53,7 @@ export function LiveMetricCards({ alerts, stats, zoneCounts }: LiveMetricCardsPr
   const currentCount = Math.max(stats.current_count, zoneOccupancyCount(zoneCounts))
   const longestWaitSeconds = Math.max(
     0,
-    ...queueZones.map((zone) => Math.max(0, zone.max_wait_seconds ?? 0)),
+    ...queueZones.map((zone) => Math.floor(Math.max(0, zone.max_wait_ms ?? 0) / 1000)),
   )
   const activeAlertCount = alerts.filter((alert) => alert.status === 'new').length
 
