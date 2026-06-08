@@ -1,24 +1,27 @@
 from __future__ import annotations
 
+import math
+import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
 
-from fastapi import APIRouter, Query
+from fastapi import APIRouter, HTTPException, Query
 
 from rva_api.api.v1.analytics_queries import (
     MAX_DAYS,
     alerts_history_sql,
     camera_sql,
     daily_sql,
+    heatmap_presence_sql,
     hourly_sql,
     queue_wait_trend_sql,
     queue_zone_summary_sql,
     summary_sql,
     trino_query,
 )
-from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData
+from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, PresenceHeatmapData, QueueAnalyticsData
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
 
@@ -53,6 +56,14 @@ def _fmt_duration(seconds: float) -> str:
 
 def _fmt_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
+
+
+_CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
+
+
+def _validate_camera_id(camera_id: str) -> None:
+    if not _CAMERA_ID_RE.fullmatch(camera_id):
+        raise HTTPException(status_code=400, detail="Invalid camera_id")
 
 
 def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict[str, Any]:
@@ -365,3 +376,59 @@ def get_analytics_dashboard(
         ],
     }
     return AnalyticsDashboardData.model_validate(data)
+
+
+HEATMAP_QUERY_TIMEOUT = 15.0
+
+
+@router.get("/heatmap", response_model=PresenceHeatmapData)
+def get_presence_heatmap(
+    camera_id: str = Query(...),
+    days: int = Query(default=7, ge=1, le=MAX_DAYS),
+    metric: str = Query(default="presence"),
+) -> PresenceHeatmapData:
+    _validate_camera_id(camera_id)
+    now = datetime.now(timezone.utc)
+
+    def _empty(status: str, msg: str | None = None) -> PresenceHeatmapData:
+        return PresenceHeatmapData.model_validate({
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "camera_id": camera_id,
+            "data_status": status,
+            "error_message": msg,
+            "grid_rows": 24,
+            "grid_cols": 32,
+            "cells": [],
+        })
+
+    try:
+        rows = trino_query(heatmap_presence_sql(camera_id, days), HEATMAP_QUERY_TIMEOUT)
+    except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
+        return _empty("error", str(exc))
+
+    if not rows:
+        return _empty("empty")
+
+    raw_counts = [_safe_int(r[2]) for r in rows]
+    max_count = max(raw_counts, default=0)
+    log_max = math.log1p(max_count)
+
+    cells = []
+    for r, cnt in zip(rows, raw_counts):
+        if cnt <= 0:
+            continue
+        normalized = int(math.log1p(cnt) / log_max * 100) if log_max > 0 else 0
+        if normalized > 0:
+            cells.append({"row": _safe_int(r[0]), "col": _safe_int(r[1]), "value": normalized})
+
+    return PresenceHeatmapData.model_validate({
+        "generated_at": now.isoformat(),
+        "range_label": f"Last {days} days",
+        "camera_id": camera_id,
+        "data_status": "ready",
+        "error_message": None,
+        "grid_rows": 24,
+        "grid_cols": 32,
+        "cells": cells,
+    })

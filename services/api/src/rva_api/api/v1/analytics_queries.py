@@ -236,6 +236,24 @@ def alerts_history_sql(days: int) -> str:
     """
 
 
+def heatmap_presence_sql(camera_id: str, days: int) -> str:
+    return f"""
+        SELECT
+            LEAST(23, GREATEST(0, CAST(FLOOR(anchor_y_norm * 24) AS INTEGER))) AS grid_row,
+            LEAST(31, GREATEST(0, CAST(FLOOR(anchor_x_norm * 32) AS INTEGER))) AS grid_col,
+            COUNT(*) AS presence_count
+        FROM lakehouse.rva.silver_detections_v2
+        WHERE camera_id    = '{camera_id}'
+          AND class_id     = 0
+          AND is_predicted = false
+          AND anchor_x_norm IS NOT NULL
+          AND anchor_y_norm IS NOT NULL
+          AND capture_ts  >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+        GROUP BY 1, 2
+        ORDER BY 1, 2
+    """
+
+
 def queue_wait_trend_sql(days: int) -> str:
     return f"""
         SELECT
