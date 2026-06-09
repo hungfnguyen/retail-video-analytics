@@ -73,7 +73,7 @@ submit_job() {
     echo "[submit-jobs] Submitting ${job_name}..."
 
     local out=""
-    if ! out=$("${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
+    if ! out=$(timeout 60s "${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
       out=""
     fi
 
