@@ -26,7 +26,7 @@ export function TrafficHeatmap({ cameraId, days }: TrafficHeatmapProps) {
 
       {isError && (
         <p className="mb-3 rounded-md bg-red-50 px-3 py-2 text-xs font-semibold text-red-700">
-          {error ?? data?.error_message ?? 'Query failed'}
+          Data warehouse unavailable — Trino may still be starting. Please refresh in a moment.
         </p>
       )}
 

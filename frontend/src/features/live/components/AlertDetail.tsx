@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react'
-import { X } from 'lucide-react'
+import { Play, X } from 'lucide-react'
 import type { Alert } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
@@ -24,6 +24,7 @@ function formatTs(iso: string): string {
 
 export function AlertDetail({ alert, onClose }: AlertDetailProps) {
   const [ackStatus, setAckStatus] = useState<'idle' | 'loading' | 'done'>('idle')
+  const [showVideo, setShowVideo] = useState(false)
   const overlayRef = useRef<HTMLDivElement>(null)
 
   useEffect(() => {
@@ -51,7 +52,10 @@ export function AlertDetail({ alert, onClose }: AlertDetailProps) {
     ? `${API_BASE_URL}/api/v1/alerts/${alert.alert_id}/clip`
     : null
 
-  const snapshotUrl = !clipUrl && alert.snapshot_key
+  // Show snapshot for all alerts that have one, including HIGH severity.
+  // For HIGH alerts with a clip, the snapshot is always shown first; the
+  // video is only fetched when the user explicitly requests it.
+  const snapshotUrl = alert.snapshot_key
     ? `${API_BASE_URL}/api/v1/alerts/${alert.alert_id}/snapshot`
     : null
 
@@ -78,25 +82,43 @@ export function AlertDetail({ alert, onClose }: AlertDetailProps) {
         </div>
 
         <div className="p-5">
-          {/* Clip player (high severity — video) */}
-          {clipUrl && (
-            <div className="mb-5 overflow-hidden rounded-lg bg-slate-950">
-              <video
-                className="w-full"
-                controls
-                src={clipUrl}
-              />
-            </div>
+          {/* Snapshot + lazy video — shown before video is requested */}
+          {!showVideo && (
+            <>
+              {snapshotUrl && (
+                <div className="relative mb-5 overflow-hidden rounded-lg bg-slate-100">
+                  <img alt="Alert snapshot" className="w-full object-cover" src={snapshotUrl} />
+                  {clipUrl && (
+                    <button
+                      className="absolute bottom-3 right-3 flex items-center gap-2 rounded-lg bg-black/70 px-3 py-2 text-xs font-bold text-white backdrop-blur-sm transition hover:bg-black/90"
+                      onClick={() => setShowVideo(true)}
+                      type="button"
+                    >
+                      <Play size={13} />
+                      Watch video clip
+                    </button>
+                  )}
+                </div>
+              )}
+
+              {/* No snapshot but clip available — show standalone button */}
+              {clipUrl && !snapshotUrl && (
+                <button
+                  className="mb-5 flex w-full items-center justify-center gap-2 rounded-lg border border-slate-200 bg-slate-50 py-5 text-sm font-bold text-slate-700 transition hover:bg-slate-100"
+                  onClick={() => setShowVideo(true)}
+                  type="button"
+                >
+                  <Play size={16} />
+                  Watch video clip
+                </button>
+              )}
+            </>
           )}
 
-          {/* Snapshot (medium severity — image) */}
-          {snapshotUrl && (
-            <div className="mb-5 overflow-hidden rounded-lg bg-slate-100">
-              <img
-                alt="Alert snapshot"
-                className="w-full object-cover"
-                src={snapshotUrl}
-              />
+          {/* Video — only mounted after user clicks */}
+          {clipUrl && showVideo && (
+            <div className="mb-5 overflow-hidden rounded-lg bg-slate-950">
+              <video autoPlay className="w-full" controls src={clipUrl} />
             </div>
           )}
 

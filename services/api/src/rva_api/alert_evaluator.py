@@ -268,7 +268,7 @@ def _write_clip_alert(client: Any, event: dict[str, Any]) -> None:
         "status": "new",
         "track_id": "",
         "clip_s3_key": event.get("clip_s3_key", ""),
-        "snapshot_key": "",
+        "snapshot_key": _upload_snapshot(cam, alert_id) or "",
     }
 
     pipe = client.pipeline()
