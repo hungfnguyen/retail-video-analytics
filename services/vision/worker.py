@@ -6,6 +6,8 @@ from dataclasses import asdict
 from datetime import datetime, timezone
 from typing import Any, Dict
 
+import supervision as sv
+
 from detect.supervision_yolo_detector import SupervisionYoloDetector
 from inference.shared_yolo import SharedInferenceClient
 from emit.pulsar_emitter import PulsarEmitter

@@ -1,4 +1,4 @@
-import type { AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData } from '../types'
+import type { AlertHistoryData, AnalyticsDashboardData, PresenceHeatmapData, QueueAnalyticsData } from '../types'
 
 const API_BASE_URL = import.meta.env.VITE_API_BASE_URL ?? 'http://localhost:8000'
 const REQUEST_TIMEOUT_MS = 60_000
@@ -23,4 +23,10 @@ export function getQueueAnalyticsData(days = 7): Promise<QueueAnalyticsData> {
 
 export function getAlertHistoryData(days = 7): Promise<AlertHistoryData> {
   return fetchJson(`${API_BASE_URL}/api/v1/analytics/alerts?days=${encodeURIComponent(days)}`)
+}
+
+export function getPresenceHeatmapData(cameraId: string, days = 7): Promise<PresenceHeatmapData> {
+  return fetchJson(
+    `${API_BASE_URL}/api/v1/analytics/heatmap?camera_id=${encodeURIComponent(cameraId)}&days=${days}&metric=presence`,
+  )
 }

@@ -99,3 +99,14 @@ export type AlertHistoryData = {
   error_message: string | null
   records: AlertHistoryRecord[]
 }
+
+export type PresenceHeatmapData = {
+  generated_at: string
+  range_label: string
+  camera_id: string
+  data_status: 'ready' | 'empty' | 'error'
+  error_message: string | null
+  grid_rows: number
+  grid_cols: number
+  cells: HeatmapCell[]
+}

@@ -64,7 +64,7 @@ tmux send-keys -t "$SESSION:vision" \
 # Source .env for S3/boto3 credentials, then override Docker-internal hostnames
 # with localhost equivalents for host-side processes
 tmux send-keys -t "$SESSION:api" \
-    "cd '$PROJECT_ROOT' && set -a; source .env; set +a && export REDIS_HOST=localhost REDIS_PORT=16379 PULSAR_SERVICE_URL=pulsar://localhost:6650 && uv run --package rva-api uvicorn rva_api.main:app --reload --port 8000" Enter
+    "cd '$PROJECT_ROOT' && set -a; source .env; set +a && export REDIS_HOST=localhost REDIS_PORT=16379 PULSAR_SERVICE_URL=pulsar://localhost:6650 && uv run --package rva-api uvicorn rva_api.main:app --workers 4 --port 8000" Enter
 
 # window 3 — React frontend
 tmux send-keys -t "$SESSION:frontend" \

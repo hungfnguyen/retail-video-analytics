@@ -9,7 +9,7 @@ jobmanager.bind-host: 0.0.0.0
 jobmanager.memory.process.size: 800m
 
 taskmanager.bind-host: 0.0.0.0
-taskmanager.memory.process.size: 3072m
+taskmanager.memory.process.size: 2048m
 taskmanager.numberOfTaskSlots: 8
 
 # -- REST Interface (Web UI) --
@@ -39,6 +39,7 @@ state.savepoints.dir: file:///opt/flink/state/savepoints
 # 30s cho near real-time analytics (trade-off giữa latency vs small files)
 execution.checkpointing.interval: 30s
 execution.checkpointing.min-pause: 15s
+execution.checkpointing.timeout: 1200s
 execution.checkpointing.tolerable-failed-checkpoints: 5
 execution.checkpointing.externalized-checkpoint-retention: DELETE_ON_CANCELLATION
 

@@ -73,7 +73,7 @@ submit_job() {
     echo "[submit-jobs] Submitting ${job_name}..."
 
     local out=""
-    if ! out=$("${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
+    if ! out=$(timeout 60s "${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
       out=""
     fi
 
@@ -139,6 +139,11 @@ main() {
   echo "[submit-jobs] === Submitting Gold Alerts Job ==="
   if ! submit_job "org.rva.gold.GoldAlertsJob" "${USR_LIB}/gold-jobs.jar" "GoldAlertsJob"; then
     echo "[submit-jobs] WARN: GoldAlertsJob failed, continuing anyway."
+  fi
+
+  echo "[submit-jobs] === Submitting Gold Dashboard Aggregate Job ==="
+  if ! submit_job "org.rva.gold.GoldDashboardAggregateJob" "${USR_LIB}/gold-jobs.jar" "Gold-DashboardAggregate"; then
+    echo "[submit-jobs] WARN: Gold-DashboardAggregate failed, continuing anyway."
   fi
 
   echo "[submit-jobs] Job submission complete."

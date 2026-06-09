@@ -1,5 +1,6 @@
 import { useState } from 'react'
 import { AnalyticsPage } from '../features/analytics/AnalyticsPage'
+import { HeatmapPage } from '../features/heatmap/HeatmapPage'
 import { LivePage } from '../features/live/LivePage'
 import { SystemPage } from '../features/system/SystemPage'
 import type { AppPage } from '../shared/components/AppShell'
@@ -10,6 +11,15 @@ function App() {
   if (activePage === 'analytics') {
     return (
       <AnalyticsPage
+        activePage={activePage}
+        onPageChange={setActivePage}
+      />
+    )
+  }
+
+  if (activePage === 'heatmap') {
+    return (
+      <HeatmapPage
         activePage={activePage}
         onPageChange={setActivePage}
       />

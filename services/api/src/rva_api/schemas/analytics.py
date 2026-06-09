@@ -101,3 +101,14 @@ class AlertHistoryData(BaseModel):
     data_status: Literal["ready", "empty", "error"]
     error_message: str | None = None
     records: list[AlertHistoryRecord]
+
+
+class PresenceHeatmapData(BaseModel):
+    generated_at: str
+    range_label: str
+    camera_id: str
+    data_status: Literal["ready", "empty", "error"]
+    error_message: str | None = None
+    grid_rows: int
+    grid_cols: int
+    cells: list[HeatmapCell]
