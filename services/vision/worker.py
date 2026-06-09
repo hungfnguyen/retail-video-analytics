@@ -4,7 +4,6 @@ import signal
 import time
 from dataclasses import asdict
 from datetime import datetime, timezone
-from pathlib import Path
 from typing import Any, Dict
 
 import supervision as sv
@@ -21,7 +20,7 @@ from features.detections import (
     track_to_detection,
 )
 from features.runtime_versions import package_version
-from media.live_frame_publisher import LiveFramePublisher, LiveFramePublisherConfig, create_live_frame_publisher
+from media.live_frame_publisher import LiveFramePublisher, create_live_frame_publisher
 from reader import VideoFileReader
 from track.roboflow_tracker import create_detections_smoother, create_supervision_tracker
 from track.track_memory import TrackMemory, TrackMemoryConfig
@@ -209,31 +208,6 @@ def run_worker(
         track_memory.config.lost_ttl_frames,
         track_memory.config.publish_predicted,
     )
-
-    # Supervision HeatMapAnnotator — accumulates person detections across frames.
-    # Runs only when live media is enabled; saves to runtime/heatmap_frames/{cam}.jpg.
-    heatmap_annotator: sv.HeatMapAnnotator | None = None
-    heatmap_publisher: LiveFramePublisher | None = None
-    if live_frame_publisher:
-        heatmap_annotator = sv.HeatMapAnnotator(
-            position=sv.Position.BOTTOM_CENTER,
-            opacity=0.4,
-            radius=30,
-            kernel_size=25,
-        )
-        _heatmap_output_dir = (
-            Path(global_cfg.get("live_media_dir", "runtime/live_frames")).parent
-            / "heatmap_frames"
-        )
-        heatmap_publisher = LiveFramePublisher(
-            camera_id=camera_id,
-            config=LiveFramePublisherConfig(
-                output_dir=_heatmap_output_dir,
-                fps=float(global_cfg.get("live_media_fps", 10.0)),
-                jpeg_quality=int(global_cfg.get("live_media_jpeg_quality", 80)),
-            ),
-        )
-        logger.info("HeatMap publisher enabled: dir=%s", _heatmap_output_dir)
 
     frame_sampler: FrameSampler | None = None
     clip_extractor: AlertClipExtractor | None = None
@@ -468,22 +442,6 @@ def run_worker(
                     logger.exception(
                         "Live media publish failed for frame %d", frame_index
                     )
-
-            if heatmap_annotator is not None and heatmap_publisher is not None:
-                try:
-                    person_dets = tracked_detections[tracked_detections.class_id == 0]
-                    heatmap_frame = heatmap_annotator.annotate(
-                        scene=frame.copy(),
-                        detections=person_dets,
-                    )
-                    heatmap_publisher.publish(
-                        heatmap_frame,
-                        frame_index=frame_index,
-                        capture_ts=capture_ts,
-                        detections_count=len(detections),
-                    )
-                except Exception:
-                    logger.exception("Heatmap publish failed for frame %d", frame_index)
 
             _emitter.emit_frame(
                 pipeline_run_id=pipeline_run_id,

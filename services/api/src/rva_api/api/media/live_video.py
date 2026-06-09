@@ -33,12 +33,6 @@ def _frame_path(camera_id: str) -> Path:
     return _media_dir() / f"{camera_id}.jpg"
 
 
-def _heatmap_path(camera_id: str) -> Path:
-    if not CAMERA_ID_PATTERN.fullmatch(camera_id):
-        raise HTTPException(status_code=400, detail="Invalid camera_id")
-    return _media_dir().parent / "heatmap_frames" / f"{camera_id}.jpg"
-
-
 def _wait_for_frame(path: Path) -> Path:
     timeout_sec = float(os.getenv("RVA_LIVE_MEDIA_START_TIMEOUT_SEC", "2.0"))
     deadline = time.monotonic() + max(timeout_sec, 0.0)
@@ -78,18 +72,6 @@ def _mjpeg_frames(path: Path) -> Iterator[bytes]:
 @router.get("/{camera_id}/snapshot.jpg")
 def get_live_snapshot(camera_id: str) -> FileResponse:
     path = _wait_for_frame(_frame_path(camera_id))
-    return FileResponse(
-        path,
-        media_type="image/jpeg",
-        headers={"Cache-Control": "no-store"},
-    )
-
-
-@router.get("/{camera_id}/heatmap.jpg")
-def get_heatmap_snapshot(camera_id: str) -> FileResponse:
-    path = _heatmap_path(camera_id)
-    if not path.exists():
-        raise HTTPException(status_code=404, detail="Heatmap not yet available — vision worker may still be accumulating")
     return FileResponse(
         path,
         media_type="image/jpeg",

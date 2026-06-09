@@ -113,7 +113,10 @@ def _maybe_emit(
 ) -> str | None:
     """Emit alert if not on cooldown. Returns alert_id if emitted, None otherwise."""
     cooldown_key = f"alert:cooldown:{cam}:{zone}:{alert_type}"
-    if client.exists(cooldown_key):
+    # SET NX EX is atomic — only the first uvicorn worker to acquire this key
+    # proceeds; all other workers see None and skip, preventing duplicate alerts
+    # when running with --workers > 1.
+    if not client.set(cooldown_key, 1, ex=cooldown_sec, nx=True):
         return None
 
     now = datetime.now(timezone.utc)
@@ -140,7 +143,6 @@ def _maybe_emit(
     pipe.zadd(f"alert:live:{cam}", {alert_id: float(ts_ms)})
     pipe.expire(f"alert:live:{cam}", ALERT_STORE_TTL)
     pipe.zremrangebyrank(f"alert:live:{cam}", 0, -(ALERT_STORE_MAX + 1))
-    pipe.set(cooldown_key, 1, ex=cooldown_sec)
     pipe.execute()
     log.info("alert emitted: %s", alert_id)
     return alert_id
