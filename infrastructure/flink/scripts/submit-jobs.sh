@@ -62,6 +62,11 @@ check_job_status_by_id() {
   return 1
 }
 
+get_running_job_ids() {
+  curl -sf "http://flink-jobmanager:8081/jobs/overview" 2>/dev/null \
+    | grep -oE '"jid":"[0-9a-f]+"' | grep -oE '[0-9a-f]{32}' | sort || true
+}
+
 submit_job() {
   local class_name=$1
   local jar_file=$2
@@ -72,17 +77,32 @@ submit_job() {
   while [ "${retry}" -lt "${max_retries}" ]; do
     echo "[submit-jobs] Submitting ${job_name}..."
 
+    # Snapshot existing IDs so we can detect a newly created job even if
+    # the flink-run client is killed by timeout before printing the JobID.
+    local before_ids
+    before_ids=$(get_running_job_ids)
+
     local out=""
-    if ! out=$(timeout 60s "${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
+    if ! out=$(timeout 120s "${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
       out=""
     fi
 
     local job_id=""
     job_id=$(echo "${out}" | grep -Eo 'JobID [0-9a-f]+' | awk '{print $2}' | tail -n 1 || true)
 
+    # Client timed-out or printed no JobID — diff before/after to find the new job.
     if [ -z "${job_id}" ]; then
-      echo "[submit-jobs] ERROR: Could not parse JobID for ${job_name}."
-      echo "${out}"
+      sleep 3
+      local after_ids
+      after_ids=$(get_running_job_ids)
+      job_id=$(comm -13 <(echo "${before_ids}") <(echo "${after_ids}") | head -1 || true)
+      if [ -n "${job_id}" ]; then
+        echo "[submit-jobs] ${job_name} found in Flink via API with JobID ${job_id}."
+      fi
+    fi
+
+    if [ -z "${job_id}" ]; then
+      echo "[submit-jobs] ERROR: Could not determine JobID for ${job_name}."
       retry=$((retry + 1))
       echo "[submit-jobs] Retry ${retry}/${max_retries} for ${job_name}..."
       sleep 5
