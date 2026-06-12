@@ -62,13 +62,18 @@ tmux send-keys -t "$SESSION:vision" \
 
 # window 2 — FastAPI
 # Source .env for S3/boto3 credentials, then override Docker-internal hostnames
-# with localhost equivalents for host-side processes
+# with localhost equivalents for host-side processes.
+# Wrapped in `bash -c` so the bash-only `set -a` / `source .env` syntax works
+# even when the tmux window shell is fish (or any non-bash shell).
 tmux send-keys -t "$SESSION:api" \
-    "cd '$PROJECT_ROOT' && set -a; source .env; set +a && export REDIS_HOST=localhost REDIS_PORT=16379 PULSAR_SERVICE_URL=pulsar://localhost:6650 && uv run --package rva-api uvicorn rva_api.main:app --workers 4 --port 8000" Enter
+    "cd '$PROJECT_ROOT' && bash -c 'set -a; source .env; set +a; export REDIS_HOST=localhost REDIS_PORT=16379 PULSAR_SERVICE_URL=pulsar://localhost:6650; exec uv run --package rva-api uvicorn rva_api.main:app --workers 4 --port 8000'" Enter
 
 # window 3 — React frontend
+# Vite needs Node 20.19+/22.12+. nvm is bash-based and is NOT loaded by fish,
+# so a fish tmux window falls back to the old system node. Load nvm inside
+# `bash -c` and select node 20 before launching the dev server.
 tmux send-keys -t "$SESSION:frontend" \
-    "cd '$PROJECT_ROOT/frontend' && npm run dev" Enter
+    "cd '$PROJECT_ROOT/frontend' && bash -c '. \"\$HOME/.nvm/nvm.sh\"; nvm use 20 >/dev/null 2>&1 || nvm use --lts >/dev/null 2>&1; exec npm run dev'" Enter
 
 # ── attach ────────────────────────────────────────────────────────────────────
 
