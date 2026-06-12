@@ -47,8 +47,12 @@ def test_dashboard_unique_tracks_are_recomputed_from_base_grain():
         ]
     )
 
-    assert "lakehouse.rva.silver_detections" in combined_sql
-    assert "COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar)))" in combined_sql
+    # Recompute reads the v2 silver lineage and uses the global track identity
+    # (run-prefixed) with predicted rows excluded, consistent with the Flink
+    # GoldDashboardAggregateJob after the v1 -> v2 migration.
+    assert "lakehouse.rva.silver_detections_v2" in combined_sql
+    assert "COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id))" in combined_sql
+    assert "is_predicted = false" in combined_sql
     assert "SUM(daily.unique_tracks)" not in combined_sql
     assert "SUM(unique_tracks)" not in combined_sql
 

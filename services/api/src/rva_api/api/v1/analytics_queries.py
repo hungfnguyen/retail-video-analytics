@@ -86,12 +86,13 @@ def summary_sql(days: int) -> str:
         ),
         tracks AS (
           SELECT
-            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
-          FROM lakehouse.rva.silver_detections
+            COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
+          FROM lakehouse.rva.silver_detections_v2
           WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
             AND camera_id IS NOT NULL
             AND capture_ts IS NOT NULL
-            AND track_id IS NOT NULL
+            AND global_track_id IS NOT NULL
+            AND is_predicted = false
         ),
         dwell AS (
           SELECT *
@@ -131,12 +132,13 @@ def hourly_sql(days: int) -> str:
         track_counts AS (
           SELECT
             CAST(HOUR(capture_ts) AS INT) AS hour_of_day,
-            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
-          FROM lakehouse.rva.silver_detections
+            COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
+          FROM lakehouse.rva.silver_detections_v2
           WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
             AND camera_id IS NOT NULL
             AND capture_ts IS NOT NULL
-            AND track_id IS NOT NULL
+            AND global_track_id IS NOT NULL
+            AND is_predicted = false
           GROUP BY CAST(HOUR(capture_ts) AS INT)
         )
         SELECT
@@ -165,12 +167,13 @@ def camera_sql(days: int) -> str:
         track_counts AS (
           SELECT
             camera_id,
-            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
-          FROM lakehouse.rva.silver_detections
+            COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
+          FROM lakehouse.rva.silver_detections_v2
           WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
             AND camera_id IS NOT NULL
             AND capture_ts IS NOT NULL
-            AND track_id IS NOT NULL
+            AND global_track_id IS NOT NULL
+            AND is_predicted = false
           GROUP BY camera_id
         ),
         total_counts AS (
@@ -204,12 +207,13 @@ def daily_sql(days: int) -> str:
         track_counts AS (
           SELECT
             CAST(capture_ts AS DATE) AS metric_date,
-            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
-          FROM lakehouse.rva.silver_detections
+            COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
+          FROM lakehouse.rva.silver_detections_v2
           WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
             AND camera_id IS NOT NULL
             AND capture_ts IS NOT NULL
-            AND track_id IS NOT NULL
+            AND global_track_id IS NOT NULL
+            AND is_predicted = false
           GROUP BY CAST(capture_ts AS DATE)
         ),
         hourly AS (
