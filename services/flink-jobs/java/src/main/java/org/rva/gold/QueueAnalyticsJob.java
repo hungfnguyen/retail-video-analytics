@@ -75,28 +75,6 @@ public class QueueAnalyticsJob {
         );
         tEnv.executeSql(createQueueSessions);
 
-        String createZoneMinuteMetrics = String.join("\n",
-                "CREATE TABLE IF NOT EXISTS rva.gold_zone_minute_metrics (",
-                "  store_id             STRING,",
-                "  camera_id            STRING,",
-                "  zone_id              STRING,",
-                "  zone_type            STRING,",
-                "  window_start         TIMESTAMP_LTZ(3),",
-                "  window_end           TIMESTAMP_LTZ(3),",
-                "  avg_occupancy        DOUBLE,",
-                "  max_occupancy        BIGINT,",
-                "  unique_visitors      BIGINT,",
-                "  detection_count      BIGINT,",
-                "  PRIMARY KEY (store_id, camera_id, zone_id, window_start) NOT ENFORCED",
-                ") WITH (",
-                "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(window_start)',",
-                "  'write.upsert.enabled' = 'true'",
-                ")"
-        );
-        tEnv.executeSql(createZoneMinuteMetrics);
-
         String insertQueueSessions = String.join("\n",
                 "INSERT INTO rva.gold_queue_sessions",
                 "SELECT",
@@ -120,55 +98,15 @@ public class QueueAnalyticsJob {
                 "GROUP BY store_id, camera_id, queue_zone_id, global_track_id"
         );
 
-        String insertZoneMinuteMetrics = String.join("\n",
-                "INSERT INTO rva.gold_zone_minute_metrics",
-                "WITH windowed AS (",
-                "  SELECT",
-                "    store_id, camera_id, primary_zone_id, primary_zone_type, frame_index, global_track_id,",
-                "    TO_TIMESTAMP_LTZ(UNIX_TIMESTAMP(DATE_FORMAT(capture_ts, 'yyyy-MM-dd HH:mm:00')) * 1000, 3) AS window_start",
-                "  FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
-                "  WHERE primary_zone_id IS NOT NULL",
-                "    AND global_track_id IS NOT NULL",
-                "    AND capture_ts IS NOT NULL",
-                "),",
-                "frame_counts AS (",
-                "  SELECT",
-                "    store_id, camera_id, primary_zone_id, primary_zone_type, window_start, frame_index,",
-                "    COUNT(*) AS frame_occupancy",
-                "  FROM windowed",
-                "  GROUP BY store_id, camera_id, primary_zone_id, primary_zone_type, window_start, frame_index",
-                "),",
-                "visitor_counts AS (",
-                "  SELECT",
-                "    store_id, camera_id, primary_zone_id, primary_zone_type, window_start,",
-                "    COUNT(DISTINCT global_track_id) AS unique_visitors,",
-                "    COUNT(*) AS detection_count",
-                "  FROM windowed",
-                "  GROUP BY store_id, camera_id, primary_zone_id, primary_zone_type, window_start",
-                ")",
-                "SELECT",
-                "  f.store_id,",
-                "  f.camera_id,",
-                "  f.primary_zone_id AS zone_id,",
-                "  COALESCE(f.primary_zone_type, 'unknown') AS zone_type,",
-                "  f.window_start,",
-                "  f.window_start + INTERVAL '1' MINUTE AS window_end,",
-                "  AVG(CAST(f.frame_occupancy AS DOUBLE)) AS avg_occupancy,",
-                "  MAX(f.frame_occupancy) AS max_occupancy,",
-                "  MAX(v.unique_visitors) AS unique_visitors,",
-                "  MAX(v.detection_count) AS detection_count",
-                "FROM frame_counts f",
-                "JOIN visitor_counts v",
-                "  ON f.store_id = v.store_id",
-                " AND f.camera_id = v.camera_id",
-                " AND f.primary_zone_id = v.primary_zone_id",
-                " AND f.window_start = v.window_start",
-                "GROUP BY f.store_id, f.camera_id, f.primary_zone_id, f.primary_zone_type, f.window_start"
-        );
+        // NOTE: the gold_zone_minute_metrics insert was removed (2026-06-12).
+        // It used a stream-stream JOIN of two GROUP BY aggregations feeding an
+        // upsert sink; Flink planned that branch as bounded and it finished
+        // without ever committing a snapshot (table stayed at 0 rows). The
+        // table had no API consumer, so the dead insert was dropped rather than
+        // rewritten. See docs/lakehouse/phase1/PHASE1_ZONE_ALERT_DIAGNOSIS_2026-06-12.md.
 
         StatementSet statements = tEnv.createStatementSet();
         statements.addInsertSql(insertQueueSessions);
-        statements.addInsertSql(insertZoneMinuteMetrics);
         statements.execute();
     }
 
