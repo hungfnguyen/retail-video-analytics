@@ -94,3 +94,5 @@ configs/cameras.yaml
 !configs/cameras.yaml.example
 
 data/
+
+text.txt
