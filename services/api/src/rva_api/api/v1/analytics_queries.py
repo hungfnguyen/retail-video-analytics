@@ -84,6 +84,15 @@ def summary_sql(days: int) -> str:
           FROM lakehouse.rva.gold_camera_daily_metrics
           WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
         ),
+        tracks AS (
+          SELECT
+            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
+          FROM lakehouse.rva.silver_detections
+          WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
+            AND camera_id IS NOT NULL
+            AND capture_ts IS NOT NULL
+            AND track_id IS NOT NULL
+        ),
         dwell AS (
           SELECT *
           FROM lakehouse.rva.gold_camera_daily_dwell
@@ -91,7 +100,7 @@ def summary_sql(days: int) -> str:
         )
         SELECT
           COALESCE(SUM(daily.detections), 0) AS total_detections,
-          COALESCE(SUM(daily.unique_tracks), 0) AS unique_tracks,
+          COALESCE(MAX(tracks.unique_tracks), 0) AS unique_tracks,
           COUNT(DISTINCT daily.metric_date) AS active_days,
           COALESCE(SUM(daily.avg_conf * daily.detections) / NULLIF(SUM(daily.detections), 0), 0) AS avg_conf,
           COALESCE(SUM(daily.detections) / NULLIF(COUNT(DISTINCT daily.metric_date), 0), 0) AS avg_detections_per_active_day,
@@ -100,6 +109,7 @@ def summary_sql(days: int) -> str:
           COALESCE(SUM(dwell.long_dwell_tracks), 0) AS long_dwell_tracks,
           COALESCE(SUM(dwell.short_dwell_tracks), 0) AS short_dwell_tracks
         FROM daily
+        CROSS JOIN tracks
         LEFT JOIN dwell
           ON daily.store_id = dwell.store_id
          AND daily.camera_id = dwell.camera_id
@@ -109,15 +119,35 @@ def summary_sql(days: int) -> str:
 
 def hourly_sql(days: int) -> str:
     return f"""
+        WITH hourly_counts AS (
+          SELECT
+            hour_of_day,
+            SUM(detections) AS detections,
+            ROUND(SUM(detections) / NULLIF(COUNT(DISTINCT metric_date), 0)) AS average
+          FROM lakehouse.rva.gold_camera_hourly_metrics
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          GROUP BY hour_of_day
+        ),
+        track_counts AS (
+          SELECT
+            CAST(HOUR(capture_ts) AS INT) AS hour_of_day,
+            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
+          FROM lakehouse.rva.silver_detections
+          WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
+            AND camera_id IS NOT NULL
+            AND capture_ts IS NOT NULL
+            AND track_id IS NOT NULL
+          GROUP BY CAST(HOUR(capture_ts) AS INT)
+        )
         SELECT
-          concat(lpad(CAST(hour_of_day AS varchar), 2, '0'), ':00') AS hour_label,
-          SUM(detections) AS detections,
-          SUM(unique_tracks) AS unique_tracks,
-          ROUND(SUM(detections) / NULLIF(COUNT(DISTINCT metric_date), 0)) AS average
-        FROM lakehouse.rva.gold_camera_hourly_metrics
-        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-        GROUP BY hour_of_day
-        ORDER BY hour_of_day
+          concat(lpad(CAST(hourly_counts.hour_of_day AS varchar), 2, '0'), ':00') AS hour_label,
+          hourly_counts.detections,
+          COALESCE(track_counts.unique_tracks, 0) AS unique_tracks,
+          hourly_counts.average
+        FROM hourly_counts
+        LEFT JOIN track_counts
+          ON hourly_counts.hour_of_day = track_counts.hour_of_day
+        ORDER BY hourly_counts.hour_of_day
     """
 
 
@@ -127,23 +157,36 @@ def camera_sql(days: int) -> str:
           SELECT
             camera_id,
             SUM(detections) AS detections,
-            SUM(unique_tracks) AS unique_tracks,
             COALESCE(SUM(avg_conf * detections) / NULLIF(SUM(detections), 0), 0) AS avg_conf
           FROM lakehouse.rva.gold_camera_daily_metrics
           WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          GROUP BY camera_id
+        ),
+        track_counts AS (
+          SELECT
+            camera_id,
+            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
+          FROM lakehouse.rva.silver_detections
+          WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
+            AND camera_id IS NOT NULL
+            AND capture_ts IS NOT NULL
+            AND track_id IS NOT NULL
           GROUP BY camera_id
         ),
         total_counts AS (
           SELECT SUM(detections) AS total_detections FROM camera_counts
         )
         SELECT
-          camera_id,
-          detections,
-          ROUND(detections * 100.0 / NULLIF(total_detections, 0), 1) AS share,
-          unique_tracks,
-          avg_conf
-        FROM camera_counts CROSS JOIN total_counts
-        ORDER BY detections DESC
+          camera_counts.camera_id,
+          camera_counts.detections,
+          ROUND(camera_counts.detections * 100.0 / NULLIF(total_counts.total_detections, 0), 1) AS share,
+          COALESCE(track_counts.unique_tracks, 0) AS unique_tracks,
+          camera_counts.avg_conf
+        FROM camera_counts
+        CROSS JOIN total_counts
+        LEFT JOIN track_counts
+          ON camera_counts.camera_id = track_counts.camera_id
+        ORDER BY camera_counts.detections DESC
     """
 
 
@@ -153,11 +196,21 @@ def daily_sql(days: int) -> str:
           SELECT
             metric_date,
             SUM(detections) AS total_detections,
-            SUM(unique_tracks) AS unique_tracks,
             COALESCE(SUM(avg_conf * detections) / NULLIF(SUM(detections), 0), 0) AS avg_conf
           FROM lakehouse.rva.gold_camera_daily_metrics
           WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
           GROUP BY 1
+        ),
+        track_counts AS (
+          SELECT
+            CAST(capture_ts AS DATE) AS metric_date,
+            COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar))) AS unique_tracks
+          FROM lakehouse.rva.silver_detections
+          WHERE CAST(capture_ts AS DATE) >= CURRENT_DATE - INTERVAL '{days}' DAY
+            AND camera_id IS NOT NULL
+            AND capture_ts IS NOT NULL
+            AND track_id IS NOT NULL
+          GROUP BY CAST(capture_ts AS DATE)
         ),
         hourly AS (
           SELECT metric_date, hour_of_day, SUM(detections) AS detections
@@ -185,7 +238,7 @@ def daily_sql(days: int) -> str:
         SELECT
           CAST(daily.metric_date AS varchar) AS date_label,
           daily.total_detections,
-          daily.unique_tracks,
+          COALESCE(track_counts.unique_tracks, 0) AS unique_tracks,
           concat(lpad(CAST(hourly_ranked.hour_of_day AS varchar), 2, '0'), ':00 (', CAST(hourly_ranked.detections AS varchar), ')') AS peak,
           COALESCE(dwell.avg_dwell_sec, 0) AS avg_dwell_sec,
           daily.avg_conf
@@ -193,6 +246,8 @@ def daily_sql(days: int) -> str:
         LEFT JOIN hourly_ranked
           ON daily.metric_date = hourly_ranked.metric_date
          AND hourly_ranked.rn = 1
+        LEFT JOIN track_counts
+          ON daily.metric_date = track_counts.metric_date
         LEFT JOIN dwell
           ON daily.metric_date = dwell.metric_date
         ORDER BY daily.metric_date DESC

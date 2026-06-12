@@ -1,6 +1,8 @@
 from __future__ import annotations
 
+import json
 import math
+import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
 from datetime import datetime, timezone
@@ -22,8 +24,19 @@ from rva_api.api.v1.analytics_queries import (
     trino_query,
 )
 from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, PresenceHeatmapData, QueueAnalyticsData
+from storage import RedisClientConfig, create_redis_client
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
+
+_analytics_cache_client: Any | None = None
+_analytics_cache_disabled = False
+
+DASHBOARD_CACHE_TTL_SEC = int(os.getenv("ANALYTICS_DASHBOARD_CACHE_TTL_SEC", "120"))
+QUEUE_CACHE_TTL_SEC = int(os.getenv("ANALYTICS_QUEUE_CACHE_TTL_SEC", "120"))
+HEATMAP_CACHE_TTL_1D_SEC = int(os.getenv("ANALYTICS_HEATMAP_CACHE_TTL_1D_SEC", "300"))
+HEATMAP_CACHE_TTL_LONG_SEC = int(os.getenv("ANALYTICS_HEATMAP_CACHE_TTL_LONG_SEC", "900"))
+ALERTS_CACHE_TTL_SEC = int(os.getenv("ANALYTICS_ALERTS_CACHE_TTL_SEC", "300"))
+EMPTY_RESULT_CACHE_TTL_SEC = int(os.getenv("ANALYTICS_EMPTY_CACHE_TTL_SEC", "60"))
 
 
 def _safe_int(value: Any) -> int:
@@ -64,6 +77,75 @@ _CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 def _validate_camera_id(camera_id: str) -> None:
     if not _CAMERA_ID_RE.fullmatch(camera_id):
         raise HTTPException(status_code=400, detail="Invalid camera_id")
+
+
+def _cache_config() -> RedisClientConfig:
+    return RedisClientConfig(
+        host=os.getenv("REDIS_HOST", "localhost"),
+        port=int(os.getenv("REDIS_PORT", os.getenv("REDIS_HOST_PORT", "16379"))),
+        password=os.getenv("REDIS_PASSWORD") or None,
+        db=int(os.getenv("REDIS_DB", "0")),
+    )
+
+
+def _get_cache_client() -> Any | None:
+    global _analytics_cache_client, _analytics_cache_disabled
+
+    if _analytics_cache_client is not None:
+        return _analytics_cache_client
+    if _analytics_cache_disabled:
+        return None
+
+    _analytics_cache_client = create_redis_client(_cache_config())
+    if _analytics_cache_client is None:
+        _analytics_cache_disabled = True
+        return None
+    return _analytics_cache_client
+
+
+def _cache_key(name: str, *parts: str) -> str:
+    normalized = [part.replace(" ", "_") for part in parts]
+    return ":".join(["analytics", "cache", "v1", name, *normalized])
+
+
+def _cache_get(model_cls: type[Any], key: str) -> Any | None:
+    client = _get_cache_client()
+    if client is None:
+        return None
+    try:
+        raw = client.get(key)
+    except Exception:
+        return None
+    if not raw:
+        return None
+    try:
+        payload = json.loads(raw)
+        return model_cls.model_validate(payload)
+    except Exception:
+        return None
+
+
+def _cache_set(key: str, payload: dict[str, Any], ttl_sec: int) -> None:
+    client = _get_cache_client()
+    if client is None or ttl_sec <= 0:
+        return
+    try:
+        client.setex(key, ttl_sec, json.dumps(payload, separators=(",", ":")))
+    except Exception:
+        return
+
+
+def _cacheable_status(payload: dict[str, Any]) -> str | None:
+    status = payload.get("data_status")
+    if status in {"ready", "empty"}:
+        return str(status)
+    return None
+
+
+def _cache_ttl_for_status(ready_ttl_sec: int, status: str) -> int:
+    if status == "empty":
+        return min(ready_ttl_sec, EMPTY_RESULT_CACHE_TTL_SEC)
+    return ready_ttl_sec
 
 
 def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict[str, Any]:
@@ -118,28 +200,36 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
 def get_alert_history(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
 ) -> AlertHistoryData:
+    cache_key = _cache_key("alerts", f"days_{days}")
+    cached = _cache_get(AlertHistoryData, cache_key)
+    if cached is not None:
+        return cached
+
     now = datetime.now(timezone.utc)
     try:
         rows = trino_query(alerts_history_sql(days), 10.0)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-        return AlertHistoryData.model_validate({
+        payload = {
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "error",
             "error_message": str(exc),
             "records": [],
-        })
+        }
+        return AlertHistoryData.model_validate(payload)
 
     if not rows:
-        return AlertHistoryData.model_validate({
+        payload = {
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "empty",
             "error_message": None,
             "records": [],
-        })
+        }
+        _cache_set(cache_key, payload, _cache_ttl_for_status(ALERTS_CACHE_TTL_SEC, "empty"))
+        return AlertHistoryData.model_validate(payload)
 
-    return AlertHistoryData.model_validate({
+    payload = {
         "generated_at": now.isoformat(),
         "range_label": f"Last {days} days",
         "data_status": "ready",
@@ -159,13 +249,20 @@ def get_alert_history(
             }
             for r in rows
         ],
-    })
+    }
+    _cache_set(cache_key, payload, _cache_ttl_for_status(ALERTS_CACHE_TTL_SEC, "ready"))
+    return AlertHistoryData.model_validate(payload)
 
 
 @router.get("/queue", response_model=QueueAnalyticsData)
 def get_queue_analytics(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
 ) -> QueueAnalyticsData:
+    cache_key = _cache_key("queue", f"days_{days}")
+    cached = _cache_get(QueueAnalyticsData, cache_key)
+    if cached is not None:
+        return cached
+
     now = datetime.now(timezone.utc)
     rows: dict[str, list[list[Any]]] = {}
     errors: dict[str, str] = {}
@@ -189,7 +286,7 @@ def get_queue_analytics(
             {"label": "Max wait session", "value": "--", "meta": "No data", "tone": "violet"},
             {"label": "Total sessions", "value": "0", "meta": "No data", "tone": "blue"},
         ]
-        return QueueAnalyticsData.model_validate({
+        payload = {
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "error",
@@ -197,13 +294,14 @@ def get_queue_analytics(
             "kpis": empty_kpis,
             "zone_stats": [],
             "wait_trend": [],
-        })
+        }
+        return QueueAnalyticsData.model_validate(payload)
 
     zone_rows = rows["zone_summary"]
     trend_rows = rows["wait_trend"]
 
     if not zone_rows:
-        return QueueAnalyticsData.model_validate({
+        payload = {
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "empty",
@@ -215,14 +313,16 @@ def get_queue_analytics(
             ],
             "zone_stats": [],
             "wait_trend": [],
-        })
+        }
+        _cache_set(cache_key, payload, _cache_ttl_for_status(QUEUE_CACHE_TTL_SEC, "empty"))
+        return QueueAnalyticsData.model_validate(payload)
 
     total_sessions = sum(_safe_int(r[1]) for r in zone_rows)
     overall_avg_wait = sum(_safe_float(r[2]) * _safe_int(r[1]) for r in zone_rows) / total_sessions if total_sessions else 0.0
     max_wait = max((_safe_float(r[3]) for r in zone_rows), default=0.0)
     busiest_zone = zone_rows[0][0] if zone_rows else "--"
 
-    return QueueAnalyticsData.model_validate({
+    payload = {
         "generated_at": now.isoformat(),
         "range_label": f"Last {days} days",
         "data_status": "ready",
@@ -265,18 +365,24 @@ def get_queue_analytics(
             }
             for r in trend_rows
         ],
-    })
+    }
+    _cache_set(cache_key, payload, _cache_ttl_for_status(QUEUE_CACHE_TTL_SEC, "ready"))
+    return QueueAnalyticsData.model_validate(payload)
 
 
 @router.get("/dashboard", response_model=AnalyticsDashboardData)
 def get_analytics_dashboard(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
 ) -> AnalyticsDashboardData:
+    cache_key = _cache_key("dashboard", f"days_{days}")
+    cached = _cache_get(AnalyticsDashboardData, cache_key)
+    if cached is not None:
+        return cached
+
     rows, errors = _run_dashboard_queries(days)
     if errors:
-        return AnalyticsDashboardData.model_validate(
-            _empty_dashboard(days, "error", "; ".join(errors.values()))
-        )
+        payload = _empty_dashboard(days, "error", "; ".join(errors.values()))
+        return AnalyticsDashboardData.model_validate(payload)
 
     summary_row = rows["summary"][0] if rows["summary"] else []
     hourly_rows = rows["hourly"]
@@ -285,7 +391,9 @@ def get_analytics_dashboard(
 
     total_detections = _safe_int(summary_row[0] if len(summary_row) > 0 else 0)
     if total_detections == 0:
-        return AnalyticsDashboardData.model_validate(_empty_dashboard(days, "empty"))
+        payload = _empty_dashboard(days, "empty")
+        _cache_set(cache_key, payload, _cache_ttl_for_status(DASHBOARD_CACHE_TTL_SEC, "empty"))
+        return AnalyticsDashboardData.model_validate(payload)
 
     unique_tracks = _safe_int(summary_row[1] if len(summary_row) > 1 else 0)
     active_days = _safe_int(summary_row[2] if len(summary_row) > 2 else 0)
@@ -375,6 +483,9 @@ def get_analytics_dashboard(
             for row in daily_rows
         ],
     }
+    status = _cacheable_status(data)
+    if status is not None:
+        _cache_set(cache_key, data, _cache_ttl_for_status(DASHBOARD_CACHE_TTL_SEC, status))
     return AnalyticsDashboardData.model_validate(data)
 
 
@@ -388,7 +499,13 @@ def get_presence_heatmap(
     metric: str = Query(default="presence"),
 ) -> PresenceHeatmapData:
     _validate_camera_id(camera_id)
+    cache_key = _cache_key("heatmap", camera_id, f"days_{days}", f"metric_{metric}")
+    cached = _cache_get(PresenceHeatmapData, cache_key)
+    if cached is not None:
+        return cached
+
     now = datetime.now(timezone.utc)
+    ttl_sec = HEATMAP_CACHE_TTL_1D_SEC if days <= 1 else HEATMAP_CACHE_TTL_LONG_SEC
 
     def _empty(status: str, msg: str | None = None) -> PresenceHeatmapData:
         return PresenceHeatmapData.model_validate({
@@ -408,7 +525,18 @@ def get_presence_heatmap(
         return _empty("error", str(exc))
 
     if not rows:
-        return _empty("empty")
+        payload = {
+            "generated_at": now.isoformat(),
+            "range_label": f"Last {days} days",
+            "camera_id": camera_id,
+            "data_status": "empty",
+            "error_message": None,
+            "grid_rows": 24,
+            "grid_cols": 32,
+            "cells": [],
+        }
+        _cache_set(cache_key, payload, _cache_ttl_for_status(ttl_sec, "empty"))
+        return PresenceHeatmapData.model_validate(payload)
 
     raw_counts = [_safe_int(r[2]) for r in rows]
     max_count = max(raw_counts, default=0)
@@ -422,7 +550,7 @@ def get_presence_heatmap(
         if normalized > 0:
             cells.append({"row": _safe_int(r[0]), "col": _safe_int(r[1]), "value": normalized})
 
-    return PresenceHeatmapData.model_validate({
+    payload = {
         "generated_at": now.isoformat(),
         "range_label": f"Last {days} days",
         "camera_id": camera_id,
@@ -431,4 +559,6 @@ def get_presence_heatmap(
         "grid_rows": 24,
         "grid_cols": 32,
         "cells": cells,
-    })
+    }
+    _cache_set(cache_key, payload, _cache_ttl_for_status(ttl_sec, "ready"))
+    return PresenceHeatmapData.model_validate(payload)

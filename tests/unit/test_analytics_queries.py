@@ -34,8 +34,23 @@ def test_dashboard_queries_read_gold_aggregate_tables():
     assert "gold_camera_hourly_metrics" in combined_sql
     assert "gold_camera_daily_metrics" in combined_sql
     assert "gold_camera_daily_dwell" in combined_sql
-    assert "silver_detections" not in combined_sql
     assert "gold_track_summary" not in combined_sql
+
+
+def test_dashboard_unique_tracks_are_recomputed_from_base_grain():
+    combined_sql = "\n".join(
+        [
+            analytics_queries.summary_sql(7),
+            analytics_queries.hourly_sql(7),
+            analytics_queries.camera_sql(7),
+            analytics_queries.daily_sql(7),
+        ]
+    )
+
+    assert "lakehouse.rva.silver_detections" in combined_sql
+    assert "COUNT(DISTINCT CONCAT(camera_id, ':', COALESCE(pipeline_run_id, 'unknown'), ':', CAST(track_id AS varchar)))" in combined_sql
+    assert "SUM(daily.unique_tracks)" not in combined_sql
+    assert "SUM(unique_tracks)" not in combined_sql
 
 
 def test_daily_query_returns_real_dwell_and_quality_fields():
