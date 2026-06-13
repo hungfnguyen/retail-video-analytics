@@ -1,0 +1,117 @@
+// Retail Video Analytics — LINEAGE OVERVIEW (paste into https://dbdiagram.io)
+// Table-level data flow only: Bronze -> Silver -> Gold facts -> Gold serving.
+// Each node keeps just the key(s) used to draw the flow. Full columns live in
+// docs/lakehouse/schema.dbml. Arrows = data lineage, NOT FK constraints.
+
+// ───── BRONZE ─────
+Table bronze_raw {
+  event_id varchar [pk]
+  Note: 'Raw Pulsar event/frame (JSON payload).'
+}
+
+// ───── SILVER ─────
+Table silver_detections_v2 {
+  event_id        varchar
+  global_track_id varchar
+  camera_id       varchar
+  queue_zone_id   varchar
+  primary_zone_id varchar
+  Note: '1 detection. Parsed + exploded + dedup + enriched from Bronze.'
+}
+
+// ───── GOLD FACTS ─────
+Table gold_track_summary_v2 {
+  global_track_id varchar
+  camera_id       varchar
+  Note: '1 global track (dwell/visit lifecycle).'
+}
+Table gold_queue_sessions {
+  global_track_id varchar
+  queue_zone_id   varchar
+  Note: '1 queue session per track.'
+}
+Table gold_camera_hourly_metrics {
+  camera_id varchar
+  Note: 'camera + hour traffic.'
+}
+Table gold_camera_daily_metrics {
+  camera_id varchar
+  Note: 'camera + day traffic.'
+}
+Table gold_camera_daily_dwell {
+  camera_id varchar
+  Note: 'camera + day dwell.'
+}
+Table gold_alerts {
+  alert_type varchar
+  Note: '1 alert incident.'
+}
+Table gold_alert_events {
+  camera_id varchar
+  Note: 'frame-density alert aggregate.'
+}
+
+// ───── GOLD SERVING ─────
+Table gold_serving_heatmap_tile_5min { camera_id varchar [note: 'store+camera+5min+tile'] }
+Table gold_serving_heatmap_tile_hour { camera_id varchar [note: 'rollup of 5min'] }
+Table gold_serving_traffic_hourly    { camera_id varchar [note: 'store+camera+hour'] }
+Table gold_serving_traffic_daily     { camera_id varchar [note: 'rollup of hourly'] }
+Table gold_serving_queue_hourly      { queue_zone_id varchar [note: 'store+camera+zone+hour'] }
+Table gold_serving_queue_daily       { queue_zone_id varchar [note: 'store+camera+zone+day'] }
+Table gold_serving_zone_hourly       { camera_id varchar [note: 'store+camera+zone+hour'] }
+Table gold_serving_zone_daily        { camera_id varchar [note: 'rollup of hourly'] }
+Table gold_serving_dwell_daily       { camera_id varchar [note: 'store+camera+day'] }
+Table gold_serving_executive_daily   { store_id varchar [note: 'store+day rollup'] }
+Table gold_serving_alert_hourly      { alert_type varchar [note: 'store+camera+type+hour'] }
+Table gold_serving_alert_daily       { alert_type varchar [note: 'rollup of hourly'] }
+
+// ───── FLOW: Bronze -> Silver ─────
+Ref: bronze_raw.event_id < silver_detections_v2.event_id
+
+// ───── FLOW: Silver -> Gold facts ─────
+Ref: silver_detections_v2.global_track_id < gold_track_summary_v2.global_track_id
+Ref: silver_detections_v2.global_track_id < gold_queue_sessions.global_track_id
+Ref: silver_detections_v2.camera_id < gold_camera_hourly_metrics.camera_id
+Ref: silver_detections_v2.camera_id < gold_camera_daily_metrics.camera_id
+Ref: silver_detections_v2.camera_id < gold_alert_events.camera_id
+Ref: gold_track_summary_v2.camera_id < gold_camera_daily_dwell.camera_id
+
+// ───── FLOW: -> Gold serving ─────
+Ref: silver_detections_v2.camera_id < gold_serving_heatmap_tile_5min.camera_id
+Ref: gold_serving_heatmap_tile_5min.camera_id < gold_serving_heatmap_tile_hour.camera_id
+Ref: silver_detections_v2.camera_id < gold_serving_traffic_hourly.camera_id
+Ref: gold_serving_traffic_hourly.camera_id < gold_serving_traffic_daily.camera_id
+Ref: gold_queue_sessions.queue_zone_id < gold_serving_queue_hourly.queue_zone_id
+Ref: gold_serving_queue_hourly.queue_zone_id < gold_serving_queue_daily.queue_zone_id
+Ref: silver_detections_v2.camera_id < gold_serving_zone_hourly.camera_id
+Ref: gold_serving_zone_hourly.camera_id < gold_serving_zone_daily.camera_id
+Ref: gold_track_summary_v2.camera_id < gold_serving_dwell_daily.camera_id
+Ref: gold_serving_traffic_daily.camera_id < gold_serving_executive_daily.store_id
+Ref: gold_alerts.alert_type < gold_serving_alert_hourly.alert_type
+Ref: gold_serving_alert_hourly.alert_type < gold_serving_alert_daily.alert_type
+
+TableGroup Bronze { bronze_raw }
+TableGroup Silver { silver_detections_v2 }
+TableGroup "Gold facts" {
+  gold_track_summary_v2
+  gold_queue_sessions
+  gold_camera_hourly_metrics
+  gold_camera_daily_metrics
+  gold_camera_daily_dwell
+  gold_alerts
+  gold_alert_events
+}
+TableGroup "Gold serving" {
+  gold_serving_heatmap_tile_5min
+  gold_serving_heatmap_tile_hour
+  gold_serving_traffic_hourly
+  gold_serving_traffic_daily
+  gold_serving_queue_hourly
+  gold_serving_queue_daily
+  gold_serving_zone_hourly
+  gold_serving_zone_daily
+  gold_serving_dwell_daily
+  gold_serving_executive_daily
+  gold_serving_alert_hourly
+  gold_serving_alert_daily
+}

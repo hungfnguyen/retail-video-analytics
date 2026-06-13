@@ -44,37 +44,6 @@ public class SilverJob {
         tEnv.executeSql("CREATE DATABASE IF NOT EXISTS rva");
         tEnv.executeSql("USE rva");
 
-        // Tạo bảng Silver (Iceberg)
-        String createSilver = String.join("\n",
-            "CREATE TABLE IF NOT EXISTS rva.silver_detections (",
-            "  schema_version  STRING,",
-            "  event_id        STRING,",
-            "  detection_id    STRING,",
-            "  pipeline_run_id STRING,",
-            "  store_id        STRING,",
-            "  camera_id       STRING,",
-            "  frame_index     BIGINT,",
-            "  capture_ts      TIMESTAMP(3),",
-            "  img_w           INT,",
-            "  img_h           INT,",
-            "  det_id          STRING,",
-            "  class_name      STRING,",
-            "  class_id        INT,",
-            "  conf            DOUBLE,",
-            "  bbox_x1         INT,",
-            "  bbox_y1         INT,",
-            "  bbox_x2         INT,",
-            "  bbox_y2         INT,",
-            "  track_id        BIGINT,",
-            "  processing_ts   TIMESTAMP_LTZ(3)",
-            ") WITH (",
-            "  'format-version' = '2',",
-            "  'write.format.default' = 'parquet',",
-            "  'partitioning' = 'store_id,bucket(16, camera_id),days(capture_ts)'",
-            ")"
-        );
-        tEnv.executeSql(createSilver);
-
         String createSilverV2 = String.join("\n",
             "CREATE TABLE IF NOT EXISTS rva.silver_detections_v2 (",
             "  schema_version        STRING,",
@@ -125,78 +94,6 @@ public class SilverJob {
             ")"
         );
         tEnv.executeSql(createSilverV2);
-
-        // Chạy INSERT streaming: dùng UDTF + cleaning giống notebook:
-        // - Parse từ JSON (frame_index, pipeline_run_id)
-        // - Khử null ở key chính
-        // - Lọc nhiễu conf < 0.4
-        // - Khử trùng lặp theo (store_id, camera_id, frame_index, det_id/track_id)
-        String insertSql = String.join("\n",
-            "INSERT INTO rva.silver_detections",
-            "SELECT",
-            "  schema_version,",
-            "  event_id,",
-            "  detection_id,",
-            "  pipeline_run_id,",
-            "  store_id,",
-            "  camera_id,",
-            "  frame_index,",
-            "  capture_ts,",
-            "  img_w,",
-            "  img_h,",
-            "  det_id,",
-            "  class_name,",
-            "  class_id,",
-            "  conf,",
-            "  bbox_x1,",
-            "  bbox_y1,",
-            "  bbox_x2,",
-            "  bbox_y2,",
-            "  track_id,",
-            "  processing_ts",
-            "FROM (",
-            "  SELECT",
-            "    b.schema_version AS schema_version,",
-            "    COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')) AS event_id,",
-            "    CONCAT(COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')), ':', COALESCE(t.det_id, CAST(t.track_id AS STRING))) AS detection_id,",
-            "    COALESCE(b.pipeline_run_id, JSON_VALUE(b.payload, '$.pipeline_run_id')) AS pipeline_run_id,",
-            "    b.store_id AS store_id,",
-            "    b.camera_id AS camera_id,",
-            "    CAST(JSON_VALUE(b.payload, '$.frame_index') AS BIGINT) AS frame_index,",
-            "    TO_TIMESTAMP_LTZ(t.capture_ts_ms, 3) AS capture_ts,",
-            "    t.img_w AS img_w,",
-            "    t.img_h AS img_h,",
-            "    t.det_id AS det_id,",
-            "    t.class_name AS class_name,",
-            "    t.class_id AS class_id,",
-            "    t.conf AS conf,",
-            "    t.bbox_x1 AS bbox_x1,",
-            "    t.bbox_y1 AS bbox_y1,",
-            "    t.bbox_x2 AS bbox_x2,",
-            "    t.bbox_y2 AS bbox_y2,",
-            "    t.track_id AS track_id,",
-            "    CURRENT_TIMESTAMP AS processing_ts,",
-            "    ROW_NUMBER() OVER (",
-            "      PARTITION BY COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')),",
-            "                   COALESCE(t.det_id, CAST(t.track_id AS STRING))",
-            "      ORDER BY t.conf DESC, TO_TIMESTAMP_LTZ(t.capture_ts_ms, 3) DESC",
-            "    ) AS rn",
-            // --- SỬA ĐỔI QUAN TRỌNG TẠI ĐÂY ---
-            // Thêm OPTIONS hint để kích hoạt chế độ Streaming đọc từ Iceberg
-            "  FROM rva.bronze_raw /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */ AS b,",
-            "       LATERAL TABLE(parse_detections(b.payload)) AS t",
-            "  WHERE",
-            "    JSON_VALUE(b.payload, '$.frame_index') IS NOT NULL",
-            "    AND COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')) IS NOT NULL",
-            "    AND t.capture_ts_ms IS NOT NULL",
-            "    AND b.camera_id IS NOT NULL",
-            "    AND b.store_id IS NOT NULL",
-            "    AND t.det_id IS NOT NULL",
-            "    AND t.track_id IS NOT NULL",
-            "    AND t.conf IS NOT NULL",
-            "    AND t.conf >= 0.4",
-            ") WHERE rn = 1"
-        );
 
         String insertV2Sql = String.join("\n",
             "INSERT INTO rva.silver_detections_v2",
@@ -307,7 +204,6 @@ public class SilverJob {
         );
 
         StatementSet statements = tEnv.createStatementSet();
-        statements.addInsertSql(insertSql);
         statements.addInsertSql(insertV2Sql);
         statements.execute();
 

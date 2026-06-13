@@ -22,23 +22,26 @@ The evaluation should prove that the implemented pipeline is correct, observable
 
 ```sql
 SELECT COUNT(*) FROM lakehouse.rva.bronze_raw;
-SELECT COUNT(*) FROM lakehouse.rva.silver_detections;
-SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary;
+SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2;
+SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2;
+SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions;
 
 SELECT camera_id, COUNT(*)
-FROM lakehouse.rva.silver_detections
+FROM lakehouse.rva.silver_detections_v2
 GROUP BY camera_id;
 
 SELECT camera_id, COUNT(*) AS tracks, AVG(duration_sec)
-FROM lakehouse.rva.gold_track_summary
+FROM lakehouse.rva.gold_track_summary_v2
 GROUP BY camera_id;
+
+SHOW TABLES FROM lakehouse.rva_gold_serving;
 ```
 
 Expected properties:
 
 - Silver rows should not exceed invalid parsing expectations.
 - `camera_id` and `store_id` should be present in all curated rows.
-- `conf` in Silver should be at least `0.4`.
+- `conf` in Silver v2 should satisfy the current configured lakehouse filter.
 - Gold track summaries should have non-negative duration and positive frame counts.
 
 ## Latency Metrics

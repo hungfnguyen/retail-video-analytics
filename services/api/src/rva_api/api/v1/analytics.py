@@ -156,7 +156,7 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
         "error_message": message,
         "kpis": [
             {"label": "Total detections", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
-            {"label": "Unique tracks", "value": "0", "meta": "Waiting for camera track aggregates", "tone": "emerald"},
+            {"label": "Avg per active day", "value": "0", "meta": "Waiting for daily traffic aggregates", "tone": "emerald"},
             {"label": "Peak hour", "value": "--", "meta": "Waiting for hourly metrics", "tone": "amber"},
             {"label": "Busiest camera", "value": "--", "meta": "No camera rows", "tone": "violet"},
             {"label": "Avg dwell", "value": "0s", "meta": "Waiting for dwell aggregates", "tone": "emerald"},
@@ -353,7 +353,6 @@ def get_queue_analytics(
                 "total_sessions": _safe_int(r[1]),
                 "avg_wait_sec": _safe_float(r[2]),
                 "max_wait_sec": _safe_float(r[3]),
-                "unique_visitors": _safe_int(r[4]),
             }
             for r in zone_rows
         ],
@@ -395,17 +394,15 @@ def get_analytics_dashboard(
         _cache_set(cache_key, payload, _cache_ttl_for_status(DASHBOARD_CACHE_TTL_SEC, "empty"))
         return AnalyticsDashboardData.model_validate(payload)
 
-    unique_tracks = _safe_int(summary_row[1] if len(summary_row) > 1 else 0)
-    active_days = _safe_int(summary_row[2] if len(summary_row) > 2 else 0)
-    avg_conf = _safe_float(summary_row[3] if len(summary_row) > 3 else 0.0)
-    avg_per_active_day = _safe_float(summary_row[4] if len(summary_row) > 4 else 0.0)
-    avg_dwell_sec = _safe_float(summary_row[5] if len(summary_row) > 5 else 0.0)
-    track_count = _safe_int(summary_row[6] if len(summary_row) > 6 else 0)
-    long_dwell_tracks = _safe_int(summary_row[7] if len(summary_row) > 7 else 0)
-    short_dwell_tracks = _safe_int(summary_row[8] if len(summary_row) > 8 else 0)
+    active_days = _safe_int(summary_row[1] if len(summary_row) > 1 else 0)
+    avg_conf = _safe_float(summary_row[2] if len(summary_row) > 2 else 0.0)
+    avg_per_active_day = _safe_float(summary_row[3] if len(summary_row) > 3 else 0.0)
+    avg_dwell_sec = _safe_float(summary_row[4] if len(summary_row) > 4 else 0.0)
+    long_dwell_tracks = _safe_int(summary_row[5] if len(summary_row) > 5 else 0)
+    short_dwell_tracks = _safe_int(summary_row[6] if len(summary_row) > 6 else 0)
 
-    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0, 0]
-    busiest_camera = camera_rows[0] if camera_rows else ["--", 0, 0, 0, 0]
+    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0]
+    busiest_camera = camera_rows[0] if camera_rows else ["--", 0, 0, 0]
 
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
@@ -420,9 +417,9 @@ def get_analytics_dashboard(
                 "tone": "blue",
             },
             {
-                "label": "Unique tracks",
-                "value": _fmt_int(unique_tracks),
-                "meta": "Camera-scoped visit tracks",
+                "label": "Avg per active day",
+                "value": _fmt_int(round(avg_per_active_day)),
+                "meta": f"{active_days} active days",
                 "tone": "emerald",
             },
             {
@@ -440,13 +437,13 @@ def get_analytics_dashboard(
             {
                 "label": "Avg dwell",
                 "value": _fmt_duration(avg_dwell_sec),
-                "meta": f"{_fmt_int(track_count)} tracks, {_fmt_int(long_dwell_tracks)} long dwell",
+                "meta": f"{_fmt_int(long_dwell_tracks)} long dwell events",
                 "tone": "emerald",
             },
             {
                 "label": "Avg confidence",
                 "value": _fmt_percent(avg_conf),
-                "meta": f"{_fmt_int(short_dwell_tracks)} short dwell tracks",
+                "meta": f"{_fmt_int(short_dwell_tracks)} short dwell events",
                 "tone": "blue",
             },
         ],
@@ -454,8 +451,7 @@ def get_analytics_dashboard(
             {
                 "hour": str(row[0]),
                 "detections": _safe_int(row[1]),
-                "unique_tracks": _safe_int(row[2]),
-                "average": _safe_int(row[3]),
+                "average": _safe_int(row[2]),
             }
             for row in hourly_rows
         ],
@@ -464,8 +460,7 @@ def get_analytics_dashboard(
                 "camera_id": str(row[0]),
                 "detections": _safe_int(row[1]),
                 "share": _safe_float(row[2]),
-                "unique_tracks": _safe_int(row[3]),
-                "avg_confidence": _safe_float(row[4]),
+                "avg_confidence": _safe_float(row[3]),
             }
             for row in camera_rows
         ],
@@ -475,10 +470,9 @@ def get_analytics_dashboard(
             {
                 "date": str(row[0]),
                 "detections": _safe_int(row[1]),
-                "unique_tracks": _safe_int(row[2]),
-                "peak": str(row[3]),
-                "avg_dwell_sec": round(_safe_float(row[4]), 1),
-                "avg_confidence": round(_safe_float(row[5]), 4),
+                "peak": str(row[2]),
+                "avg_dwell_sec": round(_safe_float(row[3]), 1),
+                "avg_confidence": round(_safe_float(row[4]), 4),
             }
             for row in daily_rows
         ],

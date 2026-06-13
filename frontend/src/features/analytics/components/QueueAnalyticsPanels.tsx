@@ -58,7 +58,6 @@ function ZoneStatsTable({ zones }: { zones: QueueZoneStat[] }) {
               <th className="pb-2 pr-4 text-right">Sessions</th>
               <th className="pb-2 pr-4 text-right">Avg wait</th>
               <th className="pb-2 pr-4 text-right">Max wait</th>
-              <th className="pb-2 text-right">Unique visitors</th>
             </tr>
           </thead>
           <tbody className="divide-y divide-slate-50">
@@ -74,7 +73,6 @@ function ZoneStatsTable({ zones }: { zones: QueueZoneStat[] }) {
                 <td className="py-2.5 pr-4 text-right text-rose-500">
                   {formatDuration(zone.max_wait_sec)}
                 </td>
-                <td className="py-2.5 text-right text-slate-600">{zone.unique_visitors.toLocaleString()}</td>
               </tr>
             ))}
           </tbody>

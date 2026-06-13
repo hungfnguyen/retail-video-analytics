@@ -31,13 +31,14 @@ def test_dashboard_queries_read_gold_aggregate_tables():
         ]
     )
 
-    assert "gold_camera_hourly_metrics" in combined_sql
-    assert "gold_camera_daily_metrics" in combined_sql
-    assert "gold_camera_daily_dwell" in combined_sql
-    assert "gold_track_summary" not in combined_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_traffic_hourly" in combined_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_traffic_daily" in combined_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_dwell_daily" in combined_sql
+    assert "gold_camera_hourly_metrics" not in combined_sql
+    assert "gold_camera_daily_metrics" not in combined_sql
 
 
-def test_dashboard_unique_tracks_are_recomputed_from_base_grain():
+def test_dashboard_queries_do_not_read_unique_track_metrics():
     combined_sql = "\n".join(
         [
             analytics_queries.summary_sql(7),
@@ -47,19 +48,28 @@ def test_dashboard_unique_tracks_are_recomputed_from_base_grain():
         ]
     )
 
-    # Recompute reads the v2 silver lineage and uses the global track identity
-    # (run-prefixed) with predicted rows excluded, consistent with the Flink
-    # GoldDashboardAggregateJob after the v1 -> v2 migration.
-    assert "lakehouse.rva.silver_detections_v2" in combined_sql
-    assert "COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id))" in combined_sql
-    assert "is_predicted = false" in combined_sql
-    assert "SUM(daily.unique_tracks)" not in combined_sql
-    assert "SUM(unique_tracks)" not in combined_sql
+    assert "unique_tracks" not in combined_sql
+    assert "unique_hll" not in combined_sql
+    assert "COUNT(DISTINCT CONCAT(" not in combined_sql
+    assert "lakehouse.rva.silver_detections_v2" not in combined_sql
 
 
-def test_daily_query_returns_real_dwell_and_quality_fields():
+def test_heatmap_and_queue_queries_read_marts():
+    heatmap_sql = analytics_queries.heatmap_presence_sql("cam_01", 1)
+    queue_summary_sql = analytics_queries.queue_zone_summary_sql(7)
+    queue_trend_sql = analytics_queries.queue_wait_trend_sql(7)
+
+    assert "lakehouse.rva_gold_serving.gold_serving_heatmap_tile_5min" in heatmap_sql
+    assert "SUM(detection_count)" in heatmap_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_queue_daily" in queue_summary_sql
+    assert "unique_visitors" not in queue_summary_sql
+    assert "unique_hll" not in queue_summary_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_queue_hourly" in queue_trend_sql
+
+
+def test_daily_query_returns_dwell_and_quality_fields():
     sql = analytics_queries.daily_sql(7)
 
     assert "avg_dwell_sec" in sql
     assert "avg_conf" in sql
-    assert "unique_tracks" in sql
+    assert "unique_tracks" not in sql

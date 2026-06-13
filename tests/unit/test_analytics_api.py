@@ -23,10 +23,10 @@ def test_dashboard_ready_response_uses_cache(monkeypatch):
     def fake_dashboard_queries(days: int):
         calls["count"] += 1
         return {
-            "summary": [[100, 5, 1, 0.8, 100.0, 12.0, 5, 1, 2]],
-            "hourly": [["10:00", 100, 5, 100]],
-            "camera": [["cam_01", 100, 100.0, 5, 0.8]],
-            "daily": [["2026-06-12", 100, 5, "10:00 (100)", 12.0, 0.8]],
+            "summary": [[100, 1, 0.8, 100.0, 12.0, 1, 2]],
+            "hourly": [["10:00", 100, 100]],
+            "camera": [["cam_01", 100, 100.0, 0.8]],
+            "daily": [["2026-06-12", 100, "10:00 (100)", 12.0, 0.8]],
         }, {}
 
     monkeypatch.setattr(analytics, "_get_cache_client", lambda: cache)
@@ -66,8 +66,8 @@ def test_queue_ready_response_uses_cache(monkeypatch):
 
     def fake_trino_query(sql: str, max_wait: float | None = None):
         calls["count"] += 1
-        if "gold_queue_sessions" in sql and "GROUP BY queue_zone_id" in sql:
-            return [["checkout_queue_01", 4, 15.5, 30.0, 3]]
+        if "gold_serving_queue_daily" in sql and "GROUP BY queue_zone_id" in sql:
+            return [["checkout_queue_01", 4, 15.5, 30.0]]
         return [["10:00", 15.5, 4]]
 
     monkeypatch.setattr(analytics, "_get_cache_client", lambda: cache)

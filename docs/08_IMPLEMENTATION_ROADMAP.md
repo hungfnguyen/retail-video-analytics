@@ -8,13 +8,17 @@ Implemented:
 
 - Vision multi-camera processing.
 - Pulsar metadata topics.
-- Flink Bronze/Silver/Gold track-summary lakehouse path.
+- Flink Bronze/Silver v2/Gold facts lakehouse path.
 - Flink Gold dashboard aggregate tables for hourly, daily, and dwell analytics.
+- Flink queue sessions and clip-backed alert history.
 - Flink realtime Redis/DLQ path.
+- Gold serving tables backed by Trino SQL runners.
+- FastAPI analytics endpoints backed by Trino and cache.
+- Airflow orchestration skeleton for Gold serving refresh and Iceberg maintenance.
 - AWS S3-backed Iceberg warehouse.
 - Trino query access.
 - FastAPI live dashboard and media serving.
-- React Live dashboard.
+- React Live, Analytics, Heatmap, and System pages.
 
 ## Phase 1: Documentation Alignment
 
@@ -27,8 +31,7 @@ Implemented:
 
 Remaining analytical Gold tables should be added based on clear dashboard needs:
 
-- camera minute metrics;
-- historical zone or camera heatmap;
+- line-crossing / funnel history;
 - store-level daily rollups across all cameras;
 - data quality daily summary.
 
@@ -39,15 +42,9 @@ Each new table should include:
 - validation query;
 - frontend/API use case.
 
-## Phase 3: Analytics API
+## Phase 3: Analytics API Refinement
 
-Current MVP endpoint:
-
-```text
-GET /api/v1/analytics/dashboard
-```
-
-Add narrower FastAPI endpoints backed by Trino when drill-down workflows need them:
+Current analytics endpoints already exist. Add narrower FastAPI endpoints backed by Trino when drill-down workflows need them:
 
 ```text
 GET /api/v1/analytics/hourly-traffic

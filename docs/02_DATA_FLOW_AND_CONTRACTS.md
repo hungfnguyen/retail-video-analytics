@@ -91,18 +91,23 @@ alerts:cooldown:{camera_id}:{alert_type} short TTL key to prevent alert spam
 
 ```text
 lakehouse.rva.bronze_raw
-lakehouse.rva.silver_detections          legacy-compatible detection rows
 lakehouse.rva.silver_detections_v2       Supervision/global-id/zone detection rows
-lakehouse.rva.gold_track_summary         legacy-compatible track summary
 lakehouse.rva.gold_track_summary_v2      global_track_id-based track summary
+lakehouse.rva.gold_queue_sessions
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
 lakehouse.rva.gold_alert_events
+lakehouse.rva.gold_alerts
+lakehouse.rva_gold_serving.gold_serving_*
 ```
 
-`gold_alert_events` stores alert metadata only. Video evidence remains in S3 and
-is linked through `clip_s3_uri` when clip extraction is enabled.
+`gold_alerts` stores clip-backed alert incidents from `media-events` and is used
+by alert history / alert serving. `gold_alert_events` stores frame-level density
+signals from detection counts. These tables are not interchangeable.
+
+`lakehouse.rva_gold_serving.gold_serving_*` tables are Gold serving tables for
+analyst dashboards.
 
 ### AWS S3 Media
 
@@ -116,6 +121,6 @@ Media upload is optional and controlled by `media_upload_enabled` in `configs/ca
 ## Compatibility Notes
 
 - Raw payload is kept in Bronze so downstream parsing can evolve.
-- Silver filters only valid person detections with sufficient confidence.
+- Silver v2 filters valid person detections and carries global id, zone, queue, anchor, and runtime metadata.
 - Realtime state is TTL based; Iceberg is the analytical source of truth.
 - Redis writes are low-latency serving state and should not be treated as historical storage.

@@ -9,9 +9,9 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * QueueAnalyticsJob builds the first queue and semantic-zone Gold tables from
- * silver_detections_v2. The source table already contains Supervision runtime
- * facts: global_track_id, bottom-center zone assignment, and queue flags.
+ * QueueAnalyticsJob builds queue-session Gold facts from silver_detections_v2.
+ * The source table already contains Supervision runtime facts:
+ * global_track_id, bottom-center zone assignment, and queue flags.
  */
 public class QueueAnalyticsJob {
 
@@ -97,14 +97,6 @@ public class QueueAnalyticsJob {
                 "  AND capture_ts IS NOT NULL",
                 "GROUP BY store_id, camera_id, queue_zone_id, global_track_id"
         );
-
-        // NOTE: the gold_zone_minute_metrics insert was removed (2026-06-12).
-        // It used a stream-stream JOIN of two GROUP BY aggregations feeding an
-        // upsert sink; Flink planned that branch as bounded and it finished
-        // without ever committing a snapshot (table stayed at 0 rows). The
-        // table had no API consumer, so the dead insert was dropped rather than
-        // rewritten. See docs/lakehouse/phase1/PHASE1_ZONE_ALERT_DIAGNOSIS_2026-06-12.md.
-
         StatementSet statements = tEnv.createStatementSet();
         statements.addInsertSql(insertQueueSessions);
         statements.execute();

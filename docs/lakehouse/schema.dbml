@@ -1,0 +1,432 @@
+// Retail Video Analytics — Lakehouse schema (paste into https://dbdiagram.io)
+// Medallion: Bronze -> Silver -> Gold (facts + serving).
+// NOTE: This is a denormalized medallion model, NOT a star schema — there are
+// no dimension tables; dimensions (store/camera/zone/time) are degenerate
+// columns embedded in each fact. Refs below show DATA LINEAGE, not FK constraints.
+
+// ───────────────────────── BRONZE ─────────────────────────
+Table bronze_raw {
+  schema_version  varchar
+  event_id        varchar [pk]
+  pipeline_run_id varchar
+  frame_index     bigint
+  payload         varchar   [note: 'raw JSON event/frame payload']
+  camera_id       varchar
+  store_id        varchar
+  ingest_ts       timestamp
+  Note: 'Grain: 1 raw event/frame. Pure ingest from Pulsar (no transform).'
+}
+
+// ───────────────────────── SILVER ─────────────────────────
+Table silver_detections_v2 {
+  schema_version      varchar
+  event_type          varchar
+  event_id            varchar
+  detection_id        varchar [pk]
+  pipeline_run_id     varchar
+  store_id            varchar
+  camera_id           varchar
+  frame_index         bigint
+  source_frame_index  bigint
+  capture_ts          timestamp
+  img_w               int
+  img_h               int
+  det_id              varchar
+  class_name          varchar
+  class_id            int
+  conf                double
+  track_id            bigint
+  raw_track_id        bigint
+  global_track_id     varchar
+  track_state         varchar
+  is_predicted        boolean
+  anchor_type         varchar
+  anchor_x            int
+  anchor_y            int
+  anchor_x_norm       double
+  anchor_y_norm       double
+  primary_zone_id     varchar
+  primary_zone_type   varchar
+  in_queue            boolean
+  queue_zone_id       varchar
+  model_name          varchar
+  detector_type       varchar
+  tracker_type        varchar
+  supervision_version varchar
+  trackers_version    varchar
+  zone_config_version varchar
+  processing_ts       timestamp
+  Note: 'Grain: 1 detection. Bronze JSON parsed + exploded (UDTF) + dedup (rn=1) + enriched. Wide One-Big-Table fact.'
+}
+
+// ───────────────────────── GOLD FACTS ─────────────────────────
+Table gold_track_summary_v2 {
+  store_id                 varchar
+  camera_id                varchar
+  pipeline_run_id          varchar
+  global_track_id          varchar
+  visit_date               date
+  enter_ts                 timestamp
+  exit_ts                  timestamp
+  duration_sec             bigint
+  frames                   bigint
+  raw_track_id_count       bigint
+  predicted_frames         bigint
+  representative_zone_id   varchar
+  representative_zone_type varchar
+  indexes {
+    (store_id, camera_id, pipeline_run_id, global_track_id) [pk]
+  }
+  Note: 'Grain: 1 global track (dwell/visit lifecycle).'
+}
+
+Table gold_queue_sessions {
+  store_id           varchar
+  camera_id          varchar
+  queue_zone_id      varchar
+  global_track_id    varchar
+  visit_date         date
+  enter_ts           timestamp
+  exit_ts            timestamp
+  wait_time_sec      bigint
+  frame_count        bigint
+  completed          boolean
+  last_track_id      bigint
+  raw_track_id_count bigint
+  indexes {
+    (store_id, camera_id, queue_zone_id, global_track_id) [pk]
+  }
+  Note: 'Grain: 1 queue session per track.'
+}
+
+Table gold_camera_hourly_metrics {
+  store_id    varchar
+  camera_id   varchar
+  metric_date date
+  hour_of_day int
+  detections  bigint
+  avg_conf    double
+  indexes {
+    (store_id, camera_id, metric_date, hour_of_day) [pk]
+  }
+  Note: 'Grain: camera + hour.'
+}
+
+Table gold_camera_daily_metrics {
+  store_id      varchar
+  camera_id     varchar
+  metric_date   date
+  detections    bigint
+  avg_conf      double
+  first_seen_ts timestamp
+  last_seen_ts  timestamp
+  indexes {
+    (store_id, camera_id, metric_date) [pk]
+  }
+  Note: 'Grain: camera + day.'
+}
+
+Table gold_camera_daily_dwell {
+  store_id           varchar
+  camera_id          varchar
+  metric_date        date
+  track_count        bigint
+  avg_dwell_sec      double
+  total_dwell_sec    bigint
+  short_dwell_tracks bigint
+  long_dwell_tracks  bigint
+  indexes {
+    (store_id, camera_id, metric_date) [pk]
+  }
+  Note: 'Grain: camera + day (dwell aggregate).'
+}
+
+Table gold_alerts {
+  alert_id          varchar [pk]
+  camera_id         varchar
+  store_id          varchar
+  alert_type        varchar
+  severity          varchar
+  title             varchar
+  description       varchar
+  zone              varchar
+  event_ts          timestamp
+  clip_duration_sec double
+  event_date        date
+  raw_payload       varchar
+  Note: 'Grain: 1 alert incident (used by API alert history + alert serving).'
+}
+
+Table gold_alert_events {
+  alert_id      varchar [pk]
+  store_id      varchar
+  camera_id     varchar
+  alert_type    varchar
+  severity      varchar
+  event_ts      timestamp
+  event_date    date
+  trigger_value int
+  threshold     int
+  status        varchar
+  clip_s3_uri   varchar
+  Note: 'Separate frame-density alert aggregate (from GoldDashboardAggregateJob).'
+}
+
+// ───────────────────────── GOLD SERVING (rva_gold_serving) ─────────────────────────
+Table gold_serving_heatmap_tile_5min {
+  store_id        varchar
+  camera_id       varchar
+  bucket_start    timestamp
+  bucket_end      timestamp
+  metric_date     date
+  grid_width      int
+  grid_height     int
+  tile_x          int
+  tile_y          int
+  detection_count bigint
+  avg_conf        double
+  source_rows     bigint
+  refreshed_at    timestamp
+  Note: 'Grain: store+camera+5min bucket+tile.'
+}
+
+Table gold_serving_heatmap_tile_hour {
+  store_id        varchar
+  camera_id       varchar
+  bucket_hour     timestamp
+  metric_date     date
+  grid_width      int
+  grid_height     int
+  tile_x          int
+  tile_y          int
+  detection_count bigint
+  avg_conf        double
+  refreshed_at    timestamp
+  Note: 'Grain: store+camera+hour+tile (rollup of 5min).'
+}
+
+Table gold_serving_traffic_hourly {
+  store_id         varchar
+  camera_id        varchar
+  bucket_hour      timestamp
+  metric_date      date
+  hour_of_day      int
+  detection_count  bigint
+  avg_people_count double
+  max_people_count bigint
+  avg_conf         double
+  refreshed_at     timestamp
+  Note: 'Grain: store+camera+hour.'
+}
+
+Table gold_serving_traffic_daily {
+  store_id             varchar
+  camera_id            varchar
+  metric_date          date
+  detection_count      bigint
+  avg_people_count     double
+  max_people_count     bigint
+  avg_conf             double
+  peak_hour            int
+  peak_hour_detections bigint
+  refreshed_at         timestamp
+  Note: 'Grain: store+camera+day.'
+}
+
+Table gold_serving_queue_hourly {
+  store_id          varchar
+  camera_id         varchar
+  queue_zone_id     varchar
+  bucket_hour       timestamp
+  metric_date       date
+  sessions          bigint
+  avg_wait_sec      double
+  p50_wait_sec      double
+  p90_wait_sec      double
+  max_wait_sec      double
+  avg_frame_count   double
+  sla_breach_count  bigint
+  sla_threshold_sec int
+  refreshed_at      timestamp
+  Note: 'Grain: store+camera+queue zone+hour.'
+}
+
+Table gold_serving_queue_daily {
+  store_id          varchar
+  camera_id         varchar
+  queue_zone_id     varchar
+  metric_date       date
+  sessions          bigint
+  avg_wait_sec      double
+  p50_wait_sec      double
+  p90_wait_sec      double
+  max_wait_sec      double
+  sla_breach_count  bigint
+  sla_threshold_sec int
+  refreshed_at      timestamp
+  Note: 'Grain: store+camera+queue zone+day.'
+}
+
+Table gold_serving_zone_hourly {
+  store_id         varchar
+  camera_id        varchar
+  zone_id          varchar
+  zone_type        varchar
+  bucket_hour      timestamp
+  metric_date      date
+  avg_occupancy    double
+  max_occupancy    bigint
+  detection_count  bigint
+  occupied_minutes bigint
+  refreshed_at     timestamp
+  Note: 'Grain: store+camera+zone+hour (from silver_detections_v2).'
+}
+
+Table gold_serving_zone_daily {
+  store_id         varchar
+  camera_id        varchar
+  zone_id          varchar
+  zone_type        varchar
+  metric_date      date
+  avg_occupancy    double
+  max_occupancy    bigint
+  detection_count  bigint
+  occupied_minutes bigint
+  refreshed_at     timestamp
+  Note: 'Grain: store+camera+zone+day.'
+}
+
+Table gold_serving_dwell_daily {
+  store_id            varchar
+  camera_id           varchar
+  metric_date         date
+  track_count         bigint
+  avg_dwell_sec       double
+  p50_dwell_sec       double
+  p90_dwell_sec       double
+  max_dwell_sec       double
+  short_dwell_tracks  bigint
+  medium_dwell_tracks bigint
+  long_dwell_tracks   bigint
+  refreshed_at        timestamp
+  Note: 'Grain: store+camera+day.'
+}
+
+Table gold_serving_executive_daily {
+  store_id             varchar
+  metric_date          date
+  total_detections     bigint
+  active_camera_count  bigint
+  avg_dwell_sec        double
+  p50_dwell_sec        double
+  p90_dwell_sec        double
+  queue_sessions       bigint
+  avg_queue_wait_sec   double
+  p90_queue_wait_sec   double
+  max_queue_wait_sec   double
+  total_alerts         bigint
+  high_alerts          bigint
+  latest_alert_ts      timestamp
+  peak_hour            int
+  peak_hour_detections bigint
+  source_min_ts        timestamp
+  source_max_ts        timestamp
+  refreshed_at         timestamp
+  Note: 'Grain: store+day (executive rollup across facts).'
+}
+
+Table gold_serving_alert_hourly {
+  store_id        varchar
+  camera_id       varchar
+  alert_type      varchar
+  severity        varchar
+  bucket_hour     timestamp
+  metric_date     date
+  alert_count     bigint
+  clip_count      bigint
+  latest_alert_ts timestamp
+  refreshed_at    timestamp
+  Note: 'Grain: store+camera+type+severity+hour (from gold_alerts).'
+}
+
+Table gold_serving_alert_daily {
+  store_id        varchar
+  camera_id       varchar
+  alert_type      varchar
+  severity        varchar
+  metric_date     date
+  alert_count     bigint
+  clip_count      bigint
+  latest_alert_ts timestamp
+  refreshed_at    timestamp
+  Note: 'Grain: store+camera+type+severity+day.'
+}
+
+Table gold_serving_refresh_audit {
+  job_name             varchar
+  run_id               varchar
+  run_mode             varchar
+  gold_serving_table   varchar
+  partition_date       date
+  refresh_window_start timestamp
+  refresh_window_end   timestamp
+  source_table         varchar
+  source_row_count     bigint
+  output_row_count     bigint
+  status               varchar
+  error_message        varchar
+  started_at           timestamp
+  finished_at          timestamp
+  refreshed_at         timestamp
+  Note: 'Observability: one row per refresh run.'
+}
+
+Table gold_serving_data_quality_results {
+  job_name       varchar
+  run_id         varchar
+  check_name     varchar
+  table_name     varchar
+  partition_date date
+  severity       varchar
+  status         varchar
+  observed_value varchar
+  expected_rule  varchar
+  checked_at     timestamp
+  Note: 'Observability: data-quality check results.'
+}
+
+// Lineage (Bronze -> Silver -> Gold -> Gold serving) is documented separately in
+// docs/lakehouse/lineage.dbml as a table-level overview. This file is the
+// column-level reference, grouped by medallion layer.
+
+TableGroup Bronze {
+  bronze_raw
+}
+TableGroup Silver {
+  silver_detections_v2
+}
+TableGroup "Gold facts" {
+  gold_track_summary_v2
+  gold_queue_sessions
+  gold_camera_hourly_metrics
+  gold_camera_daily_metrics
+  gold_camera_daily_dwell
+  gold_alerts
+  gold_alert_events
+}
+TableGroup "Gold serving" {
+  gold_serving_heatmap_tile_5min
+  gold_serving_heatmap_tile_hour
+  gold_serving_traffic_hourly
+  gold_serving_traffic_daily
+  gold_serving_queue_hourly
+  gold_serving_queue_daily
+  gold_serving_zone_hourly
+  gold_serving_zone_daily
+  gold_serving_dwell_daily
+  gold_serving_executive_daily
+  gold_serving_alert_hourly
+  gold_serving_alert_daily
+  gold_serving_refresh_audit
+  gold_serving_data_quality_results
+}

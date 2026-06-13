@@ -8,26 +8,51 @@
 | Catalog | Iceberg REST |
 | Object storage | AWS S3 |
 | Query engine | Trino |
-| Writer | Flink |
+| Streaming writer | Flink |
+| Serving refresh engine | Trino SQL runner currently; Flink batch only when justified |
 
-## Current Namespace
+## Namespaces
 
-All implemented tables are in:
+Current logical namespaces:
 
 ```text
-lakehouse.rva
+lakehouse.rva                 Bronze / Silver / Gold facts
+lakehouse.rva_gold_serving    Gold serving tables
 ```
+
+`rva_gold_serving` is a physical namespace for query-ready Gold tables. It is not a fourth medallion tier.
 
 ## Current Tables
 
+Bronze / Silver / Gold facts:
+
 ```text
 lakehouse.rva.bronze_raw
-lakehouse.rva.silver_detections
-lakehouse.rva.gold_track_summary
+lakehouse.rva.silver_detections_v2
+lakehouse.rva.gold_track_summary_v2
+lakehouse.rva.gold_queue_sessions
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
 lakehouse.rva.gold_alert_events
+lakehouse.rva.gold_alerts
+```
+
+Gold serving:
+
+```text
+lakehouse.rva_gold_serving.gold_serving_traffic_hourly
+lakehouse.rva_gold_serving.gold_serving_traffic_daily
+lakehouse.rva_gold_serving.gold_serving_heatmap_tile_5min
+lakehouse.rva_gold_serving.gold_serving_heatmap_tile_hour
+lakehouse.rva_gold_serving.gold_serving_queue_hourly
+lakehouse.rva_gold_serving.gold_serving_queue_daily
+lakehouse.rva_gold_serving.gold_serving_zone_hourly
+lakehouse.rva_gold_serving.gold_serving_zone_daily
+lakehouse.rva_gold_serving.gold_serving_dwell_daily
+lakehouse.rva_gold_serving.gold_serving_executive_daily
+lakehouse.rva_gold_serving.gold_serving_alert_hourly
+lakehouse.rva_gold_serving.gold_serving_alert_daily
 ```
 
 ## Bronze: `bronze_raw`
@@ -49,120 +74,113 @@ Columns implemented by `BronzeIngestJob`:
 
 Partitioning: `store_id`.
 
-## Silver: `silver_detections`
+## Silver: `silver_detections_v2`
 
-Purpose: flatten one frame event into detection rows.
+Purpose: flatten one frame event into enriched detection rows.
 
 Important columns:
 
 | Column | Notes |
 |---|---|
-| `event_id` | Link to Bronze event |
-| `detection_id` | Detection-level id |
+| `event_id`, `detection_id` | Event and detection identifiers |
 | `store_id`, `camera_id` | Query dimensions |
-| `frame_index`, `capture_ts` | Frame time and sequence |
+| `frame_index`, `source_frame_index`, `capture_ts` | Frame time and sequence |
 | `class_name`, `class_id`, `conf` | Detection semantics |
 | `bbox_x1`, `bbox_y1`, `bbox_x2`, `bbox_y2` | Pixel bounding box |
-| `track_id` | Camera/run scoped tracking id |
+| `track_id`, `raw_track_id`, `global_track_id` | Tracking identities |
+| `track_state`, `is_predicted` | Tracking state |
+| `anchor_type`, `anchor_x`, `anchor_y`, `anchor_x_norm`, `anchor_y_norm` | Bottom-center / analytics anchor |
+| `primary_zone_id`, `primary_zone_type` | Zone assignment |
+| `in_queue`, `queue_zone_id` | Queue assignment |
+| `model_name`, `detector_type`, `tracker_type` | Vision runtime metadata |
 | `processing_ts` | Flink processing timestamp |
 
 Quality rules:
 
 - Required ids are non-null.
-- `track_id` is required.
-- `conf >= 0.4`.
+- `track_id` and `global_track_id` are required.
+- `conf >= 0.15` in current lakehouse Silver v2 job.
 - Deduplication uses `ROW_NUMBER()` by event and detection key.
 
 Partitioning: `store_id`, `bucket(16, camera_id)`, `days(capture_ts)`.
 
-## Gold: `gold_track_summary`
+## Gold Facts
 
-Purpose: aggregate track lifecycle from Silver rows.
+### `gold_track_summary_v2`
 
-Columns:
+Purpose: aggregate global track lifecycle from `silver_detections_v2`.
 
-| Column | Notes |
-|---|---|
-| `store_id`, `camera_id` | Dimensions |
-| `pipeline_run_id` | Run scope |
-| `track_id` | Track key |
-| `visit_date` | Date partition helper |
-| `enter_ts` | First seen timestamp |
-| `exit_ts` | Last seen timestamp |
-| `duration_sec` | Track duration |
-| `frames` | Distinct frames containing the track |
+Grain:
 
-Primary key: `(store_id, camera_id, pipeline_run_id, track_id)` not enforced.
+```text
+store_id + camera_id + pipeline_run_id + global_track_id
+```
 
-The table is configured with Iceberg format v2 and upsert enabled.
+Used for dwell and visit lifecycle analytics.
 
-## Gold: Dashboard aggregate tables
+### `gold_queue_sessions`
 
-Purpose: pre-aggregate dashboard metrics so FastAPI can query compact Gold tables instead of scanning Silver and track-level Gold tables on every Analytics page load.
+Purpose: aggregate queue wait sessions from queue detections in `silver_detections_v2`.
 
-### `gold_camera_hourly_metrics`
+Grain:
 
-Hourly traffic metrics by store, camera, date, and hour:
+```text
+store_id + camera_id + queue_zone_id + global_track_id
+```
 
-| Column | Notes |
-|---|---|
-| `store_id`, `camera_id` | Query dimensions |
-| `metric_date` | Date partition helper |
-| `hour_of_day` | 0-23 local table hour |
-| `detections` | Detection rows counted from Silver |
-| `unique_tracks` | Distinct camera-scoped tracks in that hour |
-| `avg_conf` | Average detection confidence |
+Used by queue analytics and Gold serving queue tables.
 
-Primary key: `(store_id, camera_id, metric_date, hour_of_day)` not enforced.
+### Dashboard Gold facts
 
-### `gold_camera_daily_metrics`
+`GoldDashboardAggregateJob` writes:
 
-Daily camera quality and traffic metrics:
+```text
+gold_camera_hourly_metrics
+gold_camera_daily_metrics
+gold_camera_daily_dwell
+gold_alert_events
+```
 
-| Column | Notes |
-|---|---|
-| `store_id`, `camera_id` | Query dimensions |
-| `metric_date` | Date partition helper |
-| `detections` | Daily detection rows counted from Silver |
-| `unique_tracks` | Distinct camera-scoped tracks |
-| `avg_conf` | Weighted by Silver detections in downstream dashboard queries |
-| `first_seen_ts`, `last_seen_ts` | Data coverage timestamps |
+Important:
 
-Primary key: `(store_id, camera_id, metric_date)` not enforced.
+- `gold_alert_events` is a frame-level density signal table.
+- It is not the same as `gold_alerts`.
 
-### `gold_camera_daily_dwell`
+### `gold_alerts`
 
-Daily camera dwell metrics from `gold_track_summary`:
+Purpose: clip-backed alert incident history from `media-events`.
 
-| Column | Notes |
-|---|---|
-| `store_id`, `camera_id` | Query dimensions |
-| `metric_date` | Date partition helper |
-| `track_count` | Track rows in Gold |
-| `avg_dwell_sec`, `total_dwell_sec` | Dwell duration metrics |
-| `short_dwell_tracks` | Tracks shorter than 30 seconds |
-| `long_dwell_tracks` | Tracks at least 120 seconds |
+Written by `GoldAlertsJob`.
 
-Primary key: `(store_id, camera_id, metric_date)` not enforced.
+Used by:
 
-### `gold_alert_events`
+- alert history API
+- `gold_serving_alert_hourly`
+- `gold_serving_alert_daily`
 
-Historical alert events derived from compact Silver frame counts:
+## Gold Serving
 
-| Column | Notes |
-|---|---|
-| `alert_id` | Stable alert id matching the clip alert id pattern |
-| `store_id`, `camera_id` | Query dimensions |
-| `alert_type`, `severity`, `status` | Alert classification and workflow state |
-| `event_ts`, `event_date` | Alert trigger time and date partition helper |
-| `trigger_value`, `threshold` | Count and threshold that triggered the alert |
-| `clip_s3_uri` | Optional video evidence link when clip extraction is enabled |
+Gold serving tables are query-ready tables for analyst dashboards.
 
-Primary key: `alert_id` not enforced.
+Implementation currently lives in:
 
-## Current Analytical Limits
+```text
+services/gold_serving/
+```
 
-The current Gold layer now includes dashboard aggregates for hourly traffic, daily camera metrics, daily dwell metrics, and density alert history. It still does not include minute traffic, historical zone heatmap, or export-specific drill-down tables.
+Physical schema:
+
+```text
+lakehouse.rva_gold_serving
+```
+
+Current refresh engine:
+
+```text
+Trino SQL runner
+```
+
+Airflow skeleton can orchestrate refresh and maintenance, but Airflow is not the transform engine.
 
 ## Query Examples
 
@@ -170,20 +188,25 @@ The current Gold layer now includes dashboard aggregates for hourly traffic, dai
 SELECT COUNT(*) FROM lakehouse.rva.bronze_raw;
 
 SELECT camera_id, COUNT(*) AS detections
-FROM lakehouse.rva.silver_detections
+FROM lakehouse.rva.silver_detections_v2
 GROUP BY camera_id;
 
 SELECT camera_id, COUNT(*) AS tracks, AVG(duration_sec) AS avg_duration_sec
-FROM lakehouse.rva.gold_track_summary
+FROM lakehouse.rva.gold_track_summary_v2
 GROUP BY camera_id;
+
+SHOW TABLES FROM lakehouse.rva_gold_serving;
 ```
 
 ## Backfill Direction
 
-Backfill should start from Bronze because it keeps the raw payload. A safe backfill plan is:
+Backfill should start from Bronze because it keeps the raw payload.
+
+Safe direction:
 
 1. Select a time/camera range in `bronze_raw`.
-2. Rebuild Silver into a staging table.
+2. Rebuild Silver v2 into a staging table or bounded job output.
 3. Validate counts and quality rules.
-4. Rebuild affected Gold track summaries.
-5. Swap or overwrite affected partitions.
+4. Rebuild affected Gold facts.
+5. Refresh affected Gold serving partitions.
+6. Run Iceberg maintenance only with safe retention.

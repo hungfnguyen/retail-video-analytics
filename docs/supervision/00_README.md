@@ -1,5 +1,10 @@
 # Supervision Vision Rebuild Documentation
 
+> Status: historical implementation-planning notes. The current lakehouse source
+> of truth is `docs/lakehouse/README.md`, especially the v2 tables
+> `silver_detections_v2`, `gold_track_summary_v2`, `gold_queue_sessions`,
+> `gold_alerts`, and `lakehouse.rva_gold_serving.*`.
+
 This directory is the implementation planning set for rebuilding
 `services/vision/` around Supervision and Roboflow Trackers.
 
@@ -85,4 +90,3 @@ FrameSource
 - https://trackers.roboflow.com/develop/learn/detection-quality/
 - https://trackers.roboflow.com/develop/learn/track/
 - https://blog.roboflow.com/monitor-retail-queues/
-
