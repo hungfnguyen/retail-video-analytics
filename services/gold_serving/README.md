@@ -66,10 +66,17 @@ python3 maintenance.py
 
 ## Airflow orchestration
 
-Repo hiện đã có skeleton DAGs tại:
+Repo hiện đã có DAGs tại:
 
-- `infrastructure/airflow/dags/gold_serving_intraday_refresh.py`
-- `infrastructure/airflow/dags/gold_serving_daily_finalize.py`
+- `infrastructure/airflow/dags/gold_serving_today_refresh.py`
+- `infrastructure/airflow/dags/gold_serving_traffic.py`
+- `infrastructure/airflow/dags/gold_serving_heatmap.py`
+- `infrastructure/airflow/dags/gold_serving_queue.py`
+- `infrastructure/airflow/dags/gold_serving_zone.py`
+- `infrastructure/airflow/dags/gold_serving_dwell.py`
+- `infrastructure/airflow/dags/gold_serving_alert.py`
+- `infrastructure/airflow/dags/gold_serving_executive.py`
+- `infrastructure/airflow/dags/gold_quality_checks.py`
 - `infrastructure/airflow/dags/iceberg_maintenance.py`
 
 Airflow gọi các script trong thư mục này bằng `BashOperator`. Như vậy logic refresh/maintenance vẫn nằm trong codebase, còn Airflow chỉ chịu trách nhiệm schedule, dependency, retry và observability.

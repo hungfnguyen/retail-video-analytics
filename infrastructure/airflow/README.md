@@ -6,22 +6,46 @@ Thư mục này chứa skeleton orchestration cho kiến trúc:
 - `Flink` là transform engine chính
 - `Airflow` chỉ là orchestrator cho batch refresh và maintenance
 
-## DAG hiện có
+## Mô hình DAG
 
-- `dags/gold_serving_intraday_refresh.py`
-  - task `apply_gold_serving_ddl` (bootstrap schema idempotent) → `refresh_runner.py intraday --skip-ddl`
-  - mục tiêu: đảm bảo schema tồn tại rồi refresh các bảng Gold serving trong ngày
+Mỗi **domain nghiệp vụ = 1 DAG** (1 workflow). Tất cả producer chạy `schedule="@daily"`,
+`catchup=True` → mỗi run xử lý **đúng 1 ngày** (`data_interval` = `{{ ds }}`), backfill N
+ngày = N run. Task trong DAG = từng bảng theo thứ tự phụ thuộc, gọi:
 
-- `dags/gold_serving_daily_finalize.py`
-  - task `apply_gold_serving_ddl` → `refresh_runner.py daily --skip-ddl`
-  - mục tiêu: đảm bảo schema tồn tại rồi finalize serving partition của ngày hôm qua
+```
+refresh_runner.py backfill --start {{ ds }} --end {{ ds }} --only <table> --skip-ddl
+```
 
-> Task `apply_gold_serving_ddl` (chạy `apply_ddl.py`) dựng lại `rva_gold_serving` sau mỗi restart.
+### Producer DAGs (mỗi cái 1 domain)
+
+| DAG | Tasks (thứ tự) |
+|---|---|
+| `gold_serving_traffic` | apply_ddl → traffic_hourly → traffic_daily |
+| `gold_serving_heatmap` | apply_ddl → heatmap_tile_5min → heatmap_tile_hour |
+| `gold_serving_alert` | apply_ddl → alert_hourly → alert_daily |
+| `gold_serving_queue` | apply_ddl → [queue_hourly ∥ queue_daily] |
+| `gold_serving_zone` | apply_ddl → [zone_hourly ∥ zone_daily] |
+| `gold_serving_dwell` | apply_ddl → dwell_daily |
+
+### Consumer DAG (cross-domain)
+
+- `gold_serving_executive` — `@daily`, dùng `ExternalTaskSensor` chờ
+  `traffic_daily / dwell_daily / queue_daily / alert_daily` cùng `{{ ds }}` xong, rồi
+  build `executive_daily`. Sensor dùng `mode="reschedule"`.
+
+### Ops DAGs
+
+- `iceberg_maintenance` (`0 */6 * * *`) — `maintenance.py`: OPTIMIZE + DQ nhẹ.
+- `gold_quality_checks` (`0 * * * *`) — `quality_checks.py`: freshness/non-negative/presence.
+
+> Task `apply_ddl` (chạy `apply_ddl.py`) dựng lại `rva_gold_serving` sau mỗi restart.
 > Vì DDL idempotent, refresh dùng `--skip-ddl` để tránh chạy 2 lần trong cùng DAG run.
 
-- `dags/iceberg_maintenance.py`
-  - chạy `services/gold_serving/maintenance.py`
-  - mục tiêu: `OPTIMIZE` + lightweight DQ checks
+**Backfill** không có DAG riêng — dùng catchup: `airflow dags backfill <dag_id> -s <start> -e <end>`.
+
+> ⚠️ Container Airflow hiện chạy `airflow standalone` (SequentialExecutor — 1 task/lúc).
+> `ExternalTaskSensor` cross-DAG + catchup nhiều DAG sẽ bị serialize. Để chạy song song
+> đúng nghĩa nên chuyển sang **LocalExecutor + Postgres** (tốn RAM hơn).
 
 ## Thiết kế
 

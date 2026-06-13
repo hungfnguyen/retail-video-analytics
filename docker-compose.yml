@@ -220,7 +220,8 @@ services:
 
   airflow:
     build:
-      context: ./infrastructure/airflow
+      context: .
+      dockerfile: infrastructure/airflow/Dockerfile
     container_name: airflow
     command: ["airflow", "standalone"]
     ports:
@@ -235,6 +236,8 @@ services:
       TRINO_USER: "rva_gold_serving"
       TRINO_CATALOG: "lakehouse"
       TRINO_SCHEMA: "rva_gold_serving"
+      FLINK_REST_URL: "http://flink-jobmanager:8081"
+      FLINK_BATCH_JAR_PATH: "/opt/airflow/artifacts/gold-jobs.jar"
       RVA_PROJECT_ROOT: "/opt/retail-video-analytics"
       RVA_PYTHON_BIN: "python3"
       AIRFLOW__CORE__LOAD_EXAMPLES: "False"

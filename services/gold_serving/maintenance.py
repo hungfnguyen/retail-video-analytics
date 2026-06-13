@@ -14,6 +14,7 @@ from __future__ import annotations
 import datetime as dt
 import uuid
 
+import apply_ddl
 import trino_client as trino
 
 OPTIMIZE_TABLES = [
@@ -89,6 +90,7 @@ def _run_checks(run_id: str) -> None:
 
 
 def main() -> None:
+    apply_ddl.ensure_schema()
     run_id = uuid.uuid4().hex[:12]
     print(f"maintenance run_id={run_id}")
     for table_name in OPTIMIZE_TABLES:

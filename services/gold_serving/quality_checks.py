@@ -18,6 +18,7 @@ import os
 import sys
 import uuid
 
+import apply_ddl
 import trino_client as trino
 
 GS = "lakehouse.rva_gold_serving"
@@ -120,6 +121,7 @@ CHECKS = [check_silver_freshness, check_serving_freshness, check_non_negative, c
 
 
 def main() -> None:
+    apply_ddl.ensure_schema()
     run_id = uuid.uuid4().hex[:12]
     print(f"quality_checks run_id={run_id} freshness_threshold={FRESHNESS_MIN}min")
     errors = 0
