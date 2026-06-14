@@ -46,26 +46,6 @@ public class GoldTrackSummaryJob {
         tEnv.executeSql("CREATE DATABASE IF NOT EXISTS rva");
         tEnv.executeSql("USE rva");
 
-        String createGold = String.join("\n",
-                "CREATE TABLE IF NOT EXISTS rva.gold_track_summary (",
-                "  store_id        STRING,",
-                "  camera_id       STRING,",
-                "  pipeline_run_id STRING,",
-                "  track_id        BIGINT,",
-                "  visit_date      DATE,",
-                "  enter_ts        TIMESTAMP_LTZ(3),",
-                "  exit_ts         TIMESTAMP_LTZ(3),",
-                "  duration_sec    BIGINT,",
-                "  frames          BIGINT,",
-                "  PRIMARY KEY (store_id, camera_id, pipeline_run_id, track_id) NOT ENFORCED",
-                ") WITH (",
-                "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(visit_date)',",
-                "  'write.upsert.enabled' = 'true'",
-                ")");
-        tEnv.executeSql(createGold);
-
         String createGoldV2 = String.join("\n",
                 "CREATE TABLE IF NOT EXISTS rva.gold_track_summary_v2 (",
                 "  store_id             STRING,",
@@ -89,26 +69,6 @@ public class GoldTrackSummaryJob {
                 "  'write.upsert.enabled' = 'true'",
                 ")");
         tEnv.executeSql(createGoldV2);
-
-        String insertSql = String.join("\n",
-                "INSERT INTO rva.gold_track_summary",
-                "SELECT",
-                "  store_id,",
-                "  camera_id,",
-                "  pipeline_run_id,",
-                "  track_id,",
-                "  CAST(MIN(capture_ts) AS DATE) AS visit_date,",
-                "  MIN(capture_ts) AS enter_ts,",
-                "  MAX(capture_ts) AS exit_ts,",
-                "  TIMESTAMPDIFF(SECOND, MIN(capture_ts), MAX(capture_ts)) AS duration_sec,",
-                "  COUNT(DISTINCT frame_index) AS frames",
-                "FROM rva.silver_detections /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
-                "WHERE store_id IS NOT NULL",
-                "  AND camera_id IS NOT NULL",
-                "  AND pipeline_run_id IS NOT NULL",
-                "  AND track_id IS NOT NULL",
-                "  AND capture_ts IS NOT NULL",
-                "GROUP BY store_id, camera_id, pipeline_run_id, track_id");
 
         String insertV2Sql = String.join("\n",
                 "INSERT INTO rva.gold_track_summary_v2",
@@ -135,7 +95,6 @@ public class GoldTrackSummaryJob {
                 "GROUP BY store_id, camera_id, pipeline_run_id, global_track_id");
 
         StatementSet statements = tEnv.createStatementSet();
-        statements.addInsertSql(insertSql);
         statements.addInsertSql(insertV2Sql);
         statements.execute();
     }

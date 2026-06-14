@@ -1,3 +1,4 @@
+# syntax=docker/dockerfile:1
 # -----------------------------------------------------------------------------
 # Stage 1: Build Flink Jobs với Maven
 # -----------------------------------------------------------------------------
@@ -9,8 +10,10 @@ WORKDIR /build
 COPY services/flink-jobs/java/pom.xml ./
 COPY services/flink-jobs/java/src ./src
 
-# Build JAR (skip tests để nhanh hơn)
-RUN mvn clean package -DskipTests
+# Build JAR (skip tests để nhanh hơn).
+# Cache mount cho ~/.m2: dependency tải 1 lần rồi tái dùng qua mọi lần build,
+# kể cả khi build với --no-cache (cache mount tách biệt với layer cache).
+RUN --mount=type=cache,target=/root/.m2 mvn clean package -DskipTests
 
 # -----------------------------------------------------------------------------
 # Stage 2: Flink Runtime Image với Dependencies đầy đủ

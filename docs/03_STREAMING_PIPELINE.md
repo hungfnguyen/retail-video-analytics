@@ -20,21 +20,29 @@
 | Job | API | Input | Output | Role |
 |---|---|---|---|---|
 | `BronzeIngestJob` | Table API | Pulsar raw JSON | `lakehouse.rva.bronze_raw` | Raw audit trail |
-| `SilverJob` | Table API | `bronze_raw` streaming read | `lakehouse.rva.silver_detections` | Flatten and clean detections |
-| `GoldTrackSummaryJob` | Table API | `silver_detections` streaming read | `lakehouse.rva.gold_track_summary` | Track-level aggregate |
-| `GoldDashboardAggregateJob` | Table API | `silver_detections`, `gold_track_summary` streaming reads | `gold_camera_hourly_metrics`, `gold_camera_daily_metrics`, `gold_camera_daily_dwell` | Compact dashboard analytics |
+| `SilverJob` | Table API | `bronze_raw` streaming read | `lakehouse.rva.silver_detections_v2` | Flatten, clean, and enrich detections |
+| `GoldTrackSummaryJob` | Table API | `silver_detections_v2` streaming read | `lakehouse.rva.gold_track_summary_v2` | Global-track lifecycle aggregate |
+| `QueueAnalyticsJob` | Table API | `silver_detections_v2` streaming read | `lakehouse.rva.gold_queue_sessions` | Queue session facts |
+| `GoldAlertsJob` | Table API | Pulsar `media-events` | `lakehouse.rva.gold_alerts` | Clip-backed alert incidents |
+| `GoldDashboardAggregateJob` | Table API | `silver_detections_v2`, `gold_track_summary_v2` streaming reads | `gold_camera_hourly_metrics`, `gold_camera_daily_metrics`, `gold_camera_daily_dwell`, `gold_alert_events` | Compact dashboard Gold facts |
 | `RealtimeMetricsJob` | DataStream API | Pulsar raw JSON | Redis + DLQ topic | Low-latency dashboard state |
 
 ## Lakehouse Path
 
 ```text
 Pulsar -> BronzeIngestJob -> bronze_raw
-bronze_raw -> SilverJob -> silver_detections
-silver_detections -> GoldTrackSummaryJob -> gold_track_summary
-silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables
+bronze_raw -> SilverJob -> silver_detections_v2
+silver_detections_v2 -> GoldTrackSummaryJob -> gold_track_summary_v2
+silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions
+media-events -> GoldAlertsJob -> gold_alerts
+silver_detections_v2 + gold_track_summary_v2 -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables
 ```
 
-Bronze keeps the raw payload. Silver uses a UDTF to parse detections, validates fields, filters confidence, and deduplicates detection rows. Gold aggregates each track into enter/exit/duration/frame-count summary rows. The dashboard aggregate job precomputes hourly traffic, daily camera metrics, and daily dwell metrics so the Analytics API does not scan Silver/track-level Gold for every dashboard load.
+Bronze keeps the raw payload. Silver v2 uses a UDTF to parse detections,
+validates fields, filters confidence, and keeps global track, zone, queue, and
+anchor metadata. Gold aggregates global tracks, queue sessions, dashboard facts,
+and clip-backed alerts. Gold serving tables in `lakehouse.rva_gold_serving`
+provide query-ready data for analytics endpoints.
 
 ## Realtime Path
 
@@ -89,9 +97,11 @@ docker exec redis redis-cli GET stats:count:cam_01
 docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
 
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
-docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
-docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_hourly_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_dwell"
+docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva_gold_serving"
 ```

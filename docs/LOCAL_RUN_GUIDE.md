@@ -86,8 +86,10 @@ docker exec redis redis-cli GET stats:count:cam_01
 
 docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
-docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
-docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions"
+docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva_gold_serving"
 ```
 
 ## 8. Stop

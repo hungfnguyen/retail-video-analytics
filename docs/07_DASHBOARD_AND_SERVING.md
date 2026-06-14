@@ -7,7 +7,7 @@ Redis live state ----\
                      FastAPI -> React frontend
 Latest JPEG files ---/
 
-Gold aggregate Iceberg tables -> Trino -> FastAPI analytics endpoint -> React analytics page
+Gold serving Iceberg tables -> Trino -> FastAPI analytics endpoint -> React analytics page
 ```
 
 FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media endpoints.
@@ -40,9 +40,10 @@ FastAPI is the backend-for-frontend. It exposes live dashboard JSON and media en
 Realtime density alerts are written by `RealtimeMetricsJob` when the per-frame
 people count exceeds `ALERT_DENSITY_THRESHOLD`. Redis keeps only recent alert
 state with TTL and cooldown; historical alert events are written to
-`rva.gold_alert_events` for audit and analytics. Video clips stay outside Redis
-and are linked through optional `clip_s3_uri` metadata when clip extraction is
-enabled.
+`rva.gold_alert_events` records frame-level density signals. Clip-backed alert
+incidents are written to `rva.gold_alerts` and used by alert history / alert
+serving. Video clips stay outside Redis and are linked through `clip_s3_key` /
+`clip_s3_uri` metadata when clip extraction is enabled.
 
 ## Media Serving
 
@@ -63,13 +64,13 @@ VITE_LIVE_VIDEO_TRANSPORT=mjpeg
 | Page | Status |
 |---|---|
 | Live | Connected to FastAPI realtime endpoint and media stream |
-| Analytics | Connected to FastAPI analytics endpoint backed by Trino and Gold aggregate tables |
+| Analytics | Connected to FastAPI analytics endpoint backed by Trino and Gold serving tables |
 | System | UI exists; service cards partially use live API; deeper system metrics are pending |
 
 ## Next Serving Work
 
 - Add narrower analytics endpoints for drill-down and exports.
-- Add historical heatmap and minute-level Gold tables when those panels return to the main dashboard.
+- Continue moving expensive historical panels to Gold serving tables.
 - Add system health endpoints for Pulsar, Flink, Trino, S3, Redis, and API.
 - Replace placeholder traffic with real entry/exit data contracts.
 - Add cache and query limits for analytical endpoints.

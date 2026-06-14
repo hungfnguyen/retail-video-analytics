@@ -1,5 +1,11 @@
 # Lakehouse Zone Queue Tables
 
+> Status: historical design note from the Supervision migration. The current
+> implementation no longer uses legacy `silver_detections` /
+> `gold_track_summary` as canonical sources, and `gold_zone_minute_metrics` has
+> been removed from the active flow. Use `docs/lakehouse/06_JOB_MAPPING_AND_DATA_MODELING.md`
+> and `docs/lakehouse/07_GOLD_SERVING_PHYSICAL_MODEL.md` for current guidance.
+
 ## Goal
 
 Extend the current Iceberg lakehouse from track summaries to retail zone and
@@ -292,4 +298,3 @@ SELECT line_id, SUM(in_count) AS in_total, SUM(out_count) AS out_total
 FROM lakehouse.rva.gold_line_crossing_counts
 GROUP BY line_id;
 ```
-

@@ -1,5 +1,10 @@
 # Implementation Roadmap And Test Plan
 
+> Status: historical roadmap for the Vision Supervision rewrite. Some table names
+> and acceptance criteria below predate the current lakehouse model. Use
+> `docs/lakehouse/README.md` and `docs/lakehouse/05_IMPLEMENTATION_ROADMAP.md`
+> for the current project roadmap.
+
 ## Phase 0: Baseline Current Vision
 
 Goal: identify why IDs jump before changing production behavior.
@@ -291,4 +296,3 @@ DLQ rate
 schema validation error rate
 camera_to_dashboard_latency
 ```
-

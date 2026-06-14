@@ -34,8 +34,15 @@ Current logical tables:
 
 ```text
 lakehouse.rva.bronze_raw
-lakehouse.rva.silver_detections
-lakehouse.rva.gold_track_summary
+lakehouse.rva.silver_detections_v2
+lakehouse.rva.gold_track_summary_v2
+lakehouse.rva.gold_queue_sessions
+lakehouse.rva.gold_camera_hourly_metrics
+lakehouse.rva.gold_camera_daily_metrics
+lakehouse.rva.gold_camera_daily_dwell
+lakehouse.rva.gold_alert_events
+lakehouse.rva.gold_alerts
+lakehouse.rva_gold_serving.gold_serving_*
 ```
 
 ## Media Object Paths

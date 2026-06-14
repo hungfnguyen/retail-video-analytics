@@ -34,12 +34,12 @@ This document describes the current target architecture implemented in the repos
 |---|---|
 | Vision service | Reads camera/video frames, runs detection/tracking, publishes metadata, writes live media |
 | Pulsar | Durable metadata transport between Vision and Flink |
-| Flink lakehouse jobs | Persist raw events, flatten detections, aggregate track summaries |
+| Flink lakehouse jobs | Persist raw events, flatten enriched detections, aggregate Gold facts |
 | Flink realtime job | Build low-latency Redis state and route invalid events to DLQ |
 | Redis | Current count, active tracks, heatmap, latest frame snapshot |
 | Iceberg REST | Catalog for Iceberg tables stored on AWS S3 |
 | AWS S3 | Iceberg table data, sampled frames, optional clips |
-| Trino | SQL query engine for lakehouse data |
+| Trino | SQL query engine for lakehouse data and Gold serving refreshes |
 | FastAPI | Backend-for-frontend, live API, WebRTC/MJPEG gateway |
 | React frontend | Live monitoring, analytics UI, system UI |
 
@@ -57,12 +57,18 @@ This path optimizes low latency. It is suitable for current count, active tracks
 
 ```text
 Pulsar -> BronzeIngestJob -> bronze_raw
-bronze_raw -> SilverJob -> silver_detections
-silver_detections -> GoldTrackSummaryJob -> gold_track_summary
-Trino -> analytical queries
+bronze_raw -> SilverJob -> silver_detections_v2
+silver_detections_v2 -> GoldTrackSummaryJob -> gold_track_summary_v2
+silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions
+silver_detections_v2 + gold_track_summary_v2 -> GoldDashboardAggregateJob -> dashboard Gold facts
+media-events -> GoldAlertsJob -> gold_alerts
+Gold facts / Silver -> gold_serving_* -> FastAPI analytics
 ```
 
 This path optimizes correctness, auditability, replay, and SQL analysis. Latency is governed by Flink checkpoints and Iceberg commit cycles.
+
+`gold_serving_*` tables live in `lakehouse.rva_gold_serving`. They are query-ready
+Gold tables for analyst dashboards, not a separate medallion tier.
 
 ## Current Deployment Boundary
 

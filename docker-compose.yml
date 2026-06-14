@@ -217,13 +217,45 @@ services:
       retries: 10
     networks:
       - retail-net
-  
+
+  airflow:
+    build:
+      context: .
+      dockerfile: infrastructure/airflow/Dockerfile
+    container_name: airflow
+    command: ["airflow", "standalone"]
+    ports:
+      - "8085:8080"      # Airflow webserver (host:8085 to avoid conflicts)
+    volumes:
+      - ./infrastructure/airflow/dags:/opt/airflow/dags
+      - .:/opt/retail-video-analytics:ro   # repo mount so DAGs can run services/gold_serving/*.py
+      - airflow_data:/opt/airflow
+    environment:
+      # Orchestration glue only — Airflow shells out to the repo's runner scripts.
+      TRINO_URL: "http://trino:8080"
+      TRINO_USER: "rva_gold_serving"
+      TRINO_CATALOG: "lakehouse"
+      TRINO_SCHEMA: "rva_gold_serving"
+      FLINK_REST_URL: "http://flink-jobmanager:8081"
+      FLINK_BATCH_JAR_PATH: "/opt/airflow/artifacts/gold-jobs.jar"
+      RVA_PROJECT_ROOT: "/opt/retail-video-analytics"
+      RVA_PYTHON_BIN: "python3"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+    depends_on:
+      trino:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - retail-net
+
 volumes:
   trino_data:
     driver: local
   flink_state:
     driver: local
   pulsar_data:
+    driver: local
+  airflow_data:
     driver: local
 
 networks:

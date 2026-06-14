@@ -88,7 +88,10 @@ settings:
 
   # Clip extraction is implemented but disabled by default because it encodes
   # every frame into a small pre-buffer. Enable it when testing alert replay.
-  # Density alerts are emitted when current people count exceeds this threshold.
+  # Density alerts (-> clips -> gold_alerts) fire when a single frame's people
+  # count exceeds this threshold. Tune it to your scene: it must be below the
+  # real peak occupancy or no alert ever fires. (Our demo peaks at ~8/frame, so
+  # the live config uses 6.)
   alert_clip_enabled: false
   alert_density_threshold: 10
   alert_pre_buffer_sec: 5
