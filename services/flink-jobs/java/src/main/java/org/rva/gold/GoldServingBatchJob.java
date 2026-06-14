@@ -2,8 +2,6 @@ package org.rva.gold;
 
 import org.apache.flink.table.api.TableEnvironment;
 
-import java.time.OffsetDateTime;
-
 public class GoldServingBatchJob {
 
     public static void main(String[] args) throws Exception {
@@ -11,45 +9,49 @@ public class GoldServingBatchJob {
         TableEnvironment tEnv = GoldServingSupport.createBatchEnvironment();
         GoldServingSupport.ensureServingTables(tEnv);
 
-        if ("all".equals(parsed.domain)) {
-            runTraffic(tEnv, parsed);
-            runHeatmap(tEnv, parsed);
-            runQueue(tEnv, parsed);
-            runZone(tEnv, parsed);
-            runDwell(tEnv, parsed);
-            runAlert(tEnv, parsed);
-            runExecutive(tEnv, parsed);
-            return;
-        }
-
         switch (parsed.domain) {
-            case "traffic":
-                runTraffic(tEnv, parsed);
+            case "traffic_hourly":
+                runTrafficHourly(tEnv, parsed);
                 break;
-            case "heatmap":
-                runHeatmap(tEnv, parsed);
+            case "traffic_daily":
+                runTrafficDaily(tEnv, parsed);
                 break;
-            case "queue":
-                runQueue(tEnv, parsed);
+            case "heatmap_5min":
+                runHeatmap5Min(tEnv, parsed);
                 break;
-            case "zone":
-                runZone(tEnv, parsed);
+            case "heatmap_hour":
+                runHeatmapHour(tEnv, parsed);
                 break;
-            case "dwell":
-                runDwell(tEnv, parsed);
+            case "queue_hourly":
+                runQueueHourly(tEnv, parsed);
                 break;
-            case "alert":
-                runAlert(tEnv, parsed);
+            case "queue_daily":
+                runQueueDaily(tEnv, parsed);
                 break;
-            case "executive":
-                runExecutive(tEnv, parsed);
+            case "zone_hourly":
+                runZoneHourly(tEnv, parsed);
+                break;
+            case "zone_daily":
+                runZoneDaily(tEnv, parsed);
+                break;
+            case "dwell_daily":
+                runDwellDaily(tEnv, parsed);
+                break;
+            case "alert_hourly":
+                runAlertHourly(tEnv, parsed);
+                break;
+            case "alert_daily":
+                runAlertDaily(tEnv, parsed);
+                break;
+            case "executive_daily":
+                runExecutiveDaily(tEnv, parsed);
                 break;
             default:
                 throw new IllegalArgumentException("Unsupported domain: " + parsed.domain);
         }
     }
 
-    private static void runTraffic(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runTrafficHourly(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_traffic_hourly", "silver_detections_v2",
                 String.join("\n",
@@ -70,7 +72,7 @@ public class GoldServingBatchJob {
                         "    store_id,",
                         "    camera_id,",
                         "    frame_index,",
-                        "    CAST(DATE_TRUNC('HOUR', capture_ts) AS TIMESTAMP(6)) AS bucket_hour,",
+                        "    TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,",
                         "    CAST(capture_ts AS DATE) AS metric_date,",
                         "    CAST(EXTRACT(HOUR FROM capture_ts) AS INT) AS hour_of_day,",
                         "    COUNT(*) AS frame_det,",
@@ -80,12 +82,14 @@ public class GoldServingBatchJob {
                         "    AND is_predicted = FALSE",
                         "    AND capture_ts IS NOT NULL",
                         "    AND CAST(capture_ts AS DATE) BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
-                        "  GROUP BY store_id, camera_id, frame_index, DATE_TRUNC('HOUR', capture_ts), CAST(capture_ts AS DATE), EXTRACT(HOUR FROM capture_ts)",
+                        "  GROUP BY store_id, camera_id, frame_index, TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(capture_ts AS DATE), EXTRACT(HOUR FROM capture_ts)",
                         ") f",
                         "GROUP BY store_id, camera_id, bucket_hour, metric_date, hour_of_day"
                 )
         );
+    }
 
+    private static void runTrafficDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_traffic_daily", "gold_serving_traffic_hourly",
                 String.join("\n",
@@ -98,7 +102,7 @@ public class GoldServingBatchJob {
                         "  SUM(avg_people_count * detection_count) / NULLIF(SUM(detection_count), 0) AS avg_people_count,",
                         "  MAX(max_people_count) AS max_people_count,",
                         "  SUM(avg_conf * detection_count) / NULLIF(SUM(detection_count), 0) AS avg_conf,",
-                        "  CAST(MAX_BY(CAST(hour_of_day AS BIGINT), detection_count) AS INT) AS peak_hour,",
+                        "  CAST(NULL AS INT) AS peak_hour,",
                         "  MAX(detection_count) AS peak_hour_detections,",
                         "  CAST(CURRENT_TIMESTAMP AS TIMESTAMP(6)) AS refreshed_at",
                         "FROM rva_gold_serving.gold_serving_traffic_hourly",
@@ -108,7 +112,7 @@ public class GoldServingBatchJob {
         );
     }
 
-    private static void runHeatmap(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runHeatmap5Min(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_heatmap_tile_5min", "silver_detections_v2",
                 String.join("\n",
@@ -132,7 +136,7 @@ public class GoldServingBatchJob {
                         "    store_id,",
                         "    camera_id,",
                         "    conf,",
-                        "    CAST(TIMESTAMPADD(MINUTE, - MOD(EXTRACT(MINUTE FROM capture_ts), 5), DATE_TRUNC('MINUTE', capture_ts)) AS TIMESTAMP(6)) AS bucket_start,",
+                        "    TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:') || LPAD(CAST(CAST(FLOOR(EXTRACT(MINUTE FROM capture_ts) / 5) * 5 AS INT) AS STRING), 2, '0') || ':00') AS bucket_start,",
                         "    LEAST(31, GREATEST(0, CAST(FLOOR(anchor_x_norm * 32) AS INT))) AS tile_x,",
                         "    LEAST(23, GREATEST(0, CAST(FLOOR(anchor_y_norm * 24) AS INT))) AS tile_y",
                         "  FROM rva.silver_detections_v2",
@@ -146,7 +150,9 @@ public class GoldServingBatchJob {
                         "GROUP BY store_id, camera_id, bucket_start, tile_x, tile_y"
                 )
         );
+    }
 
+    private static void runHeatmapHour(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_heatmap_tile_hour", "gold_serving_heatmap_tile_5min",
                 String.join("\n",
@@ -154,7 +160,7 @@ public class GoldServingBatchJob {
                         "SELECT",
                         "  store_id,",
                         "  camera_id,",
-                        "  CAST(DATE_TRUNC('HOUR', bucket_start) AS TIMESTAMP(6)) AS bucket_hour,",
+                        "  TO_TIMESTAMP(DATE_FORMAT(CAST(bucket_start AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,",
                         "  metric_date,",
                         "  32 AS grid_width,",
                         "  24 AS grid_height,",
@@ -165,12 +171,12 @@ public class GoldServingBatchJob {
                         "  CAST(CURRENT_TIMESTAMP AS TIMESTAMP(6)) AS refreshed_at",
                         "FROM rva_gold_serving.gold_serving_heatmap_tile_5min",
                         "WHERE metric_date BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
-                        "GROUP BY store_id, camera_id, DATE_TRUNC('HOUR', bucket_start), metric_date, tile_x, tile_y"
+                        "GROUP BY store_id, camera_id, TO_TIMESTAMP(DATE_FORMAT(CAST(bucket_start AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), metric_date, tile_x, tile_y"
                 )
         );
     }
 
-    private static void runQueue(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runQueueHourly(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_queue_hourly", "gold_queue_sessions",
                 String.join("\n",
@@ -179,12 +185,12 @@ public class GoldServingBatchJob {
                         "  store_id,",
                         "  camera_id,",
                         "  queue_zone_id,",
-                        "  CAST(DATE_TRUNC('HOUR', enter_ts) AS TIMESTAMP(6)) AS bucket_hour,",
+                        "  TO_TIMESTAMP(DATE_FORMAT(CAST(enter_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,",
                         "  CAST(enter_ts AS DATE) AS metric_date,",
                         "  COUNT(*) AS sessions,",
                         "  AVG(CAST(wait_time_sec AS DOUBLE)) AS avg_wait_sec,",
-                        "  CAST(PERCENTILE(wait_time_sec, 0.5) AS DOUBLE) AS p50_wait_sec,",
-                        "  CAST(PERCENTILE(wait_time_sec, 0.9) AS DOUBLE) AS p90_wait_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p50_wait_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p90_wait_sec,",
                         "  CAST(MAX(wait_time_sec) AS DOUBLE) AS max_wait_sec,",
                         "  AVG(CAST(frame_count AS DOUBLE)) AS avg_frame_count,",
                         "  SUM(CASE WHEN wait_time_sec >= 120 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS sla_breach_count,",
@@ -195,10 +201,12 @@ public class GoldServingBatchJob {
                         "  AND enter_ts IS NOT NULL",
                         "  AND queue_zone_id IS NOT NULL",
                         "  AND CAST(enter_ts AS DATE) BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
-                        "GROUP BY store_id, camera_id, queue_zone_id, DATE_TRUNC('HOUR', enter_ts), CAST(enter_ts AS DATE)"
+                        "GROUP BY store_id, camera_id, queue_zone_id, TO_TIMESTAMP(DATE_FORMAT(CAST(enter_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(enter_ts AS DATE)"
                 )
         );
+    }
 
+    private static void runQueueDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_queue_daily", "gold_queue_sessions",
                 String.join("\n",
@@ -210,8 +218,8 @@ public class GoldServingBatchJob {
                         "  CAST(enter_ts AS DATE) AS metric_date,",
                         "  COUNT(*) AS sessions,",
                         "  AVG(CAST(wait_time_sec AS DOUBLE)) AS avg_wait_sec,",
-                        "  CAST(PERCENTILE(wait_time_sec, 0.5) AS DOUBLE) AS p50_wait_sec,",
-                        "  CAST(PERCENTILE(wait_time_sec, 0.9) AS DOUBLE) AS p90_wait_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p50_wait_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p90_wait_sec,",
                         "  CAST(MAX(wait_time_sec) AS DOUBLE) AS max_wait_sec,",
                         "  SUM(CASE WHEN wait_time_sec >= 120 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS sla_breach_count,",
                         "  120 AS sla_threshold_sec,",
@@ -226,7 +234,7 @@ public class GoldServingBatchJob {
         );
     }
 
-    private static void runZone(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runZoneHourly(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_zone_hourly", "silver_detections_v2",
                 String.join("\n",
@@ -249,9 +257,9 @@ public class GoldServingBatchJob {
                         "    camera_id,",
                         "    primary_zone_id AS zone_id,",
                         "    COALESCE(primary_zone_type, 'unknown') AS zone_type,",
-                        "    CAST(DATE_TRUNC('HOUR', capture_ts) AS TIMESTAMP(6)) AS bucket_hour,",
+                        "    TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,",
                         "    CAST(capture_ts AS DATE) AS metric_date,",
-                        "    DATE_TRUNC('MINUTE', capture_ts) AS minute_bucket,",
+                        "    TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:mm:00')) AS minute_bucket,",
                         "    frame_index,",
                         "    COUNT(*) AS frame_det",
                         "  FROM rva.silver_detections_v2",
@@ -261,12 +269,14 @@ public class GoldServingBatchJob {
                         "    AND capture_ts IS NOT NULL",
                         "    AND CAST(capture_ts AS DATE) BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
                         "  GROUP BY store_id, camera_id, primary_zone_id, COALESCE(primary_zone_type, 'unknown'),",
-                        "           DATE_TRUNC('HOUR', capture_ts), CAST(capture_ts AS DATE), DATE_TRUNC('MINUTE', capture_ts), frame_index",
+                        "           TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(capture_ts AS DATE), TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:mm:00')), frame_index",
                         ") f",
                         "GROUP BY store_id, camera_id, zone_id, zone_type, bucket_hour, metric_date"
                 )
         );
+    }
 
+    private static void runZoneDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_zone_daily", "silver_detections_v2",
                 String.join("\n",
@@ -289,7 +299,7 @@ public class GoldServingBatchJob {
                         "    primary_zone_id AS zone_id,",
                         "    COALESCE(primary_zone_type, 'unknown') AS zone_type,",
                         "    CAST(capture_ts AS DATE) AS metric_date,",
-                        "    DATE_TRUNC('MINUTE', capture_ts) AS minute_bucket,",
+                        "    TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:mm:00')) AS minute_bucket,",
                         "    frame_index,",
                         "    COUNT(*) AS frame_det",
                         "  FROM rva.silver_detections_v2",
@@ -299,14 +309,14 @@ public class GoldServingBatchJob {
                         "    AND capture_ts IS NOT NULL",
                         "    AND CAST(capture_ts AS DATE) BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
                         "  GROUP BY store_id, camera_id, primary_zone_id, COALESCE(primary_zone_type, 'unknown'),",
-                        "           CAST(capture_ts AS DATE), DATE_TRUNC('MINUTE', capture_ts), frame_index",
+                        "           CAST(capture_ts AS DATE), TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:mm:00')), frame_index",
                         ") f",
                         "GROUP BY store_id, camera_id, zone_id, zone_type, metric_date"
                 )
         );
     }
 
-    private static void runDwell(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runDwellDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_dwell_daily", "gold_track_summary_v2",
                 String.join("\n",
@@ -317,8 +327,8 @@ public class GoldServingBatchJob {
                         "  visit_date AS metric_date,",
                         "  COUNT(*) AS track_count,",
                         "  AVG(CAST(duration_sec AS DOUBLE)) AS avg_dwell_sec,",
-                        "  CAST(PERCENTILE(duration_sec, 0.5) AS DOUBLE) AS p50_dwell_sec,",
-                        "  CAST(PERCENTILE(duration_sec, 0.9) AS DOUBLE) AS p90_dwell_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p50_dwell_sec,",
+                        "  CAST(NULL AS DOUBLE) AS p90_dwell_sec,",
                         "  CAST(MAX(duration_sec) AS DOUBLE) AS max_dwell_sec,",
                         "  SUM(CASE WHEN duration_sec < 30 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS short_dwell_tracks,",
                         "  SUM(CASE WHEN duration_sec >= 30 AND duration_sec < 120 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS medium_dwell_tracks,",
@@ -335,7 +345,7 @@ public class GoldServingBatchJob {
         );
     }
 
-    private static void runAlert(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runAlertHourly(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_alert_hourly", "gold_alerts",
                 String.join("\n",
@@ -345,7 +355,7 @@ public class GoldServingBatchJob {
                         "  camera_id,",
                         "  alert_type,",
                         "  severity,",
-                        "  CAST(DATE_TRUNC('HOUR', event_ts) AS TIMESTAMP(6)) AS bucket_hour,",
+                        "  TO_TIMESTAMP(DATE_FORMAT(CAST(event_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,",
                         "  CAST(event_ts AS DATE) AS metric_date,",
                         "  COUNT(*) AS alert_count,",
                         "  COUNT(clip_s3_key) AS clip_count,",
@@ -355,10 +365,12 @@ public class GoldServingBatchJob {
                         "WHERE event_ts IS NOT NULL",
                         "  AND camera_id IS NOT NULL",
                         "  AND CAST(event_ts AS DATE) BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
-                        "GROUP BY store_id, camera_id, alert_type, severity, DATE_TRUNC('HOUR', event_ts), CAST(event_ts AS DATE)"
+                        "GROUP BY store_id, camera_id, alert_type, severity, TO_TIMESTAMP(DATE_FORMAT(CAST(event_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(event_ts AS DATE)"
                 )
         );
+    }
 
+    private static void runAlertDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_alert_daily", "gold_serving_alert_hourly",
                 String.join("\n",
@@ -380,7 +392,7 @@ public class GoldServingBatchJob {
         );
     }
 
-    private static void runExecutive(TableEnvironment tEnv, Args args) throws Exception {
+    private static void runExecutiveDaily(TableEnvironment tEnv, Args args) throws Exception {
         executeStep(
                 tEnv, args, "gold_serving_executive_daily", "gold_serving_traffic_daily",
                 String.join("\n",
@@ -409,15 +421,15 @@ public class GoldServingBatchJob {
                         "),",
                         "peak AS (",
                         "  SELECT store_id, metric_date,",
-                        "         CAST(MAX_BY(CAST(hour_of_day AS BIGINT), d) AS INT) AS peak_hour,",
+                        "         CAST(NULL AS INT) AS peak_hour,",
                         "         MAX(d) AS peak_hour_detections",
                         "  FROM peak_src GROUP BY store_id, metric_date",
                         "),",
                         "dwell AS (",
                         "  SELECT store_id, visit_date AS metric_date,",
                         "         AVG(CAST(duration_sec AS DOUBLE)) AS avg_dwell_sec,",
-                        "         CAST(PERCENTILE(duration_sec, 0.5) AS DOUBLE) AS p50_dwell_sec,",
-                        "         CAST(PERCENTILE(duration_sec, 0.9) AS DOUBLE) AS p90_dwell_sec",
+                        "         CAST(NULL AS DOUBLE) AS p50_dwell_sec,",
+                        "         CAST(NULL AS DOUBLE) AS p90_dwell_sec",
                         "  FROM rva.gold_track_summary_v2",
                         "  WHERE duration_sec >= 0 AND visit_date BETWEEN DATE " + GoldServingSupport.sqlString(args.start) + " AND DATE " + GoldServingSupport.sqlString(args.end),
                         "  GROUP BY store_id, visit_date",
@@ -426,7 +438,7 @@ public class GoldServingBatchJob {
                         "  SELECT store_id, CAST(enter_ts AS DATE) AS metric_date,",
                         "         COUNT(*) AS queue_sessions,",
                         "         AVG(CAST(wait_time_sec AS DOUBLE)) AS avg_queue_wait_sec,",
-                        "         CAST(PERCENTILE(wait_time_sec, 0.9) AS DOUBLE) AS p90_queue_wait_sec,",
+                        "         CAST(NULL AS DOUBLE) AS p90_queue_wait_sec,",
                         "         CAST(MAX(wait_time_sec) AS DOUBLE) AS max_queue_wait_sec",
                         "  FROM rva.gold_queue_sessions",
                         "  WHERE wait_time_sec >= 0 AND enter_ts IS NOT NULL",
@@ -473,25 +485,7 @@ public class GoldServingBatchJob {
     }
 
     private static void executeStep(TableEnvironment tEnv, Args args, String tableName, String sourceTable, String sql) throws Exception {
-        String started = OffsetDateTime.now().toLocalDateTime().toString().replace('T', ' ');
-        try {
-            GoldServingSupport.executeAndAwait(tEnv, sql);
-            long out = GoldServingSupport.scalarLong(
-                    tEnv,
-                    "SELECT COUNT(*) FROM rva_gold_serving." + tableName +
-                            " WHERE metric_date BETWEEN DATE " + GoldServingSupport.sqlString(args.start) +
-                            " AND DATE " + GoldServingSupport.sqlString(args.end)
-            );
-            String finished = OffsetDateTime.now().toLocalDateTime().toString().replace('T', ' ');
-            GoldServingSupport.writeAudit(tEnv, args.runId, args.runMode, tableName, sourceTable, args.start, args.end, out, "ok", null, started, finished);
-        } catch (Exception exc) {
-            String finished = OffsetDateTime.now().toLocalDateTime().toString().replace('T', ' ');
-            try {
-                GoldServingSupport.writeAudit(tEnv, args.runId, args.runMode, tableName, sourceTable, args.start, args.end, null, "error", exc.getMessage(), started, finished);
-            } catch (Exception ignored) {
-            }
-            throw exc;
-        }
+        GoldServingSupport.executeAndAwait(tEnv, sql);
     }
 
     private static final class Args {
@@ -533,7 +527,7 @@ public class GoldServingBatchJob {
                 }
             }
             if (domain == null || start == null || end == null) {
-                throw new IllegalArgumentException("Usage: --domain <traffic|heatmap|queue|zone|dwell|alert|executive|all> --start YYYY-MM-DD --end YYYY-MM-DD [--run-mode mode]");
+                throw new IllegalArgumentException("Usage: --domain <traffic_hourly|traffic_daily|heatmap_5min|heatmap_hour|queue_hourly|queue_daily|zone_hourly|zone_daily|dwell_daily|alert_hourly|alert_daily|executive_daily> --start YYYY-MM-DD --end YYYY-MM-DD [--run-mode mode]");
             }
             return new Args(domain, start, end, runMode, GoldServingSupport.newRunId());
         }

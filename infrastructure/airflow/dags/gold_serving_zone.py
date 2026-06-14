@@ -16,10 +16,15 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "zone"],
 ) as dag:
-    refresh_zone = BashOperator(
-        task_id="refresh_zone",
-        bash_command=submit_batch_cmd("zone", "daily"),
+    refresh_zone_hourly = BashOperator(
+        task_id="refresh_zone_hourly",
+        bash_command=submit_batch_cmd("zone_hourly", "daily"),
+        append_env=True,
+    )
+    refresh_zone_daily = BashOperator(
+        task_id="refresh_zone_daily",
+        bash_command=submit_batch_cmd("zone_daily", "daily"),
         append_env=True,
     )
 
-    refresh_zone
+    refresh_zone_hourly >> refresh_zone_daily

@@ -16,10 +16,15 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "heatmap"],
 ) as dag:
-    refresh_heatmap = BashOperator(
-        task_id="refresh_heatmap",
-        bash_command=submit_batch_cmd("heatmap", "daily"),
+    refresh_heatmap_5min = BashOperator(
+        task_id="refresh_heatmap_5min",
+        bash_command=submit_batch_cmd("heatmap_5min", "daily"),
+        append_env=True,
+    )
+    refresh_heatmap_hour = BashOperator(
+        task_id="refresh_heatmap_hour",
+        bash_command=submit_batch_cmd("heatmap_hour", "daily"),
         append_env=True,
     )
 
-    refresh_heatmap
+    refresh_heatmap_5min >> refresh_heatmap_hour

@@ -18,7 +18,7 @@ with DAG(
 ) as dag:
     refresh_dwell = BashOperator(
         task_id="refresh_dwell",
-        bash_command=submit_batch_cmd("dwell", "daily"),
+        bash_command=submit_batch_cmd("dwell_daily", "daily"),
         append_env=True,
     )
 

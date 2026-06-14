@@ -16,10 +16,15 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "traffic"],
 ) as dag:
-    refresh_traffic = BashOperator(
-        task_id="refresh_traffic",
-        bash_command=submit_batch_cmd("traffic", "daily"),
+    refresh_traffic_hourly = BashOperator(
+        task_id="refresh_traffic_hourly",
+        bash_command=submit_batch_cmd("traffic_hourly", "daily"),
+        append_env=True,
+    )
+    refresh_traffic_daily = BashOperator(
+        task_id="refresh_traffic_daily",
+        bash_command=submit_batch_cmd("traffic_daily", "daily"),
         append_env=True,
     )
 
-    refresh_traffic
+    refresh_traffic_hourly >> refresh_traffic_daily

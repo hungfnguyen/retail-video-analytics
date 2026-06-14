@@ -68,6 +68,13 @@ Các DAG dùng các biến sau:
   - mặc định: `/usr/bin/python3`
 - `RVA_SERVING_RUNNER_DIR`
   - mặc định: `${RVA_PROJECT_ROOT}/services/gold_serving`
+- `FLINK_BATCH_JAR_PATH`
+  - mặc định: `/opt/rva-artifacts/gold-jobs.jar`
+
+Lưu ý:
+
+- Không đặt batch JAR dưới `/opt/airflow/...` vì path này đang bị volume `airflow_data`
+  mount đè trong `docker-compose`, sẽ làm artifact biến mất lúc runtime.
 
 ## Ghi chú
 
