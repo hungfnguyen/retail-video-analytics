@@ -345,8 +345,7 @@ final class GoldServingSupport {
     }
 
     static void executeAndAwait(TableEnvironment tEnv, String sql) throws Exception {
-        TableResult result = tEnv.executeSql(sql);
-        result.await();
+        tEnv.executeSql(sql);
     }
 
     static long scalarLong(TableEnvironment tEnv, String sql) throws Exception {

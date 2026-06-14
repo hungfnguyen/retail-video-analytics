@@ -16,7 +16,7 @@ def _flink_rest_url() -> str:
 
 
 def _jar_path() -> Path:
-    return Path(os.getenv("FLINK_BATCH_JAR_PATH", "/opt/airflow/artifacts/gold-jobs.jar"))
+    return Path(os.getenv("FLINK_BATCH_JAR_PATH", "/opt/rva-artifacts/gold-jobs.jar"))
 
 
 def _upload_jar(session: requests.Session, jar_path: Path) -> str:
@@ -68,7 +68,24 @@ def _delete_uploaded_jar(session: requests.Session, jar_id: str) -> None:
 
 def main() -> None:
     parser = argparse.ArgumentParser()
-    parser.add_argument("--domain", required=True, choices=["traffic", "heatmap", "queue", "zone", "dwell", "alert", "executive", "all"])
+    parser.add_argument(
+        "--domain",
+        required=True,
+        choices=[
+            "traffic_hourly",
+            "traffic_daily",
+            "heatmap_5min",
+            "heatmap_hour",
+            "queue_hourly",
+            "queue_daily",
+            "zone_hourly",
+            "zone_daily",
+            "dwell_daily",
+            "alert_hourly",
+            "alert_daily",
+            "executive_daily",
+        ],
+    )
     parser.add_argument("--start", required=True)
     parser.add_argument("--end", required=True)
     parser.add_argument("--run-mode", default="airflow")

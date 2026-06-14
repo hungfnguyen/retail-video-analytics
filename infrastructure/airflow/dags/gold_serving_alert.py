@@ -16,10 +16,15 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "alert"],
 ) as dag:
-    refresh_alert = BashOperator(
-        task_id="refresh_alert",
-        bash_command=submit_batch_cmd("alert", "daily"),
+    refresh_alert_hourly = BashOperator(
+        task_id="refresh_alert_hourly",
+        bash_command=submit_batch_cmd("alert_hourly", "daily"),
+        append_env=True,
+    )
+    refresh_alert_daily = BashOperator(
+        task_id="refresh_alert_daily",
+        bash_command=submit_batch_cmd("alert_daily", "daily"),
         append_env=True,
     )
 
-    refresh_alert
+    refresh_alert_hourly >> refresh_alert_daily

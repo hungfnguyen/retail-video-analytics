@@ -9,10 +9,10 @@ from common import DAG_START, DEFAULT_ARGS, submit_batch_cmd
 # executive_daily rolls up traffic_daily + dwell/queue/alert daily grains, so it
 # must wait for those domain pipelines to finish the SAME logical day.
 UPSTREAMS = {
-    "wait_traffic": ("gold_serving_traffic", "refresh_traffic"),
+    "wait_traffic": ("gold_serving_traffic", "refresh_traffic_daily"),
     "wait_dwell": ("gold_serving_dwell", "refresh_dwell"),
-    "wait_queue": ("gold_serving_queue", "refresh_queue"),
-    "wait_alert": ("gold_serving_alert", "refresh_alert"),
+    "wait_queue": ("gold_serving_queue", "refresh_queue_daily"),
+    "wait_alert": ("gold_serving_alert", "refresh_alert_daily"),
 }
 
 
@@ -42,7 +42,7 @@ with DAG(
 
     refresh_executive = BashOperator(
         task_id="refresh_executive",
-        bash_command=submit_batch_cmd("executive", "daily"),
+        bash_command=submit_batch_cmd("executive_daily", "daily"),
         append_env=True,
     )
 

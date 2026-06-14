@@ -16,10 +16,15 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "queue"],
 ) as dag:
-    refresh_queue = BashOperator(
-        task_id="refresh_queue",
-        bash_command=submit_batch_cmd("queue", "daily"),
+    refresh_queue_hourly = BashOperator(
+        task_id="refresh_queue_hourly",
+        bash_command=submit_batch_cmd("queue_hourly", "daily"),
+        append_env=True,
+    )
+    refresh_queue_daily = BashOperator(
+        task_id="refresh_queue_daily",
+        bash_command=submit_batch_cmd("queue_daily", "daily"),
         append_env=True,
     )
 
-    refresh_queue
+    refresh_queue_hourly >> refresh_queue_daily

@@ -26,4 +26,9 @@ RUN pip install --no-cache-dir \
     --constraint "${AIRFLOW_CONSTRAINTS_LOCATION}" \
     -r /requirements.txt
 
-COPY --from=flink-jar-builder /build/target/silver-job-0.1.0.jar /opt/airflow/artifacts/gold-jobs.jar
+USER root
+RUN mkdir -p /opt/rva-artifacts
+COPY --from=flink-jar-builder /build/target/silver-job-0.1.0.jar /opt/rva-artifacts/gold-jobs.jar
+RUN chown -R airflow:0 /opt/rva-artifacts
+
+USER airflow

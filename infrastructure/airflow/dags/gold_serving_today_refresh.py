@@ -22,40 +22,65 @@ with DAG(
     max_active_runs=1,
     tags=["rva", "gold-serving", "speed-layer"],
 ) as dag:
-    traffic = BashOperator(
-        task_id="traffic",
-        bash_command=submit_batch_cmd("traffic", "intraday"),
+    traffic_hourly = BashOperator(
+        task_id="traffic_hourly",
+        bash_command=submit_batch_cmd("traffic_hourly", "intraday"),
         append_env=True,
     )
-    heatmap = BashOperator(
-        task_id="heatmap",
-        bash_command=submit_batch_cmd("heatmap", "intraday"),
+    traffic_daily = BashOperator(
+        task_id="traffic_daily",
+        bash_command=submit_batch_cmd("traffic_daily", "intraday"),
         append_env=True,
     )
-    queue = BashOperator(
-        task_id="queue",
-        bash_command=submit_batch_cmd("queue", "intraday"),
+    heatmap_5min = BashOperator(
+        task_id="heatmap_5min",
+        bash_command=submit_batch_cmd("heatmap_5min", "intraday"),
         append_env=True,
     )
-    zone = BashOperator(
-        task_id="zone",
-        bash_command=submit_batch_cmd("zone", "intraday"),
+    heatmap_hour = BashOperator(
+        task_id="heatmap_hour",
+        bash_command=submit_batch_cmd("heatmap_hour", "intraday"),
         append_env=True,
     )
-    dwell = BashOperator(
-        task_id="dwell",
-        bash_command=submit_batch_cmd("dwell", "intraday"),
+    queue_hourly = BashOperator(
+        task_id="queue_hourly",
+        bash_command=submit_batch_cmd("queue_hourly", "intraday"),
         append_env=True,
     )
-    alert = BashOperator(
-        task_id="alert",
-        bash_command=submit_batch_cmd("alert", "intraday"),
+    queue_daily = BashOperator(
+        task_id="queue_daily",
+        bash_command=submit_batch_cmd("queue_daily", "intraday"),
         append_env=True,
     )
-    executive = BashOperator(
-        task_id="executive",
-        bash_command=submit_batch_cmd("executive", "intraday"),
+    zone_hourly = BashOperator(
+        task_id="zone_hourly",
+        bash_command=submit_batch_cmd("zone_hourly", "intraday"),
+        append_env=True,
+    )
+    zone_daily = BashOperator(
+        task_id="zone_daily",
+        bash_command=submit_batch_cmd("zone_daily", "intraday"),
+        append_env=True,
+    )
+    dwell_daily = BashOperator(
+        task_id="dwell_daily",
+        bash_command=submit_batch_cmd("dwell_daily", "intraday"),
+        append_env=True,
+    )
+    alert_hourly = BashOperator(
+        task_id="alert_hourly",
+        bash_command=submit_batch_cmd("alert_hourly", "intraday"),
+        append_env=True,
+    )
+    alert_daily = BashOperator(
+        task_id="alert_daily",
+        bash_command=submit_batch_cmd("alert_daily", "intraday"),
+        append_env=True,
+    )
+    executive_daily = BashOperator(
+        task_id="executive_daily",
+        bash_command=submit_batch_cmd("executive_daily", "intraday"),
         append_env=True,
     )
 
-    traffic >> heatmap >> queue >> zone >> dwell >> alert >> executive
+    traffic_hourly >> traffic_daily >> heatmap_5min >> heatmap_hour >> queue_hourly >> queue_daily >> zone_hourly >> zone_daily >> dwell_daily >> alert_hourly >> alert_daily >> executive_daily
