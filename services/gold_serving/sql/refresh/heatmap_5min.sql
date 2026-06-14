@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_heatmap_tile_5min  <- silver_detections_v2
 -- Parity with heatmap_presence_sql: class_id=0, is_predicted=false, anchors not null,
 -- tile clamp LEAST/GREATEST on a 32x24 grid.

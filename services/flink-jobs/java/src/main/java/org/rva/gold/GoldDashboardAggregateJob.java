@@ -22,6 +22,7 @@ public class GoldDashboardAggregateJob {
                 .inStreamingMode()
                 .build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
+        tEnv.getConfig().set("table.exec.state.ttl", "7 d");
 
         Map<String, String> cfg = new LinkedHashMap<>();
         cfg.put("type", "iceberg");

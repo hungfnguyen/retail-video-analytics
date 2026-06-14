@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_zone_daily  <- silver_detections_v2 (recompute at day grain so occupancy/minutes stay correct)
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_zone_daily
 WHERE metric_date BETWEEN DATE '{start}' AND DATE '{end}';

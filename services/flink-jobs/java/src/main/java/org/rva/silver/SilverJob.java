@@ -15,6 +15,7 @@ public class SilverJob {
             .inStreamingMode()
             .build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
+        tEnv.getConfig().set("table.exec.state.ttl", "30 min");
 
         // Đăng ký UDTF parse JSON
         tEnv.createTemporarySystemFunction("parse_detections", ParseDetections.class);
@@ -94,6 +95,27 @@ public class SilverJob {
             ")"
         );
         tEnv.executeSql(createSilverV2);
+
+        String createParseErrors = String.join("\n",
+            "CREATE TABLE IF NOT EXISTS rva.silver_detection_parse_errors (",
+            "  schema_version        STRING,",
+            "  event_id              STRING,",
+            "  pipeline_run_id       STRING,",
+            "  store_id              STRING,",
+            "  camera_id             STRING,",
+            "  frame_index           BIGINT,",
+            "  source_frame_index    BIGINT,",
+            "  parse_error_reason    STRING,",
+            "  capture_ts_raw        STRING,",
+            "  raw_payload           STRING,",
+            "  processing_ts         TIMESTAMP_LTZ(3)",
+            ") WITH (",
+            "  'format-version' = '2',",
+            "  'write.format.default' = 'parquet',",
+            "  'partitioning' = 'days(processing_ts)'",
+            ")"
+        );
+        tEnv.executeSql(createParseErrors);
 
         String insertV2Sql = String.join("\n",
             "INSERT INTO rva.silver_detections_v2",
@@ -182,6 +204,7 @@ public class SilverJob {
             "    JSON_VALUE(b.payload, '$.runtime.trackers_version') AS trackers_version,",
             "    JSON_VALUE(b.payload, '$.runtime.zone_config_version') AS zone_config_version,",
             "    CURRENT_TIMESTAMP AS processing_ts,",
+            "    t.parse_status AS parse_status,",
             "    ROW_NUMBER() OVER (",
             "      PARTITION BY COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')),",
             "                   COALESCE(t.det_id, CAST(t.track_id AS STRING))",
@@ -192,7 +215,7 @@ public class SilverJob {
             "  WHERE",
             "    JSON_VALUE(b.payload, '$.frame_index') IS NOT NULL",
             "    AND COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')) IS NOT NULL",
-            "    AND t.capture_ts_ms IS NOT NULL",
+            "    AND t.capture_ts_ms > 0",
             "    AND b.camera_id IS NOT NULL",
             "    AND b.store_id IS NOT NULL",
             "    AND t.det_id IS NOT NULL",
@@ -200,11 +223,31 @@ public class SilverJob {
             "    AND t.global_track_id IS NOT NULL",
             "    AND t.conf IS NOT NULL",
             "    AND t.conf >= 0.15",
-            ") WHERE rn = 1"
+            ") WHERE parse_status = 'ok' AND rn = 1"
+        );
+
+        String insertParseErrorsSql = String.join("\n",
+            "INSERT INTO rva.silver_detection_parse_errors",
+            "SELECT",
+            "  b.schema_version AS schema_version,",
+            "  COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')) AS event_id,",
+            "  COALESCE(b.pipeline_run_id, JSON_VALUE(b.payload, '$.pipeline_run_id')) AS pipeline_run_id,",
+            "  b.store_id AS store_id,",
+            "  b.camera_id AS camera_id,",
+            "  CAST(JSON_VALUE(b.payload, '$.frame_index') AS BIGINT) AS frame_index,",
+            "  CAST(JSON_VALUE(b.payload, '$.source_frame_index') AS BIGINT) AS source_frame_index,",
+            "  t.parse_error_reason AS parse_error_reason,",
+            "  t.capture_ts_raw AS capture_ts_raw,",
+            "  b.payload AS raw_payload,",
+            "  CURRENT_TIMESTAMP AS processing_ts",
+            "FROM rva.bronze_raw /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */ AS b,",
+            "     LATERAL TABLE(parse_detections(b.payload)) AS t",
+            "WHERE t.parse_status = 'error'"
         );
 
         StatementSet statements = tEnv.createStatementSet();
         statements.addInsertSql(insertV2Sql);
+        statements.addInsertSql(insertParseErrorsSql);
         statements.execute();
 
         // Không block; khi submit bằng -d job sẽ chạy nền.

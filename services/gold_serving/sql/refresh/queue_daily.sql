@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_queue_daily  <- gold_queue_sessions (recompute percentiles from base, not from hourly)
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_queue_daily
 WHERE metric_date BETWEEN DATE '{start}' AND DATE '{end}';

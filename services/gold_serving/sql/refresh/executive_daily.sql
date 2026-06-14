@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_executive_daily  <- store/day rollup of traffic + dwell/queue/alerts
 -- Anchored on the traffic spine; percentiles recomputed from gold base (not merged).
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_executive_daily

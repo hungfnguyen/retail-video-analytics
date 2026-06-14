@@ -128,18 +128,18 @@ Airflow không chứa logic transform.
 Trong trạng thái hiện tại, Airflow gọi:
 
 ```text
-services/gold_serving/refresh_runner.py intraday
-services/gold_serving/refresh_runner.py daily
+services/flink-jobs/python/submit_batch_job.py --domain <step> --start <ds> --end <ds>
 services/gold_serving/maintenance.py
 ```
 
-Sau này nếu một bảng chuyển sang Flink batch, DAG chỉ đổi command target:
+Ý nghĩa:
 
 ```text
-Airflow -> submit Flink batch job -> write gold_serving_* table
+Airflow -> Flink REST detached batch -> GoldServingBatchJob -> rva_gold_serving.*
 ```
 
-Không đổi data model.
+`services/gold_serving/refresh_runner.py` chỉ còn là legacy/manual fallback path bằng Trino SQL,
+không còn là source of truth cho refresh theo lịch.
 
 ## 6. Quy tắc quyết định engine
 
