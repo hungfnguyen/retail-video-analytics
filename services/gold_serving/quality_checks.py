@@ -122,7 +122,7 @@ def check_non_negative(run_id) -> bool:
 
 def check_today_presence(run_id) -> bool:
     silver_today = trino.scalar(
-        f"SELECT COUNT(*) FROM {RVA}.silver_detections_v2 WHERE CAST(capture_ts AS date) = current_date"
+        f"SELECT COUNT(*) FROM {RVA}.silver_detections_v2 WHERE capture_date = current_date"
     ) or 0
     for table in TODAY_PRESENCE:
         rows = trino.scalar(f"SELECT COUNT(*) FROM {GS}.{table} WHERE metric_date = current_date") or 0

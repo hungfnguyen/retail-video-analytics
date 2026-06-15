@@ -62,11 +62,10 @@ public class GoldTrackSummaryJob {
                 "  predicted_frames     BIGINT,",
                 "  representative_zone_id   STRING,",
                 "  representative_zone_type STRING,",
-                "  PRIMARY KEY (store_id, camera_id, pipeline_run_id, global_track_id) NOT ENFORCED",
-                ") WITH (",
+                "  PRIMARY KEY (store_id, camera_id, pipeline_run_id, global_track_id, visit_date) NOT ENFORCED",
+                ") PARTITIONED BY (store_id, visit_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(visit_date)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")");
         tEnv.executeSql(createGoldV2);

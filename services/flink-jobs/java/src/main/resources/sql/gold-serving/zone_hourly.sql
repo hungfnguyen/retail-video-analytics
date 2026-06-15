@@ -27,7 +27,7 @@ FROM (
     AND is_predicted = FALSE
     AND primary_zone_id IS NOT NULL
     AND capture_ts IS NOT NULL
-    AND CAST(capture_ts AS DATE) BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
+    AND capture_date BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
   GROUP BY store_id, camera_id, primary_zone_id, COALESCE(primary_zone_type, 'unknown'),
            TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(capture_ts AS DATE), TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:mm:00')), frame_index
 ) f

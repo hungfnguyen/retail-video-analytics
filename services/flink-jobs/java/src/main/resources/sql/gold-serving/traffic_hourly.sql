@@ -24,7 +24,7 @@ FROM (
   WHERE class_id = 0
     AND is_predicted = FALSE
     AND capture_ts IS NOT NULL
-    AND CAST(capture_ts AS DATE) BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
+    AND capture_date BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
   GROUP BY store_id, camera_id, frame_index, TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(capture_ts AS DATE), EXTRACT(HOUR FROM capture_ts)
 ) f
 GROUP BY store_id, camera_id, bucket_hour, metric_date, hour_of_day

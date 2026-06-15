@@ -87,11 +87,11 @@ public class SilverJob {
             "  supervision_version   STRING,",
             "  trackers_version      STRING,",
             "  zone_config_version   STRING,",
-            "  processing_ts         TIMESTAMP_LTZ(3)",
-            ") WITH (",
+            "  processing_ts         TIMESTAMP_LTZ(3),",
+            "  capture_date          DATE",
+            ") PARTITIONED BY (store_id, capture_date) WITH (",
             "  'format-version' = '2',",
-            "  'write.format.default' = 'parquet',",
-            "  'partitioning' = 'store_id,bucket(16, camera_id),days(capture_ts)'",
+            "  'write.format.default' = 'parquet'",
             ")"
         );
         tEnv.executeSql(createSilverV2);
@@ -160,7 +160,8 @@ public class SilverJob {
             "  supervision_version,",
             "  trackers_version,",
             "  zone_config_version,",
-            "  processing_ts",
+            "  processing_ts,",
+            "  capture_date",
             "FROM (",
             "  SELECT",
             "    b.schema_version AS schema_version,",
@@ -204,6 +205,7 @@ public class SilverJob {
             "    JSON_VALUE(b.payload, '$.runtime.trackers_version') AS trackers_version,",
             "    JSON_VALUE(b.payload, '$.runtime.zone_config_version') AS zone_config_version,",
             "    CURRENT_TIMESTAMP AS processing_ts,",
+            "    CAST(TO_TIMESTAMP_LTZ(t.capture_ts_ms, 3) AS DATE) AS capture_date,",
             "    t.parse_status AS parse_status,",
             "    ROW_NUMBER() OVER (",
             "      PARTITION BY COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')),",

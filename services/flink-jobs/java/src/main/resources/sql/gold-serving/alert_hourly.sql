@@ -13,5 +13,5 @@ SELECT
 FROM rva.gold_alerts
 WHERE event_ts IS NOT NULL
   AND camera_id IS NOT NULL
-  AND CAST(event_ts AS DATE) BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
+  AND event_date BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
 GROUP BY store_id, camera_id, alert_type, severity, TO_TIMESTAMP(DATE_FORMAT(CAST(event_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')), CAST(event_ts AS DATE)

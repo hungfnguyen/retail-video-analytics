@@ -27,6 +27,6 @@ FROM (
     AND anchor_x_norm IS NOT NULL
     AND anchor_y_norm IS NOT NULL
     AND capture_ts IS NOT NULL
-    AND CAST(capture_ts AS DATE) BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
+    AND capture_date BETWEEN DATE {{START_SQL}} AND DATE {{END_SQL}}
 ) base
 GROUP BY store_id, camera_id, bucket_start, tile_x, tile_y

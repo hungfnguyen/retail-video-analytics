@@ -30,7 +30,7 @@ FROM (
       AND is_predicted = false
       AND primary_zone_id IS NOT NULL
       AND capture_ts IS NOT NULL
-      AND CAST(capture_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
+      AND capture_date BETWEEN DATE '{start}' AND DATE '{end}'
     GROUP BY store_id, camera_id, primary_zone_id, COALESCE(primary_zone_type, 'unknown'),
              CAST(capture_ts AS DATE), date_trunc('minute', capture_ts), frame_index
 ) f

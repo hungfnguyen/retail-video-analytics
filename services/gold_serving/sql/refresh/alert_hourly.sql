@@ -18,5 +18,5 @@ SELECT
 FROM lakehouse.rva.gold_alerts
 WHERE event_ts IS NOT NULL
   AND camera_id IS NOT NULL
-  AND CAST(event_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
+  AND event_date BETWEEN DATE '{start}' AND DATE '{end}'
 GROUP BY store_id, camera_id, alert_type, severity, date_trunc('hour', event_ts), CAST(event_ts AS DATE);
