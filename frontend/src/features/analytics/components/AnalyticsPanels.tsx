@@ -136,7 +136,6 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
               <tr className="border border-slate-200 bg-slate-50 text-slate-600">
                 <th className="px-3 py-2 text-left">Date</th>
                 <th className="px-3 py-2 text-right">Detections</th>
-                <th className="px-3 py-2 text-right">Tracks</th>
                 <th className="px-3 py-2 text-right">Peak</th>
                 <th className="px-3 py-2 text-right">Avg dwell</th>
                 <th className="px-3 py-2 text-right">Avg conf</th>
@@ -147,7 +146,6 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
                 <tr className="border border-slate-200" key={row.date}>
                   <td className="px-3 py-2 font-semibold text-blue-700">{row.date}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.detections)}</td>
-                  <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.unique_tracks)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{row.peak}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatDuration(row.avg_dwell_sec)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatPercent(row.avg_confidence)}</td>

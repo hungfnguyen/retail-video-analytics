@@ -8,6 +8,13 @@ import java.util.LinkedHashMap;
 import java.util.Map;
 import java.util.stream.Collectors;
 
+/**
+ * Builds near-real-time dashboard Gold facts.
+ *
+ * Alert semantics are intentionally split:
+ * - gold_alert_events: frame-level density threshold signals from detections.
+ * - gold_alerts: clip-backed alert incidents from media-events (GoldAlertsJob).
+ */
 public class GoldDashboardAggregateJob {
 
     public static void main(String[] args) {
@@ -67,7 +74,6 @@ public class GoldDashboardAggregateJob {
                 "  metric_date    DATE,",
                 "  hour_of_day    INT,",
                 "  detections     BIGINT,",
-                "  unique_tracks  BIGINT,",
                 "  avg_conf       DOUBLE,",
                 "  PRIMARY KEY (store_id, camera_id, metric_date, hour_of_day) NOT ENFORCED",
                 ") WITH (",
@@ -85,7 +91,6 @@ public class GoldDashboardAggregateJob {
                 "  camera_id      STRING,",
                 "  metric_date    DATE,",
                 "  detections     BIGINT,",
-                "  unique_tracks  BIGINT,",
                 "  avg_conf       DOUBLE,",
                 "  first_seen_ts  TIMESTAMP(3),",
                 "  last_seen_ts   TIMESTAMP(3),",
@@ -119,6 +124,7 @@ public class GoldDashboardAggregateJob {
     }
 
     private static String createAlertEventsSql() {
+        // Frame-density signal table. Clip-backed alert history lives in rva.gold_alerts.
         return String.join("\n",
                 "CREATE TABLE IF NOT EXISTS rva.gold_alert_events (",
                 "  alert_id       STRING,",
@@ -143,40 +149,42 @@ public class GoldDashboardAggregateJob {
 
     private static String insertHourlyMetricsSql() {
         return String.join("\n",
-                "INSERT INTO rva.gold_camera_hourly_metrics",
+                "INSERT INTO rva.gold_camera_hourly_metrics (",
+                "  store_id, camera_id, metric_date, hour_of_day, detections, avg_conf",
+                ")",
                 "SELECT",
                 "  store_id,",
                 "  camera_id,",
                 "  CAST(capture_ts AS DATE) AS metric_date,",
                 "  CAST(HOUR(capture_ts) AS INT) AS hour_of_day,",
                 "  COUNT(*) AS detections,",
-                "  COUNT(DISTINCT track_id) AS unique_tracks,",
                 "  AVG(conf) AS avg_conf",
-                "FROM rva.silver_detections /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
+                "FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
                 "WHERE store_id IS NOT NULL",
                 "  AND camera_id IS NOT NULL",
                 "  AND capture_ts IS NOT NULL",
-                "  AND track_id IS NOT NULL",
+                "  AND is_predicted = false",
                 "GROUP BY store_id, camera_id, CAST(capture_ts AS DATE), CAST(HOUR(capture_ts) AS INT)");
     }
 
     private static String insertDailyMetricsSql() {
         return String.join("\n",
-                "INSERT INTO rva.gold_camera_daily_metrics",
+                "INSERT INTO rva.gold_camera_daily_metrics (",
+                "  store_id, camera_id, metric_date, detections, avg_conf, first_seen_ts, last_seen_ts",
+                ")",
                 "SELECT",
                 "  store_id,",
                 "  camera_id,",
                 "  CAST(capture_ts AS DATE) AS metric_date,",
                 "  COUNT(*) AS detections,",
-                "  COUNT(DISTINCT track_id) AS unique_tracks,",
                 "  AVG(conf) AS avg_conf,",
                 "  MIN(capture_ts) AS first_seen_ts,",
                 "  MAX(capture_ts) AS last_seen_ts",
-                "FROM rva.silver_detections /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
+                "FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
                 "WHERE store_id IS NOT NULL",
                 "  AND camera_id IS NOT NULL",
                 "  AND capture_ts IS NOT NULL",
-                "  AND track_id IS NOT NULL",
+                "  AND is_predicted = false",
                 "GROUP BY store_id, camera_id, CAST(capture_ts AS DATE)");
     }
 
@@ -192,7 +200,7 @@ public class GoldDashboardAggregateJob {
                 "  SUM(duration_sec) AS total_dwell_sec,",
                 "  SUM(CASE WHEN duration_sec < 30 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS short_dwell_tracks,",
                 "  SUM(CASE WHEN duration_sec >= 120 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS long_dwell_tracks",
-                "FROM rva.gold_track_summary /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
+                "FROM rva.gold_track_summary_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
                 "WHERE store_id IS NOT NULL",
                 "  AND camera_id IS NOT NULL",
                 "  AND visit_date IS NOT NULL",
@@ -202,6 +210,7 @@ public class GoldDashboardAggregateJob {
 
     private static String insertAlertEventsSql() {
         String threshold = getenv("ALERT_DENSITY_THRESHOLD", "10");
+        // Density frames only. Clip-backed incidents are written by GoldAlertsJob into rva.gold_alerts.
         return String.join("\n",
                 "INSERT INTO rva.gold_alert_events",
                 "SELECT",
@@ -223,12 +232,13 @@ public class GoldDashboardAggregateJob {
                 "    frame_index,",
                 "    capture_ts,",
                 "    CAST(COUNT(*) AS INT) AS person_count",
-                "  FROM rva.silver_detections /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
+                "  FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
                 "  WHERE store_id IS NOT NULL",
                 "    AND camera_id IS NOT NULL",
                 "    AND frame_index IS NOT NULL",
                 "    AND capture_ts IS NOT NULL",
                 "    AND class_id = 0",
+                "    AND is_predicted = false",
                 "  GROUP BY store_id, camera_id, frame_index, capture_ts",
                 ")",
                 "WHERE person_count > " + threshold);

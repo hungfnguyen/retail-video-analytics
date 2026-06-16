@@ -165,6 +165,33 @@ services:
     networks:
       - retail-net
 
+  postgres:
+    image: postgres:16
+    container_name: postgres
+    environment:
+      POSTGRES_USER: ${POSTGRES_USER}
+      POSTGRES_PASSWORD: ${POSTGRES_PASSWORD}
+      POSTGRES_DB: postgres
+      # consumed by the init script to provision two isolated databases
+      AIRFLOW_DB_NAME: ${AIRFLOW_DB_NAME}
+      AIRFLOW_DB_USER: ${AIRFLOW_DB_USER}
+      AIRFLOW_DB_PASSWORD: ${AIRFLOW_DB_PASSWORD}
+      ICEBERG_DB_NAME: ${ICEBERG_DB_NAME}
+      ICEBERG_DB_USER: ${ICEBERG_DB_USER}
+      ICEBERG_DB_PASSWORD: ${ICEBERG_DB_PASSWORD}
+    volumes:
+      - pg_data:/var/lib/postgresql/data
+      - ./infrastructure/postgres/init:/docker-entrypoint-initdb.d:ro
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${POSTGRES_USER} -d postgres"]
+      interval: 10s
+      timeout: 5s
+      retries: 10
+      start_period: 15s
+    restart: unless-stopped
+    networks:
+      - retail-net
+
   iceberg-rest:
     image: tabulario/iceberg-rest:0.7.0
     container_name: iceberg-rest
@@ -176,11 +203,19 @@ services:
       AWS_SECRET_ACCESS_KEY: ${S3_SECRET_KEY}
       CATALOG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
       CATALOG_IO__IMPL: org.apache.iceberg.aws.s3.S3FileIO
+      # Durable JDBC catalog on Postgres (replaces the ephemeral in-memory SQLite
+      # default that wiped all table metadata on every restart).
+      CATALOG_URI: jdbc:postgresql://postgres:5432/${ICEBERG_DB_NAME}
+      CATALOG_JDBC_USER: ${ICEBERG_DB_USER}
+      CATALOG_JDBC_PASSWORD: ${ICEBERG_DB_PASSWORD}
       CATALOG_S3_ENDPOINT: ${S3_ENDPOINT}
       CATALOG_S3_ACCESS__KEY__ID: ${S3_ACCESS_KEY}
       CATALOG_S3_SECRET__ACCESS__KEY: ${S3_SECRET_KEY}
       CATALOG_S3_PATH__STYLE__ACCESS: "${S3_PATH_STYLE}"
       CATALOG_S3_REGION: ${S3_REGION}
+    depends_on:
+      postgres:
+        condition: service_healthy
     healthcheck:
       test: ["CMD", "bash", "-c", "cat < /dev/null > /dev/tcp/localhost/8181 || exit 1"]
       interval: 10s
@@ -217,13 +252,61 @@ services:
       retries: 10
     networks:
       - retail-net
-  
+
+  airflow:
+    build:
+      context: .
+      dockerfile: infrastructure/airflow/Dockerfile
+    container_name: airflow
+    entrypoint:
+      - /bin/bash
+      - -lc
+    command:
+      - >
+        rm -f /opt/airflow/airflow-webserver.pid
+        /opt/airflow/airflow-scheduler.pid
+        /opt/airflow/airflow-triggerer.pid
+        && exec airflow standalone
+    ports:
+      - "8085:8080"      # Airflow webserver (host:8085 to avoid conflicts)
+    volumes:
+      - ./infrastructure/airflow/dags:/opt/airflow/dags
+      - .:/opt/retail-video-analytics:ro   # repo mount so DAGs can run services/gold_serving/*.py
+      - airflow_data:/opt/airflow
+    environment:
+      # Orchestration glue only — Airflow shells out to the repo's runner scripts.
+      TRINO_URL: "http://trino:8080"
+      TRINO_USER: "rva_gold_serving"
+      TRINO_CATALOG: "lakehouse"
+      TRINO_SCHEMA: "rva_gold_serving"
+      FLINK_REST_URL: "http://flink-jobmanager:8081"
+      FLINK_BATCH_JAR_PATH: "/opt/rva-artifacts/gold-jobs.jar"
+      RVA_PROJECT_ROOT: "/opt/retail-video-analytics"
+      RVA_PYTHON_BIN: "python3"
+      AIRFLOW__CORE__LOAD_EXAMPLES: "False"
+      # Durable metadata DB on Postgres (replaces the standalone SQLite backend),
+      # which also unlocks parallel task execution via LocalExecutor.
+      AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB_NAME}"
+      AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+    depends_on:
+      trino:
+        condition: service_healthy
+      postgres:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - retail-net
+
 volumes:
   trino_data:
     driver: local
   flink_state:
     driver: local
   pulsar_data:
+    driver: local
+  airflow_data:
+    driver: local
+  pg_data:
     driver: local
 
 networks:

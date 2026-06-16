@@ -22,8 +22,9 @@ Each event contains:
 - image size;
 - detection list;
 - bbox in pixel and normalized coordinates;
-- centroid in pixel and normalized coordinates;
-- tracker id;
+- centroid/anchor in pixel and normalized coordinates;
+- raw track id, stabilized track id, and global track id;
+- zone and queue assignment;
 - runtime metadata.
 
 ## Why Normalize Coordinates
@@ -51,13 +52,15 @@ Media artifacts are separate from analytical metadata.
 
 ```text
 Pulsar raw JSON -> bronze_raw
-bronze_raw payload -> ParseDetections UDTF -> silver_detections
-silver_detections -> track aggregate -> gold_track_summary
+bronze_raw payload -> ParseDetections UDTF -> silver_detections_v2
+silver_detections_v2 -> track aggregate -> gold_track_summary_v2
+silver_detections_v2 -> queue aggregate -> gold_queue_sessions
+media-events -> clip incident aggregate -> gold_alerts
+Gold facts / Silver -> Gold serving -> rva_gold_serving.gold_serving_*
 ```
 
 ## Current Limitations
 
-- Historical traffic by minute/hour is not implemented yet as a Gold table.
-- Historical heatmap is not implemented yet as a Gold table.
-- Alert history is not implemented yet as a historical table.
-- Analytics frontend currently needs API endpoints over Trino before it can show real historical data.
+- Airflow is present as an orchestration skeleton, not yet a fully wired runtime service in compose.
+- Some Gold serving tables are currently refreshed by Trino SQL runners; they may move to Flink batch only if measured complexity justifies it.
+- Line-crossing/funnel historical tables are not yet modeled as lakehouse products.

@@ -10,7 +10,12 @@ jobmanager.memory.process.size: 800m
 
 taskmanager.bind-host: 0.0.0.0
 taskmanager.memory.process.size: 2048m
-taskmanager.numberOfTaskSlots: 8
+# 16 slots (was 8): the always-on streaming layer is ~8 jobs and fully occupied
+# all 8 slots, leaving none for the sequential Gold-serving batch chain — batch
+# steps then timed out on slot.request.timeout (e.g. zone_hourly). Slots are
+# scheduling units only; idle slots cost no RAM, and batch data volume is tiny,
+# so this adds headroom without raising the 2048m TM process size.
+taskmanager.numberOfTaskSlots: 16
 
 # -- REST Interface (Web UI) --
 rest.address: flink-jobmanager
@@ -20,6 +25,15 @@ rest.bind-address: 0.0.0.0
 # -- Parallelism & Timeouts --
 parallelism.default: 1
 slot.request.timeout: 120000
+
+# Disable batch Adaptive Batch Scheduler auto-parallelism. Streaming commits a
+# small file every 30s, so Iceberg batch sources inferred huge parallelism
+# (p=40/25 for ~4 rows), and the multi-join executive_daily job then exhausted
+# network buffers ("Insufficient number of network buffers"). Data volume is
+# tiny, so forcing parallelism.default=1 for batch is correct, costs no RAM, and
+# is far faster than scheduling dozens of empty subtasks. (Streaming jobs are
+# unaffected — adaptive batch parallelism applies only to BATCH execution mode.)
+execution.batch.adaptive.auto-parallelism.enabled: false
 
 # -- Blob & Query Server --
 blob.server.port: 6124

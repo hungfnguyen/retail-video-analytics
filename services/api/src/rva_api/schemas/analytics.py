@@ -13,7 +13,6 @@ class AnalyticsKpi(BaseModel):
 class HourlyTrafficPoint(BaseModel):
     hour: str
     detections: int
-    unique_tracks: int
     average: int
 
 
@@ -21,7 +20,6 @@ class CameraComparisonPoint(BaseModel):
     camera_id: str
     detections: int
     share: float
-    unique_tracks: int
     avg_confidence: float
 
 
@@ -39,7 +37,6 @@ class DwellBand(BaseModel):
 class DailySummaryRow(BaseModel):
     date: str
     detections: int
-    unique_tracks: int
     peak: str
     avg_dwell_sec: float
     avg_confidence: float
@@ -63,7 +60,6 @@ class QueueZoneStat(BaseModel):
     total_sessions: int
     avg_wait_sec: float
     max_wait_sec: float
-    unique_visitors: int
 
 
 class QueueWaitTrendPoint(BaseModel):

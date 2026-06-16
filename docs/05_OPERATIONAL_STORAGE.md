@@ -64,12 +64,15 @@ Current tables:
 
 ```text
 lakehouse.rva.bronze_raw
-lakehouse.rva.silver_detections
-lakehouse.rva.gold_track_summary
+lakehouse.rva.silver_detections_v2
+lakehouse.rva.gold_track_summary_v2
+lakehouse.rva.gold_queue_sessions
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
 lakehouse.rva.gold_alert_events
+lakehouse.rva.gold_alerts
+lakehouse.rva_gold_serving.gold_serving_*
 ```
 
 ## Serving Access Pattern
@@ -82,7 +85,8 @@ lakehouse.rva.gold_alert_events
 | Recent alerts | Redis recent alert lists |
 | Current video | Local latest JPEG served by FastAPI |
 | Historical detections | Trino over Iceberg |
-| Track summary analytics | Trino over `gold_track_summary` |
-| Alert history | Trino over `gold_alert_events` |
+| Track summary analytics | Trino over `gold_track_summary_v2` |
+| Alert history | Trino over `gold_alerts` |
+| Dashboard analytics | Trino over `rva_gold_serving.gold_serving_*` |
 | Sampled frame lookup | AWS S3 object paths |
 | Alert clip replay | AWS S3 object paths linked by alert metadata |
