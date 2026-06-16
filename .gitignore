@@ -96,3 +96,5 @@ configs/cameras.yaml
 data/
 
 text.txt
+
+knowledge/
