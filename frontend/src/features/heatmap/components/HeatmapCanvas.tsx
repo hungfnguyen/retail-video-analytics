@@ -22,6 +22,7 @@ function renderHeatmap(
   cells: HeatmapCell[],
   gridRows: number,
   gridCols: number,
+  opacity = 100,
 ): void {
   const { width, height } = canvas
   const ctx = canvas.getContext('2d')
@@ -80,7 +81,7 @@ function renderHeatmap(
     outData[i + 2] = colorLUT[lutIdx + 2]
     // Steeper power curve (2.2): low values nearly invisible, only true hotspots show colour
     // Max alpha 150 (~59% opacity) so camera is always visible through the overlay
-    outData[i + 3] = Math.round(Math.pow(v / 255, 2.2) * 150)
+    outData[i + 3] = Math.round(Math.pow(v / 255, 2.2) * 150 * (opacity / 100))
   }
 
   ctx.putImageData(out, 0, 0)
@@ -90,22 +91,20 @@ type Props = {
   cells: HeatmapCell[]
   gridRows: number
   gridCols: number
+  opacity?: number
 }
 
-export function HeatmapCanvas({ cells, gridRows, gridCols }: Props) {
+export function HeatmapCanvas({ cells, gridRows, gridCols, opacity = 100 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
-  // Keep latest props accessible from ResizeObserver without re-subscribing
-  const propsRef = useRef({ cells, gridRows, gridCols })
-  propsRef.current = { cells, gridRows, gridCols }
+  const propsRef = useRef({ cells, gridRows, gridCols, opacity })
+  propsRef.current = { cells, gridRows, gridCols, opacity }
 
-  // Re-render when data changes
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas || canvas.width === 0) return
-    renderHeatmap(canvas, cells, gridRows, gridCols)
-  }, [cells, gridRows, gridCols])
+    renderHeatmap(canvas, cells, gridRows, gridCols, opacity)
+  }, [cells, gridRows, gridCols, opacity])
 
-  // Keep canvas pixel size in sync with CSS layout size
   useEffect(() => {
     const canvas = canvasRef.current
     if (!canvas) return
@@ -114,8 +113,8 @@ export function HeatmapCanvas({ cells, gridRows, gridCols }: Props) {
         const { width, height } = entry.contentRect
         canvas.width = Math.round(width)
         canvas.height = Math.round(height)
-        const { cells: c, gridRows: r, gridCols: cols } = propsRef.current
-        renderHeatmap(canvas, c, r, cols)
+        const { cells: c, gridRows: r, gridCols: cols, opacity: op } = propsRef.current
+        renderHeatmap(canvas, c, r, cols, op)
       }
     })
     ro.observe(canvas)

@@ -1,5 +1,5 @@
 import type { ReactNode } from 'react'
-import { BarChart3, Camera, Settings, Thermometer } from 'lucide-react'
+import { BarChart3, Camera, Map, Settings } from 'lucide-react'
 
 export type AppPage = 'live' | 'analytics' | 'heatmap' | 'system'
 
@@ -11,8 +11,8 @@ type AppShellProps = {
 
 const navItems = [
   { id: 'live' as const, label: 'Live', icon: Camera },
-  { id: 'analytics' as const, label: 'Analytics', icon: BarChart3 },
-  { id: 'heatmap' as const, label: 'Heatmap', icon: Thermometer },
+  { id: 'analytics' as const, label: 'Analyst Dashboard', icon: BarChart3 },
+  { id: 'heatmap' as const, label: 'Heatmap', icon: Map },
   { id: 'system' as const, label: 'System', icon: Settings },
 ]
 

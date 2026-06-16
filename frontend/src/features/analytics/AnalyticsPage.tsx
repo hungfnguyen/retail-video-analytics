@@ -1,101 +1,106 @@
 import { useState } from 'react'
-import { CalendarDays, Database, RefreshCw } from 'lucide-react'
 import { AppShell, type AppPage } from '../../shared/components/AppShell'
-import { AlertHistoryPanel } from './components/AlertHistoryPanel'
-import { AnalyticsPanels } from './components/AnalyticsPanels'
-import { QueueAnalyticsPanels } from './components/QueueAnalyticsPanels'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { Tabs } from '../../shared/components/ui/Tabs'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
+import { AnalyticsFilterBar, datePresetToDays } from './components/AnalyticsFilterBar'
+import { AlertsTab } from './components/tabs/AlertsTab'
+import { OverviewTab } from './components/tabs/OverviewTab'
+import { QueueTab } from './components/tabs/QueueTab'
+import { TrafficTab } from './components/tabs/TrafficTab'
+import { ZonesTab } from './components/tabs/ZonesTab'
 import { useAlertHistoryData } from './hooks/useAlertHistoryData'
 import { useAnalyticsData } from './hooks/useAnalyticsData'
 import { useQueueData } from './hooks/useQueueData'
+import type { DatePreset } from './components/AnalyticsFilterBar'
 
 type AnalyticsPageProps = {
   activePage: AppPage
   onPageChange: (page: AppPage) => void
 }
 
-const dayOptions = [1, 7, 14, 30]
+type AnalyticsTab = 'overview' | 'traffic' | 'queue' | 'zones' | 'alerts'
 
-function StatusPanel({ title, detail }: { title: string; detail: string }) {
-  return (
-    <section className="grid min-h-[520px] place-items-center rounded-lg border border-dashed border-slate-300 bg-white p-8 text-center shadow-[0_14px_36px_rgba(15,23,42,0.05)]">
-      <div className="max-w-xl">
-        <span className="mx-auto grid h-14 w-14 place-items-center rounded-lg bg-slate-100 text-slate-600">
-          <Database size={26} />
-        </span>
-        <h2 className="mb-2 mt-5 text-xl font-bold text-slate-950">{title}</h2>
-        <p className="m-0 text-sm font-medium leading-6 text-slate-500">{detail}</p>
-      </div>
-    </section>
-  )
-}
+const TAB_ITEMS = [
+  { id: 'overview' as const, label: 'Overview' },
+  { id: 'traffic' as const, label: 'Traffic' },
+  { id: 'queue' as const, label: 'Queue' },
+  { id: 'zones' as const, label: 'Zones' },
+  { id: 'alerts' as const, label: 'Alerts' },
+]
 
 export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) {
-  const [days, setDays] = useState(7)
+  const [preset, setPreset] = useState<DatePreset>('last_7_days')
+  const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview')
+
+  const days = datePresetToDays[preset]
   const { data, error, refresh } = useAnalyticsData(days)
   const { data: queueData } = useQueueData(days)
   const { data: alertHistoryData } = useAlertHistoryData(days)
 
-  const statusTitle = error
-    ? 'Analytics API is unavailable'
-    : data?.data_status === 'error'
-      ? 'Trino analytics query failed'
-      : 'No lakehouse analytics rows'
+  function renderTabContent() {
+    if (!data && !error) {
+      return <EmptyState title="Loading analytics data…" description="Querying Gold lakehouse via Trino" />
+    }
+    if (error || data?.data_status === 'error') {
+      return (
+        <EmptyState
+          title={error ? 'Analytics API unavailable' : 'Trino query failed'}
+          description={error ?? data?.error_message ?? undefined}
+          tone="error"
+        />
+      )
+    }
+    if (data?.data_status === 'empty') {
+      return (
+        <EmptyState
+          title="No data in lakehouse yet"
+          description="Run the pipeline until Gold tables receive rows, then refresh."
+          tone="warning"
+        />
+      )
+    }
+    if (!data) return null
 
-  const statusDetail = error
-    ? error
-    : data?.error_message ?? 'Run the pipeline until Silver and Gold tables receive rows, then refresh this page.'
+    switch (activeTab) {
+      case 'overview':
+        return <OverviewTab data={data} queueData={queueData ?? null} alertData={alertHistoryData ?? null} />
+      case 'traffic':
+        return <TrafficTab data={data} />
+      case 'queue':
+        return queueData
+          ? <QueueTab data={queueData} />
+          : <EmptyState title="No queue data" description="Gold queue tables are empty or still loading" />
+      case 'zones':
+        return <ZonesTab />
+      case 'alerts':
+        return alertHistoryData
+          ? <AlertsTab data={alertHistoryData} />
+          : <EmptyState title="No alert data" description="Gold alerts table is empty or still loading" />
+    }
+  }
 
   return (
     <AppShell activePage={activePage} onPageChange={onPageChange}>
-      <header className="mb-4 flex items-center justify-between gap-4">
-        <div>
-          <h1 className="m-0 text-[26px] font-bold leading-tight text-slate-950">Traffic Analytics</h1>
-          <p className="m-0 mt-1 text-sm font-semibold text-slate-500">Silver detections and Gold track summaries from the lakehouse</p>
-        </div>
+      <PageHeader
+        title="Analyst Dashboard"
+        subtitle="Business insights from Gold lakehouse metrics"
+        actions={
+          <AnalyticsFilterBar
+            preset={preset}
+            onPresetChange={setPreset}
+            onRefresh={() => void refresh()}
+          />
+        }
+      />
 
-        <div className="flex items-center gap-2.5">
-          <div className="flex rounded-lg border border-slate-200 bg-white p-1 shadow-sm">
-            {dayOptions.map((option) => (
-              <button
-                className={`rounded-md px-3 py-2 text-sm font-bold transition ${
-                  days === option ? 'bg-slate-950 text-white' : 'text-slate-600 hover:bg-slate-100'
-                }`}
-                key={option}
-                onClick={() => setDays(option)}
-                type="button"
-              >
-                {option}d
-              </button>
-            ))}
-          </div>
+      <Tabs<AnalyticsTab>
+        value={activeTab}
+        onChange={setActiveTab}
+        items={TAB_ITEMS}
+      />
 
-          <span className="flex min-w-40 items-center gap-2 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-bold text-slate-700 shadow-sm">
-            <CalendarDays size={17} />
-            {data?.range_label ?? `Last ${days} days`}
-          </span>
-
-          <button
-            className="grid h-10 w-10 place-items-center rounded-lg border border-slate-200 bg-white text-slate-700 shadow-sm transition hover:border-blue-300 hover:text-blue-700"
-            onClick={() => void refresh()}
-            title="Refresh analytics"
-            type="button"
-          >
-            <RefreshCw size={17} />
-          </button>
-        </div>
-      </header>
-
-      {!data && !error ? (
-        <StatusPanel detail="Loading Trino-backed dashboard data." title="Loading analytics" />
-      ) : data?.data_status === 'ready' ? (
-        <>
-          <AnalyticsPanels data={data} />
-          {queueData && <QueueAnalyticsPanels data={queueData} />}
-          {alertHistoryData && <AlertHistoryPanel data={alertHistoryData} />}
-        </>
-      ) : (
-        <StatusPanel detail={statusDetail} title={statusTitle} />
-      )}
+      {renderTabContent()}
     </AppShell>
   )
 }
