@@ -24,6 +24,7 @@ import trino_client as trino
 GS = "lakehouse.rva_gold_serving"
 RVA = "lakehouse.rva"
 FRESHNESS_MIN = int(os.getenv("DQ_FRESHNESS_MIN", "60"))
+DQ_RECENT_DAYS = int(os.getenv("DQ_RECENT_DAYS", "7"))
 
 # (table, column) additive measures that must never be negative.
 NON_NEGATIVE = [
@@ -42,6 +43,22 @@ TODAY_PRESENCE = [
     "gold_serving_heatmap_tile_5min",
     "gold_serving_zone_hourly",
 ]
+
+# Business keys that should be unique per serving table for recent partitions.
+DUPLICATE_KEYS = {
+    "gold_serving_traffic_hourly": ["store_id", "camera_id", "bucket_hour", "metric_date"],
+    "gold_serving_traffic_daily": ["store_id", "camera_id", "metric_date"],
+    "gold_serving_heatmap_tile_5min": ["store_id", "camera_id", "bucket_start", "metric_date", "tile_x", "tile_y"],
+    "gold_serving_heatmap_tile_hour": ["store_id", "camera_id", "bucket_hour", "metric_date", "tile_x", "tile_y"],
+    "gold_serving_queue_hourly": ["store_id", "camera_id", "queue_zone_id", "bucket_hour", "metric_date"],
+    "gold_serving_queue_daily": ["store_id", "camera_id", "queue_zone_id", "metric_date"],
+    "gold_serving_zone_hourly": ["store_id", "camera_id", "zone_id", "zone_type", "bucket_hour", "metric_date"],
+    "gold_serving_zone_daily": ["store_id", "camera_id", "zone_id", "zone_type", "metric_date"],
+    "gold_serving_dwell_daily": ["store_id", "camera_id", "metric_date"],
+    "gold_serving_executive_daily": ["store_id", "metric_date"],
+    "gold_serving_alert_hourly": ["store_id", "camera_id", "alert_type", "severity", "bucket_hour", "metric_date"],
+    "gold_serving_alert_daily": ["store_id", "camera_id", "alert_type", "severity", "metric_date"],
+}
 
 
 def _sql_str(value: str | None) -> str:
@@ -105,7 +122,7 @@ def check_non_negative(run_id) -> bool:
 
 def check_today_presence(run_id) -> bool:
     silver_today = trino.scalar(
-        f"SELECT COUNT(*) FROM {RVA}.silver_detections_v2 WHERE CAST(capture_ts AS date) = current_date"
+        f"SELECT COUNT(*) FROM {RVA}.silver_detections_v2 WHERE capture_date = current_date"
     ) or 0
     for table in TODAY_PRESENCE:
         rows = trino.scalar(f"SELECT COUNT(*) FROM {GS}.{table} WHERE metric_date = current_date") or 0
@@ -117,13 +134,54 @@ def check_today_presence(run_id) -> bool:
     return False  # presence gap is a warning, not a hard failure
 
 
-CHECKS = [check_silver_freshness, check_serving_freshness, check_non_negative, check_today_presence]
+def check_duplicate_keys(run_id) -> bool:
+    any_error = False
+    recent_start_expr = f"date_add('day', -{DQ_RECENT_DAYS}, current_date)"
+    for table, key_columns in DUPLICATE_KEYS.items():
+        key_sql = ", ".join(key_columns)
+        bad = trino.scalar(
+            f"""
+            SELECT COUNT(*) FROM (
+                SELECT {key_sql}
+                FROM {GS}.{table}
+                WHERE metric_date >= {recent_start_expr}
+                GROUP BY {key_sql}
+                HAVING COUNT(*) > 1
+            )
+            """
+        ) or 0
+        status = "error" if int(bad) > 0 else "ok"
+        if status == "error":
+            any_error = True
+        _write(
+            run_id,
+            "duplicate_keys",
+            table,
+            "error",
+            status,
+            f"duplicate_groups={bad}",
+            f"unique over ({key_sql}) for metric_date >= current_date - {DQ_RECENT_DAYS}d",
+        )
+        print(f"  {status:5} duplicate_keys {table} duplicate_groups={bad}")
+    return any_error
+
+
+CHECKS = [
+    check_silver_freshness,
+    check_serving_freshness,
+    check_non_negative,
+    check_today_presence,
+    check_duplicate_keys,
+]
 
 
 def main() -> None:
     apply_ddl.ensure_schema()
     run_id = uuid.uuid4().hex[:12]
-    print(f"quality_checks run_id={run_id} freshness_threshold={FRESHNESS_MIN}min")
+    print(
+        f"quality_checks run_id={run_id} freshness_threshold={FRESHNESS_MIN}min "
+        f"duplicate_window_days={DQ_RECENT_DAYS}"
+    )
     errors = 0
     for check in CHECKS:
         try:

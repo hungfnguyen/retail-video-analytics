@@ -1,49 +1,71 @@
-import { AlertTriangle, ChevronDown, Video } from 'lucide-react'
+import {
+  AlertTriangle,
+  Bell,
+  ChevronDown,
+  Clock3,
+  Expand,
+  RefreshCw,
+  TimerReset,
+  Users,
+} from 'lucide-react'
 import { useEffect, useRef, useState } from 'react'
 import { AppShell } from '../../shared/components/AppShell'
+import type { AppPage } from '../../shared/components/AppShell'
+import { MetricCard } from '../../shared/components/ui/MetricCard'
+import { PageHeader } from '../../shared/components/ui/PageHeader'
+import { StatusBadge } from '../../shared/components/ui/StatusBadge'
+import { formatDuration, formatDurationMs } from '../../shared/utils/format'
 import { AlertDetail } from './components/AlertDetail'
 import { AlertList } from './components/AlertList'
-import { LiveMetricCards } from './components/LiveMetricCards'
+import { QueueStatusTable } from './components/QueueStatusTable'
+import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
-import { ZoneHeatmap } from './components/ZoneHeatmap'
-import { ZoneRuntimePanel } from './components/ZoneRuntimePanel'
+import { ZoneOccupancyPanel } from './components/ZoneOccupancyPanel'
 import { useLiveData } from './hooks/useLiveData'
-import type { AppPage } from '../../shared/components/AppShell'
-import type { Alert } from './types'
+import type { Alert, ZoneCount } from './types'
 
 type LivePageProps = {
   activePage: AppPage
   onPageChange: (page: AppPage) => void
 }
 
-function zoneOccupancyCount(zoneCounts: Array<{ count: number, global_track_ids?: string[] }>) {
-  const uniqueGlobalIds = new Set(
-    zoneCounts.flatMap((zone) => zone.global_track_ids ?? []),
-  )
-  if (uniqueGlobalIds.size > 0) {
-    return uniqueGlobalIds.size
-  }
+function zoneOccupancyCount(zoneCounts: Array<Pick<ZoneCount, 'count' | 'global_track_ids'>>) {
+  const uniqueGlobalIds = new Set(zoneCounts.flatMap((z) => z.global_track_ids ?? []))
+  if (uniqueGlobalIds.size > 0) return uniqueGlobalIds.size
+  return zoneCounts.reduce((sum, z) => sum + Math.max(0, z.count), 0)
+}
 
-  return zoneCounts.reduce((sum, zone) => sum + Math.max(0, zone.count), 0)
+function formatDeltaSeconds(deltaSec: number, compareLabel = 'vs yesterday') {
+  if (!Number.isFinite(deltaSec) || Math.abs(deltaSec) < 1) {
+    return { value: `Stable ${compareLabel}`, tone: 'neutral' as const }
+  }
+  const absText = formatDuration(Math.abs(deltaSec))
+  if (deltaSec > 0) {
+    return { value: `↑ ${absText} ${compareLabel}`, tone: 'negative' as const }
+  }
+  return { value: `↓ ${absText} ${compareLabel}`, tone: 'positive' as const }
+}
+
+function liveStatusTone(status: string, metadataStatus: string) {
+  if (status === 'critical' || metadataStatus === 'stale' || metadataStatus === 'missing') return 'red' as const
+  if (status === 'warning' || metadataStatus === 'lagging') return 'amber' as const
+  return 'green' as const
 }
 
 export function LivePage({ activePage, onPageChange }: LivePageProps) {
-  const { data, error, switchCamera } = useLiveData()
+  const { data, error, switchCamera, refresh } = useLiveData()
   const [cameraMenuOpen, setCameraMenuOpen] = useState(false)
   const [selectedAlert, setSelectedAlert] = useState<Alert | null>(null)
   const [toast, setToast] = useState<string | null>(null)
   const prevAlertIds = useRef<Set<string>>(new Set())
   const toastTimeout = useRef<ReturnType<typeof setTimeout> | null>(null)
 
-  // Detect new HIGH alerts and show a toast
   useEffect(() => {
     if (!data?.alerts) return
-    const current = data.alerts
-    const newHigh = current.filter(
+    const newHigh = data.alerts.filter(
       (a) => a.severity === 'high' && !prevAlertIds.current.has(a.alert_id),
     )
-    prevAlertIds.current = new Set(current.map((a) => a.alert_id))
-
+    prevAlertIds.current = new Set(data.alerts.map((a) => a.alert_id))
     if (newHigh.length > 0) {
       setToast(newHigh[0].title)
       if (toastTimeout.current) clearTimeout(toastTimeout.current)
@@ -52,70 +74,54 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
   }, [data?.alerts])
 
   if (error) {
-    return <div className="grid min-h-screen place-items-center">{error}</div>
+    return <div className="grid min-h-screen place-items-center text-red-600">{error}</div>
   }
-
   if (!data) {
-    return <div className="grid min-h-screen place-items-center">Loading live dashboard...</div>
+    return <div className="grid min-h-screen place-items-center text-slate-500">Loading live dashboard…</div>
   }
 
-  const selectedCamera = data.cameras.find(
-    (camera) => camera.camera_id === data.selected_camera_id,
-  )
-  const highAlertCameraIds = new Set(
-    data.alerts.filter((alert) => alert.severity === 'high').map((alert) => alert.camera_id),
-  )
-  const activeAlertCameraIds = new Set(
-    data.alerts.filter((alert) => alert.status === 'new').map((alert) => alert.camera_id),
-  )
-  const currentPeopleCount = Math.max(
-    data.stats.current_count,
-    zoneOccupancyCount(data.frame.zone_counts),
-  )
+  const selectedCamera = data.cameras.find((c) => c.camera_id === data.selected_camera_id)
+  const queueZones = data.frame.zone_counts.filter((z) => z.zone_type === 'queue')
+  const totalQueuePeople = queueZones.reduce((sum, z) => sum + Math.max(0, z.count), 0)
+  const currentCount = Math.max(data.stats.current_count, zoneOccupancyCount(data.frame.zone_counts))
+  const activeAlertCount = data.alerts.filter((a) => a.status === 'new').length
+  const avgQueueWaitMs = totalQueuePeople > 0
+    ? queueZones.reduce((sum, z) => sum + (z.avg_wait_ms ?? 0) * Math.max(0, z.count), 0) / totalQueuePeople
+    : 0
 
-  return (
-    <AppShell activePage={activePage} onPageChange={onPageChange}>
-      {/* HIGH alert toast */}
-      {toast && (
-        <div className="fixed right-5 top-5 z-40 flex items-center gap-3 rounded-lg border border-red-200 bg-white px-4 py-3 shadow-lg">
-          <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
-          <span className="text-sm font-semibold text-slate-900">{toast}</span>
-          <button
-            className="ml-2 text-slate-400 hover:text-slate-600"
-            onClick={() => setToast(null)}
-            type="button"
-          >
-            ×
-          </button>
-        </div>
-      )}
+  const peakHourLabel = data.insights.peak_hour || data.traffic_summary.peak_time || '--'
+  const peakHourVisitors = data.insights.peak_hour_visitors || data.traffic_summary.peak_count
+  const avgDwellSec = data.insights.avg_dwell_sec
 
-      {/* Page header */}
-      <header className="mb-5 flex items-center justify-between">
-        <h1 className="m-0 text-[26px] font-bold leading-tight text-slate-950">Live Store Monitor</h1>
+  const updatedAt = new Date(data.stats.updated_at)
+  const timeLabel = Number.isNaN(updatedAt.getTime())
+    ? 'live'
+    : updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
+  const queueTrend = totalQueuePeople > 0 ? formatDeltaSeconds(data.insights.avg_queue_wait_delta_sec) : undefined
+  const dwellTrend = avgDwellSec > 0 ? formatDeltaSeconds(data.insights.avg_dwell_delta_sec) : undefined
+
+  const headerActions = (
+      <div className="flex items-center gap-2">
         <div className="relative">
           <button
-            className="flex min-w-55 items-center justify-between gap-8 rounded-lg border border-slate-200 bg-white px-3.5 py-2.5 text-slate-950 shadow-sm"
-            onClick={() => setCameraMenuOpen((prev) => !prev)}
+            className="flex min-w-44 items-center justify-between gap-4 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm font-medium text-slate-700 shadow-sm hover:border-slate-300"
+            onClick={() => setCameraMenuOpen((open) => !open)}
             onBlur={() => setTimeout(() => setCameraMenuOpen(false), 150)}
             type="button"
           >
             {selectedCamera?.name ?? data.selected_camera_id}
-            <ChevronDown size={16} />
+            <ChevronDown size={14} />
           </button>
-
           {cameraMenuOpen && (
-            <div className="absolute right-0 z-50 mt-1 w-full rounded-lg border border-slate-200 bg-white py-1 shadow-lg">
+            <div className="absolute right-0 z-50 mt-1 w-full rounded-xl border border-slate-200 bg-white py-1 shadow-lg">
               {data.cameras.map((camera) => (
                 <button
                   className={`w-full px-3.5 py-2 text-left text-sm hover:bg-blue-50 ${
-                    camera.camera_id === data.selected_camera_id
-                      ? 'font-bold text-blue-600'
-                      : 'text-slate-700'
+                    camera.camera_id === data.selected_camera_id ? 'font-semibold text-blue-600' : 'text-slate-700'
                   }`}
                   key={camera.camera_id}
-                  onMouseDown={(e) => e.preventDefault()}
+                  onMouseDown={(event) => event.preventDefault()}
                   onClick={() => {
                     switchCamera(camera.camera_id)
                     setCameraMenuOpen(false)
@@ -128,72 +134,134 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
             </div>
           )}
         </div>
-      </header>
 
-      {/* Primary live monitoring area */}
-      <div className="grid gap-5">
-        <LiveMetricCards
-          alerts={data.alerts}
-          stats={data.stats}
-          zoneCounts={data.frame.zone_counts}
+        <button
+          className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700"
+          onClick={refresh}
+          type="button"
+        >
+          <RefreshCw size={16} />
+        </button>
+        <button
+          className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700"
+          type="button"
+        >
+          <Expand size={16} />
+        </button>
+        <div className="relative">
+          <button
+            className="grid h-10 w-10 place-items-center rounded-xl border border-slate-200 bg-white text-slate-500 shadow-sm transition hover:border-slate-300 hover:text-slate-700"
+            type="button"
+          >
+            <Bell size={16} />
+          </button>
+          {activeAlertCount > 0 && (
+            <span className="absolute -right-1 -top-1 grid h-5 min-w-5 place-items-center rounded-full bg-red-500 px-1 text-[10px] font-bold text-white">
+              {activeAlertCount}
+            </span>
+          )}
+        </div>
+      </div>
+  )
+
+  return (
+    <AppShell activePage={activePage} onPageChange={onPageChange}>
+      {toast && (
+        <div className="fixed right-5 top-5 z-40 flex items-center gap-3 rounded-xl border border-red-200 bg-white px-4 py-3 shadow-lg">
+          <span className="h-2 w-2 shrink-0 rounded-full bg-red-500" />
+          <span className="text-sm font-semibold text-slate-900">{toast}</span>
+          <button className="ml-2 text-slate-400 hover:text-slate-600" onClick={() => setToast(null)} type="button">
+            ×
+          </button>
+        </div>
+      )}
+
+      <PageHeader
+        title="Live Monitor"
+        subtitle={`${data.store.name} · Updated ${timeLabel}`}
+        badge={<StatusBadge status="live" />}
+        actions={headerActions}
+      />
+
+      <div className="mb-6 grid grid-cols-5 gap-4">
+        <MetricCard
+          icon={Users}
+          label="Visitors in Store"
+          meta="Current store occupancy"
+          tone="blue"
+          trend={
+            data.stats.count_change_percent !== 0
+              ? {
+                  value: `${data.stats.count_change_percent > 0 ? '↑' : '↓'} ${Math.abs(data.stats.count_change_percent)}% vs previous`,
+                  tone: data.stats.count_change_percent > 0 ? 'positive' : 'neutral',
+                }
+              : undefined
+          }
+          value={currentCount}
         />
-
-        <section className="grid grid-cols-[repeat(auto-fit,minmax(170px,1fr))] gap-3" aria-label="Camera overview">
-          {data.cameras.map((camera) => {
-            const isSelected = camera.camera_id === data.selected_camera_id
-            const hasHighAlert = highAlertCameraIds.has(camera.camera_id)
-            const hasActiveAlert = activeAlertCameraIds.has(camera.camera_id)
-
-            return (
-              <button
-                className={`min-h-24 rounded-lg border bg-white p-3 text-left shadow-sm transition hover:border-blue-300 ${
-                  isSelected ? 'border-blue-500 ring-2 ring-blue-100' : 'border-slate-200'
-                }`}
-                key={camera.camera_id}
-                onClick={() => switchCamera(camera.camera_id)}
-                type="button"
-              >
-                <div className="flex items-start justify-between gap-3">
-                  <span className="flex min-w-0 items-center gap-2">
-                    <Video className="shrink-0 text-slate-500" size={16} />
-                    <span className="truncate font-bold text-slate-950">
-                      {camera.name ?? camera.camera_id}
-                    </span>
-                  </span>
-
-                  {hasActiveAlert && <AlertTriangle className="shrink-0 text-amber-600" size={15} />}
-                </div>
-
-                <div className="mt-3 flex flex-wrap items-center gap-2 text-xs text-slate-500">
-                  <span>{camera.zone}</span>
-                  {isSelected && <span>{currentPeopleCount} people</span>}
-                  {hasActiveAlert && (
-                    <span className={`rounded-full px-2 py-1 font-bold ${
-                      hasHighAlert ? 'bg-red-100 text-red-600' : 'bg-amber-100 text-amber-700'
-                    }`}
-                    >
-                      Alert
-                    </span>
-                  )}
-                </div>
-              </button>
-            )
-          })}
-        </section>
-
-        <VideoPanel frame={data.frame} />
+        <MetricCard
+          icon={TimerReset}
+          label="Avg Queue Wait"
+          meta={totalQueuePeople > 0 ? `${totalQueuePeople} people in queue` : 'No active queue'}
+          tone={avgQueueWaitMs > 120000 ? 'red' : avgQueueWaitMs > 60000 ? 'amber' : 'violet'}
+          trend={queueTrend}
+          value={avgQueueWaitMs > 0 ? formatDurationMs(avgQueueWaitMs) : '—'}
+        />
+        <MetricCard
+          icon={Clock3}
+          label="Peak Hour"
+          meta={peakHourVisitors > 0 ? `${peakHourVisitors} visitors` : 'No historical traffic yet'}
+          tone="amber"
+          value={peakHourLabel}
+        />
+        <MetricCard
+          icon={TimerReset}
+          label="Dwell Time (Avg)"
+          meta={avgDwellSec > 0 ? 'Based on today visits' : 'Waiting for dwell aggregates'}
+          tone="green"
+          trend={dwellTrend}
+          value={avgDwellSec > 0 ? formatDuration(avgDwellSec) : '—'}
+        />
+        <MetricCard
+          icon={AlertTriangle}
+          label="Active Alerts"
+          meta={activeAlertCount > 0 ? `${activeAlertCount} require review` : 'All clear'}
+          tone={liveStatusTone(data.stats.status, data.stats.metadata_status)}
+          trend={
+            activeAlertCount > 0
+              ? { value: `${activeAlertCount} new`, tone: 'negative' }
+              : { value: 'No new incidents', tone: 'positive' }
+          }
+          value={activeAlertCount}
+        />
       </div>
 
-      <div className="mt-5 grid grid-cols-[1.35fr_0.75fr] gap-5">
-        <ZoneRuntimePanel
-          lineCrossings={data.frame.line_crossings}
-          zoneCounts={data.frame.zone_counts}
-        />
+      <div className="mb-6 grid grid-cols-[minmax(0,1.52fr)_360px] gap-5">
+        <div className="flex flex-col gap-2">
+          <div className="flex items-center justify-between">
+            <div className="flex items-center gap-2">
+              <span className="text-sm font-semibold text-slate-900">
+                Live Camera
+                {selectedCamera && (
+                  <span className="font-normal text-slate-500">
+                    {' '}· {selectedCamera.name ?? selectedCamera.camera_id}
+                    {selectedCamera.zone ? ` · ${selectedCamera.zone}` : ''}
+                  </span>
+                )}
+              </span>
+            </div>
+            <StatusBadge status="live" />
+          </div>
+          <VideoPanel frame={data.frame} />
+        </div>
+
         <AlertList alerts={data.alerts} onAlertClick={setSelectedAlert} />
       </div>
 
-      <div className="mt-5">
-        <ZoneHeatmap cells={data.zone_heatmap} />
+      <div className="grid grid-cols-3 gap-5">
+        <QueueStatusTable zoneCounts={data.frame.zone_counts} />
+        <TrafficChart traffic={data.traffic} summary={data.traffic_summary} />
+        <ZoneOccupancyPanel zoneCounts={data.frame.zone_counts} />
       </div>
 
       {selectedAlert && (

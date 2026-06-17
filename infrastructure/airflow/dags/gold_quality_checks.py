@@ -9,7 +9,7 @@ from common import DAG_START, DEFAULT_ARGS, bash_in_runner
 
 with DAG(
     dag_id="gold_quality_checks",
-    description="Freshness + non-negative + today-presence checks on the Gold serving layer.",
+    description="Freshness + non-negative + today-presence + duplicate-key checks on the Gold serving layer.",
     default_args=DEFAULT_ARGS,
     start_date=DAG_START,
     schedule="0 * * * *",

@@ -22,6 +22,7 @@ public class GoldDashboardAggregateJob {
                 .inStreamingMode()
                 .build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
+        tEnv.getConfig().set("table.exec.state.ttl", "7 d");
 
         Map<String, String> cfg = new LinkedHashMap<>();
         cfg.put("type", "iceberg");
@@ -76,10 +77,9 @@ public class GoldDashboardAggregateJob {
                 "  detections     BIGINT,",
                 "  avg_conf       DOUBLE,",
                 "  PRIMARY KEY (store_id, camera_id, metric_date, hour_of_day) NOT ENFORCED",
-                ") WITH (",
+                ") PARTITIONED BY (store_id, metric_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(metric_date)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")");
     }
@@ -95,10 +95,9 @@ public class GoldDashboardAggregateJob {
                 "  first_seen_ts  TIMESTAMP(3),",
                 "  last_seen_ts   TIMESTAMP(3),",
                 "  PRIMARY KEY (store_id, camera_id, metric_date) NOT ENFORCED",
-                ") WITH (",
+                ") PARTITIONED BY (store_id, metric_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(metric_date)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")");
     }
@@ -115,10 +114,9 @@ public class GoldDashboardAggregateJob {
                 "  short_dwell_tracks  BIGINT,",
                 "  long_dwell_tracks   BIGINT,",
                 "  PRIMARY KEY (store_id, camera_id, metric_date) NOT ENFORCED",
-                ") WITH (",
+                ") PARTITIONED BY (store_id, metric_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(metric_date)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")");
     }
@@ -138,11 +136,10 @@ public class GoldDashboardAggregateJob {
                 "  threshold      INT,",
                 "  status         STRING,",
                 "  clip_s3_uri    STRING,",
-                "  PRIMARY KEY (alert_id) NOT ENFORCED",
-                ") WITH (",
+                "  PRIMARY KEY (alert_id, store_id, event_date) NOT ENFORCED",
+                ") PARTITIONED BY (store_id, event_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'store_id,bucket(16, camera_id),days(event_date)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")");
     }

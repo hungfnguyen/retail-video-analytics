@@ -34,12 +34,57 @@ class DwellBand(BaseModel):
     value: float
 
 
+class VisitorsSeriesPoint(BaseModel):
+    label: str
+    visitors: int
+
+
+class WeekdayPatternPoint(BaseModel):
+    weekday: str
+    visitors: int
+
+
+class PeakHeatmapPoint(BaseModel):
+    weekday: str
+    weekday_order: int
+    hour: int
+    visitors: int
+
+
+class TopZonePoint(BaseModel):
+    zone_id: str
+    zone_name: str
+    visitors: int
+    share: float
+    avg_occupancy: float
+    occupied_minutes: int
+
+
+class DwellTrendPoint(BaseModel):
+    date: str
+    avg_dwell_sec: float
+    p50_dwell_sec: float
+    p90_dwell_sec: float
+
+
 class DailySummaryRow(BaseModel):
     date: str
     detections: int
     peak: str
     avg_dwell_sec: float
     avg_confidence: float
+    avg_queue_wait_sec: float = 0
+    alerts: int = 0
+
+
+class PeakDaySummary(BaseModel):
+    date: str
+    visitors: int
+
+
+class PeakHourSummary(BaseModel):
+    hour: str
+    visitors: int
 
 
 class AnalyticsDashboardData(BaseModel):
@@ -48,10 +93,19 @@ class AnalyticsDashboardData(BaseModel):
     data_status: Literal["ready", "empty", "error"]
     error_message: str | None = None
     kpis: list[AnalyticsKpi]
+    total_visitors: int = 0
+    peak_day: PeakDaySummary | None = None
+    peak_hour: PeakHourSummary | None = None
+    avg_dwell_sec: float = 0
     hourly_traffic: list[HourlyTrafficPoint]
     camera_comparison: list[CameraComparisonPoint]
+    visitors_over_time: list[VisitorsSeriesPoint] = []
+    weekday_pattern: list[WeekdayPatternPoint] = []
+    peak_hours_heatmap: list[PeakHeatmapPoint] = []
+    top_zones: list[TopZonePoint] = []
     heatmap: list[HeatmapCell]
     dwell_bands: list[DwellBand]
+    dwell_trend: list[DwellTrendPoint] = []
     daily_summary: list[DailySummaryRow]
 
 

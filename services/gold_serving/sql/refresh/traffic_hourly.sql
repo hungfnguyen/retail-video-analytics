@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_traffic_hourly  <- silver_detections_v2 (per-frame inner agg, per-hour outer)
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_traffic_hourly
 WHERE metric_date BETWEEN DATE '{start}' AND DATE '{end}';
@@ -28,7 +29,7 @@ FROM (
     WHERE class_id = 0
       AND is_predicted = false
       AND capture_ts IS NOT NULL
-      AND CAST(capture_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
+      AND capture_date BETWEEN DATE '{start}' AND DATE '{end}'
     GROUP BY store_id, camera_id, frame_index, date_trunc('hour', capture_ts),
              CAST(capture_ts AS DATE), hour(capture_ts)
 ) f

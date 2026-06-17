@@ -35,6 +35,15 @@ slot.request.timeout: 120000
 # unaffected — adaptive batch parallelism applies only to BATCH execution mode.)
 execution.batch.adaptive.auto-parallelism.enabled: false
 
+# Iceberg has its OWN source-parallelism inference, independent of the adaptive
+# batch scheduler above: it sets the scan operator's parallelism to the split
+# count (capped at 100). Streaming jobs commit a tiny file every 30s, so a fact
+# table like gold_queue_sessions accumulates ~100 small files → the batch
+# serving scan was inferred at parallelism=100 on a 16-slot cluster and failed.
+# Disabling inference makes batch scans honour parallelism.default=1, which is
+# correct for our tiny per-day windows and removes the scheduling blow-up.
+table.exec.iceberg.infer-source-parallelism: false
+
 # -- Blob & Query Server --
 blob.server.port: 6124
 query.server.port: 6125

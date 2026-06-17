@@ -16,12 +16,17 @@ from rva_api.api.v1.analytics_queries import (
     alerts_history_sql,
     camera_sql,
     daily_sql,
+    dwell_trend_sql,
     heatmap_presence_sql,
     hourly_sql,
+    peak_heatmap_sql,
     queue_wait_trend_sql,
     queue_zone_summary_sql,
     summary_sql,
+    top_zones_sql,
     trino_query,
+    visitors_series_sql,
+    weekday_pattern_sql,
 )
 from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, PresenceHeatmapData, QueueAnalyticsData
 from storage import RedisClientConfig, create_redis_client
@@ -154,6 +159,10 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
         "range_label": f"Last {days} days",
         "data_status": status,
         "error_message": message,
+        "total_visitors": 0,
+        "peak_day": None,
+        "peak_hour": None,
+        "avg_dwell_sec": 0,
         "kpis": [
             {"label": "Total detections", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
             {"label": "Avg per active day", "value": "0", "meta": "Waiting for daily traffic aggregates", "tone": "emerald"},
@@ -164,8 +173,13 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
         ],
         "hourly_traffic": [],
         "camera_comparison": [],
+        "visitors_over_time": [],
+        "weekday_pattern": [],
+        "peak_hours_heatmap": [],
+        "top_zones": [],
         "heatmap": [],
         "dwell_bands": [],
+        "dwell_trend": [],
         "daily_summary": [],
     }
 
@@ -176,11 +190,16 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
         "hourly": (hourly_sql(days), None),
         "camera": (camera_sql(days), None),
         "daily": (daily_sql(days), None),
+        "visitors_series": (visitors_series_sql(days), None),
+        "weekday_pattern": (weekday_pattern_sql(days), None),
+        "peak_heatmap": (peak_heatmap_sql(days), None),
+        "top_zones": (top_zones_sql(days), None),
+        "dwell_trend": (dwell_trend_sql(days), None),
     }
     rows: dict[str, list[list[Any]]] = {}
     errors: dict[str, str] = {}
 
-    with ThreadPoolExecutor(max_workers=4) as executor:
+    with ThreadPoolExecutor(max_workers=8) as executor:
         futures = {
             executor.submit(trino_query, sql, max_wait): name
             for name, (sql, max_wait) in queries.items()
@@ -387,6 +406,11 @@ def get_analytics_dashboard(
     hourly_rows = rows["hourly"]
     camera_rows = rows["camera"]
     daily_rows = rows["daily"]
+    visitors_series_rows = rows["visitors_series"]
+    weekday_pattern_rows = rows["weekday_pattern"]
+    peak_heatmap_rows = rows["peak_heatmap"]
+    top_zone_rows = rows["top_zones"]
+    dwell_trend_rows = rows["dwell_trend"]
 
     total_detections = _safe_int(summary_row[0] if len(summary_row) > 0 else 0)
     if total_detections == 0:
@@ -400,15 +424,31 @@ def get_analytics_dashboard(
     avg_dwell_sec = _safe_float(summary_row[4] if len(summary_row) > 4 else 0.0)
     long_dwell_tracks = _safe_int(summary_row[5] if len(summary_row) > 5 else 0)
     short_dwell_tracks = _safe_int(summary_row[6] if len(summary_row) > 6 else 0)
+    medium_dwell_tracks = _safe_int(summary_row[7] if len(summary_row) > 7 else 0)
 
     peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0]
     busiest_camera = camera_rows[0] if camera_rows else ["--", 0, 0, 0]
+    peak_day_row = max(daily_rows, key=lambda row: _safe_int(row[1])) if daily_rows else None
 
     data = {
         "generated_at": datetime.now(timezone.utc).isoformat(),
         "range_label": f"Last {days} days",
         "data_status": "ready",
         "error_message": None,
+        "total_visitors": total_detections,
+        "peak_day": (
+            {
+                "date": str(peak_day_row[0]),
+                "visitors": _safe_int(peak_day_row[1]),
+            }
+            if peak_day_row
+            else None
+        ),
+        "peak_hour": {
+            "hour": str(peak_row[0]),
+            "visitors": _safe_int(peak_row[1]),
+        },
+        "avg_dwell_sec": round(avg_dwell_sec, 1),
         "kpis": [
             {
                 "label": "Total detections",
@@ -464,15 +504,64 @@ def get_analytics_dashboard(
             }
             for row in camera_rows
         ],
+        "visitors_over_time": [
+            {
+                "label": str(row[0]),
+                "visitors": _safe_int(row[1]),
+            }
+            for row in visitors_series_rows
+        ],
+        "weekday_pattern": [
+            {
+                "weekday": str(row[0]),
+                "visitors": _safe_int(row[2]),
+            }
+            for row in weekday_pattern_rows
+        ],
+        "peak_hours_heatmap": [
+            {
+                "weekday": str(row[0]),
+                "weekday_order": _safe_int(row[1]),
+                "hour": _safe_int(row[2]),
+                "visitors": _safe_int(row[3]),
+            }
+            for row in peak_heatmap_rows
+        ],
+        "top_zones": [
+            {
+                "zone_id": str(row[0]),
+                "zone_name": str(row[1]),
+                "visitors": _safe_int(row[2]),
+                "share": _safe_float(row[3]),
+                "avg_occupancy": _safe_float(row[4]),
+                "occupied_minutes": _safe_int(row[5]),
+            }
+            for row in top_zone_rows
+        ],
         "heatmap": [],
-        "dwell_bands": [],
+        "dwell_bands": [
+            {"label": "Short", "value": short_dwell_tracks},
+            {"label": "Medium", "value": medium_dwell_tracks},
+            {"label": "Long", "value": long_dwell_tracks},
+        ],
+        "dwell_trend": [
+            {
+                "date": str(row[0]),
+                "avg_dwell_sec": round(_safe_float(row[1]), 1),
+                "p50_dwell_sec": round(_safe_float(row[2]), 1),
+                "p90_dwell_sec": round(_safe_float(row[3]), 1),
+            }
+            for row in dwell_trend_rows
+        ],
         "daily_summary": [
             {
                 "date": str(row[0]),
                 "detections": _safe_int(row[1]),
                 "peak": str(row[2]),
                 "avg_dwell_sec": round(_safe_float(row[3]), 1),
-                "avg_confidence": round(_safe_float(row[4]), 4),
+                "avg_confidence": 0.0,
+                "avg_queue_wait_sec": round(_safe_float(row[4]), 1),
+                "alerts": _safe_int(row[5]),
             }
             for row in daily_rows
         ],

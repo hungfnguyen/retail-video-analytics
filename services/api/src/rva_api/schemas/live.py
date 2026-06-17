@@ -141,6 +141,15 @@ class TrafficSummary(BaseModel):
     peak_time: str
 
 
+class LiveInsights(BaseModel):
+    peak_hour: str | None = None
+    peak_hour_visitors: int = 0
+    avg_dwell_sec: float = 0
+    avg_dwell_delta_sec: float = 0
+    avg_queue_wait_sec_today: float = 0
+    avg_queue_wait_delta_sec: float = 0
+
+
 class ZoneHeatmapCell(BaseModel):
     zone_row: str
     zone_col: int
@@ -162,6 +171,7 @@ class LiveDashboardData(BaseModel):
     selected_camera_id: str
     frame: LiveFrame
     stats: LiveStats
+    insights: LiveInsights
     alerts: list[Alert]
     traffic: list[TrafficPoint]
     traffic_summary: TrafficSummary

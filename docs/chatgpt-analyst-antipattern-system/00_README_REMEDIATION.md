@@ -22,6 +22,7 @@ correctness, đẩy production-hardening vào "Future Work" thay vì over-engine
 | `03_PARTITION_REDESIGN.md` | Quyết định về partition strategy: cái gì sửa thật, cái gì để future work, kèm DDL đề xuất tối thiểu |
 | `04_FINAL_TECH_DEBT_ASSESSMENT.md` | Kết luận cuối cùng sau khi đối chiếu tài liệu với trạng thái code hiện tại: debt thật, debt đã stale, mức ưu tiên |
 | `05_IMPLEMENTATION_PHASES.md` | Kế hoạch triển khai theo phase: làm gì, file nào chạm, output cần có, tiêu chí verify |
+| `06_PROGRESS_2026-06-14.md` | Nhật ký ngắn gọn các bước remediation đã làm xong trong code và output runtime đã verify |
 
 > **Source of truth để triển khai:** đọc `04_FINAL_TECH_DEBT_ASSESSMENT.md` trước, sau đó dùng
 > `05_IMPLEMENTATION_PHASES.md` làm checklist thực hiện. Các file `system.md` và
@@ -59,7 +60,7 @@ P0 — Correctness (NÊN sửa trong đồ án, rẻ, ảnh hưởng tính đún
   2. executive_daily: dependency Airflow ≠ nguồn SQL thực
   3. Unbounded streaming state (Silver dedup + Gold group-by) → set state TTL
   4. Audit table có code nhưng không ghi → hoàn thiện writeAudit
-  5. Kiểm chứng INSERT OVERWRITE chỉ overwrite đúng partition
+  5. Chốt semantics idempotency cho serving refresh → DELETE window + INSERT INTO
 
 P1 — Consistency / debt vừa (NÊN làm nếu còn thời gian):
   6. Chọn 1 source of truth Gold serving: bỏ dần Trino path

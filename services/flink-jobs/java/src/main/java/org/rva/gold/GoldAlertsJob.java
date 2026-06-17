@@ -63,11 +63,10 @@ public class GoldAlertsJob {
                 "  clip_s3_uri     STRING,",
                 "  clip_duration_sec DOUBLE,",
                 "  event_date      DATE,",
-                "  PRIMARY KEY (alert_id) NOT ENFORCED",
-                ") WITH (",
+                "  PRIMARY KEY (alert_id, store_id, event_date) NOT ENFORCED",
+                ") PARTITIONED BY (store_id, event_date) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'days(event_ts)',",
                 "  'write.upsert.enabled' = 'true'",
                 ")"
         ));
