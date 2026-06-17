@@ -1,10 +1,11 @@
 import { useState } from 'react'
 import { AppShell, type AppPage } from '../../shared/components/AppShell'
+import { EmptyState } from '../../shared/components/ui/EmptyState'
 import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Tabs } from '../../shared/components/ui/Tabs'
-import { EmptyState } from '../../shared/components/ui/EmptyState'
-import { AnalyticsFilterBar, datePresetToDays } from './components/AnalyticsFilterBar'
+import { AnalyticsFilterBar, datePresetToDays, type DatePreset } from './components/AnalyticsFilterBar'
 import { AlertsTab } from './components/tabs/AlertsTab'
+import { DwellTab } from './components/tabs/DwellTab'
 import { OverviewTab } from './components/tabs/OverviewTab'
 import { QueueTab } from './components/tabs/QueueTab'
 import { TrafficTab } from './components/tabs/TrafficTab'
@@ -12,14 +13,13 @@ import { ZonesTab } from './components/tabs/ZonesTab'
 import { useAlertHistoryData } from './hooks/useAlertHistoryData'
 import { useAnalyticsData } from './hooks/useAnalyticsData'
 import { useQueueData } from './hooks/useQueueData'
-import type { DatePreset } from './components/AnalyticsFilterBar'
 
 type AnalyticsPageProps = {
   activePage: AppPage
   onPageChange: (page: AppPage) => void
 }
 
-type AnalyticsTab = 'overview' | 'traffic' | 'queue' | 'zones' | 'alerts'
+type AnalyticsTab = 'overview' | 'traffic' | 'queue' | 'zones' | 'alerts' | 'dwell'
 
 const TAB_ITEMS = [
   { id: 'overview' as const, label: 'Overview' },
@@ -27,6 +27,7 @@ const TAB_ITEMS = [
   { id: 'queue' as const, label: 'Queue' },
   { id: 'zones' as const, label: 'Zones' },
   { id: 'alerts' as const, label: 'Alerts' },
+  { id: 'dwell' as const, label: 'Dwell Time' },
 ]
 
 export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) {
@@ -35,17 +36,23 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
 
   const days = datePresetToDays[preset]
   const { data, error, refresh } = useAnalyticsData(days)
-  const { data: queueData } = useQueueData(days)
-  const { data: alertHistoryData } = useAlertHistoryData(days)
+  const { data: queueData, refresh: refreshQueue } = useQueueData(days)
+  const { data: alertHistoryData, refresh: refreshAlerts } = useAlertHistoryData(days)
 
-  function renderTabContent() {
+  function refreshAll() {
+    void refresh()
+    void refreshQueue()
+    void refreshAlerts()
+  }
+
+  function renderContent() {
     if (!data && !error) {
-      return <EmptyState title="Loading analytics data…" description="Querying Gold lakehouse via Trino" />
+      return <EmptyState title="Loading analytics…" description="Querying Gold serving metrics" />
     }
     if (error || data?.data_status === 'error') {
       return (
         <EmptyState
-          title={error ? 'Analytics API unavailable' : 'Trino query failed'}
+          title={error ? 'Analytics API unavailable' : 'Analytics query failed'}
           description={error ?? data?.error_message ?? undefined}
           tone="error"
         />
@@ -54,8 +61,8 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
     if (data?.data_status === 'empty') {
       return (
         <EmptyState
-          title="No data in lakehouse yet"
-          description="Run the pipeline until Gold tables receive rows, then refresh."
+          title="No Gold analytics rows yet"
+          description="Run the pipeline and Gold serving refresh first, then reload this page."
           tone="warning"
         />
       )
@@ -64,43 +71,43 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
 
     switch (activeTab) {
       case 'overview':
-        return <OverviewTab data={data} queueData={queueData ?? null} alertData={alertHistoryData ?? null} />
+        return <OverviewTab alertData={alertHistoryData ?? null} data={data} queueData={queueData ?? null} />
       case 'traffic':
         return <TrafficTab data={data} />
       case 'queue':
         return queueData
           ? <QueueTab data={queueData} />
-          : <EmptyState title="No queue data" description="Gold queue tables are empty or still loading" />
+          : <EmptyState title="Queue analytics unavailable" description="Queue serving tables are empty or still refreshing." />
       case 'zones':
-        return <ZonesTab />
+        return <ZonesTab data={data} />
       case 'alerts':
         return alertHistoryData
           ? <AlertsTab data={alertHistoryData} />
-          : <EmptyState title="No alert data" description="Gold alerts table is empty or still loading" />
+          : <EmptyState title="Alert analytics unavailable" description="Alert history is empty or still refreshing." />
+      case 'dwell':
+        return <DwellTab data={data} />
     }
   }
 
   return (
     <AppShell activePage={activePage} onPageChange={onPageChange}>
       <PageHeader
-        title="Analyst Dashboard"
-        subtitle="Business insights from Gold lakehouse metrics"
+        title="Analytics"
+        subtitle="Business insights from Gold layer"
         actions={
           <AnalyticsFilterBar
             preset={preset}
             onPresetChange={setPreset}
-            onRefresh={() => void refresh()}
+            onRefresh={refreshAll}
           />
         }
       />
 
-      <Tabs<AnalyticsTab>
-        value={activeTab}
-        onChange={setActiveTab}
-        items={TAB_ITEMS}
-      />
+      <Tabs<AnalyticsTab> items={TAB_ITEMS} onChange={setActiveTab} value={activeTab} />
 
-      {renderTabContent()}
+      <div className="pt-5">
+        {renderContent()}
+      </div>
     </AppShell>
   )
 }

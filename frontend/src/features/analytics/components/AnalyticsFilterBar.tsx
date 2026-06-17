@@ -1,4 +1,4 @@
-import { RefreshCw } from 'lucide-react'
+import { CalendarDays, RefreshCw } from 'lucide-react'
 
 export type DatePreset = 'today' | 'last_7_days' | 'last_14_days' | 'last_30_days'
 
@@ -22,13 +22,28 @@ type AnalyticsFilterBarProps = {
   onRefresh: () => void
 }
 
+function StaticSelect({ label, value, disabled = false }: { label: string; value: string; disabled?: boolean }) {
+  return (
+    <div aria-label={label} className={`flex min-w-[140px] items-center justify-between rounded-xl border px-3.5 py-2.5 text-sm shadow-sm ${
+      disabled ? 'border-slate-100 bg-slate-50 text-slate-400' : 'border-slate-200 bg-white text-slate-700'
+    }`}>
+      <span>{value}</span>
+      <span className="text-slate-400">⌄</span>
+    </div>
+  )
+}
+
 export function AnalyticsFilterBar({ preset, onPresetChange, onRefresh }: AnalyticsFilterBarProps) {
   return (
-    <div className="flex items-center gap-2">
-      <div className="flex items-center gap-1">
-        <span className="text-xs font-medium text-slate-500">Date range:</span>
+    <div className="flex flex-wrap items-center gap-2.5">
+      <StaticSelect label="Store" value="Store A" />
+      <StaticSelect label="Camera" value="All Cameras" disabled />
+      <StaticSelect label="Zone" value="All Zones" disabled />
+
+      <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 shadow-sm">
+        <CalendarDays size={16} className="text-slate-400" />
         <select
-          className="rounded-lg border border-slate-200 bg-white px-3 py-2 text-sm font-medium text-slate-700 shadow-sm focus:border-blue-400 focus:outline-none"
+          className="bg-transparent font-medium text-slate-700 outline-none"
           value={preset}
           onChange={(e) => onPresetChange(e.target.value as DatePreset)}
         >
@@ -36,22 +51,15 @@ export function AnalyticsFilterBar({ preset, onPresetChange, onRefresh }: Analyt
             <option key={value} value={value}>{label}</option>
           ))}
         </select>
-      </div>
-
-      <div
-        className="flex items-center gap-1.5 rounded-lg border border-slate-100 bg-slate-50 px-3 py-2 text-xs text-slate-400"
-        title="Camera filter available after backend supports per-camera queries"
-      >
-        Camera: All
-      </div>
+      </label>
 
       <button
-        className="grid h-9 w-9 place-items-center rounded-lg border border-slate-200 bg-white text-slate-600 shadow-sm hover:border-blue-300 hover:text-blue-700 transition"
+        className="grid h-11 w-11 place-items-center rounded-xl border border-slate-200 bg-white text-slate-600 shadow-sm transition hover:border-slate-300 hover:text-slate-800"
         onClick={onRefresh}
-        title="Refresh data"
+        title="Refresh analytics"
         type="button"
       >
-        <RefreshCw size={15} />
+        <RefreshCw size={16} />
       </button>
     </div>
   )

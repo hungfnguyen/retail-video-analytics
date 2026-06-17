@@ -1,7 +1,7 @@
 import {
-  Bar,
-  BarChart,
   CartesianGrid,
+  Line,
+  LineChart,
   ResponsiveContainer,
   Tooltip,
   XAxis,
@@ -23,6 +23,7 @@ export function QueueTab({ data }: QueueTabProps) {
   const rows = buildQueueStatusRows(data)
   const violations = rows.filter((r) => r.avg_wait_sec > QUEUE_SLA_SECONDS).length
   const totalSessions = rows.reduce((s, r) => s + r.total_sessions, 0)
+  const longestWait = Math.max(...rows.map((r) => r.max_wait_sec), 0)
   const weightedAvg = totalSessions > 0
     ? rows.reduce((acc, r) => acc + r.avg_wait_sec * r.total_sessions, 0) / totalSessions
     : 0
@@ -34,17 +35,15 @@ export function QueueTab({ data }: QueueTabProps) {
   }))
 
   return (
-    <div className="grid gap-5 pt-5">
-      {/* KPI row */}
-      <div className="grid grid-cols-4 gap-3">
-        <MetricCard label="Total Queue Sessions" value={formatNumber(totalSessions)} tone="blue" />
-        <MetricCard label="Avg Queue Wait" value={weightedAvg > 0 ? formatDuration(weightedAvg) : '—'} tone={weightedAvg > QUEUE_SLA_SECONDS ? 'red' : weightedAvg > 60 ? 'amber' : 'green'} />
-        <MetricCard label="SLA Violations" value={violations} tone={violations > 0 ? 'red' : 'green'} meta={`SLA threshold: ${QUEUE_SLA_SECONDS}s`} />
-        <MetricCard label="Queue Zones" value={rows.length} tone="slate" />
+    <div className="grid gap-5">
+      <div className="grid grid-cols-4 gap-4">
+        <MetricCard label="Avg Queue Wait" value={weightedAvg > 0 ? formatDuration(weightedAvg) : '—'} tone={weightedAvg > QUEUE_SLA_SECONDS ? 'red' : weightedAvg > 60 ? 'amber' : 'green'} meta="Weighted across all queue sessions" />
+        <MetricCard label="Longest Wait Session" value={longestWait > 0 ? formatDuration(longestWait) : '—'} tone={longestWait > QUEUE_SLA_SECONDS ? 'red' : 'violet'} meta="Worst observed queue delay" />
+        <MetricCard label="Total Queue Sessions" value={formatNumber(totalSessions)} tone="blue" meta={`${rows.length} active queue zone(s)`} />
+        <MetricCard label="SLA Violations" value={formatNumber(violations)} tone={violations > 0 ? 'red' : 'green'} meta={`Threshold ${QUEUE_SLA_SECONDS}s`} />
       </div>
 
-      <div className="grid grid-cols-[1fr_0.7fr] gap-5">
-        {/* Zone breakdown table */}
+      <div className="grid grid-cols-[1.05fr_0.95fr] gap-5">
         <SectionCard title="Queue Zone Breakdown" subtitle="Per-zone session and wait stats">
           {rows.length === 0 ? (
             <EmptyState title="No queue zone data" description="Gold queue tables are empty — pipeline warming up" />
@@ -84,20 +83,19 @@ export function QueueTab({ data }: QueueTabProps) {
           )}
         </SectionCard>
 
-        {/* Wait trend chart */}
-        <SectionCard title="Avg Wait by Hour" subtitle="Minutes per session, grouped by hour">
+        <SectionCard title="Avg Wait Trend" subtitle="Queue delay by hour across the selected period">
           {trendData.length === 0 ? (
             <EmptyState title="No trend data" />
           ) : (
-            <div className="h-52">
+            <div className="h-64">
               <ResponsiveContainer height="100%" width="100%">
-                <BarChart data={trendData} barSize={16}>
-                  <CartesianGrid strokeDasharray="3 3" stroke="#f1f5f9" />
+                <LineChart data={trendData} margin={{ top: 8, right: 8, bottom: 0, left: -8 }}>
+                  <CartesianGrid stroke="#eef2ff" vertical={false} />
                   <XAxis dataKey="hour" tickLine={false} tick={{ fontSize: 11 }} />
                   <YAxis tickLine={false} width={36} tick={{ fontSize: 11 }} unit="m" />
                   <Tooltip isAnimationActive={false} formatter={(v) => [String(Number(v)) + 'm', 'Avg wait']} />
-                  <Bar dataKey="avg_wait_min" fill="#f59e0b" radius={[3, 3, 0, 0]} isAnimationActive={false} />
-                </BarChart>
+                  <Line dataKey="avg_wait_min" dot={{ r: 3, fill: '#f59e0b' }} isAnimationActive={false} stroke="#f59e0b" strokeWidth={3} type="monotone" />
+                </LineChart>
               </ResponsiveContainer>
             </div>
           )}
