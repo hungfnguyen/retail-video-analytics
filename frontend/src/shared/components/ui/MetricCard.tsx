@@ -1,39 +1,68 @@
 import type { ComponentType, ReactNode } from 'react'
 
-export type MetricTone = 'blue' | 'green' | 'amber' | 'red' | 'violet' | 'slate'
+export type MetricTone = 'blue' | 'green' | 'emerald' | 'amber' | 'red' | 'violet' | 'slate'
+
+type MetricTrendTone = 'positive' | 'negative' | 'neutral' | 'alert'
 
 export type MetricCardProps = {
   label: string
   value: string | number
   unit?: string
   meta?: string
+  trend?: {
+    value: string
+    tone?: MetricTrendTone
+  }
   icon?: ComponentType<{ size?: number; className?: string }>
   tone?: MetricTone
   children?: ReactNode
 }
 
-const toneClasses: Record<MetricTone, { bg: string; text: string; icon: string }> = {
-  blue:   { bg: 'bg-blue-50',   text: 'text-blue-700',   icon: 'text-blue-500' },
-  green:  { bg: 'bg-emerald-50', text: 'text-emerald-700', icon: 'text-emerald-500' },
-  amber:  { bg: 'bg-amber-50',  text: 'text-amber-700',  icon: 'text-amber-500' },
-  red:    { bg: 'bg-red-50',    text: 'text-red-700',    icon: 'text-red-500' },
-  violet: { bg: 'bg-violet-50', text: 'text-violet-700', icon: 'text-violet-500' },
-  slate:  { bg: 'bg-slate-100', text: 'text-slate-700',  icon: 'text-slate-500' },
+const toneClasses: Record<MetricTone, { bg: string; border: string; iconBg: string; icon: string; value: string }> = {
+  blue:    { bg: 'bg-white', border: 'border-blue-100',   iconBg: 'bg-blue-50',    icon: 'text-blue-500',    value: 'text-slate-900' },
+  green:   { bg: 'bg-white', border: 'border-emerald-100', iconBg: 'bg-emerald-50', icon: 'text-emerald-500', value: 'text-slate-900' },
+  emerald: { bg: 'bg-white', border: 'border-emerald-100', iconBg: 'bg-emerald-50', icon: 'text-emerald-500', value: 'text-slate-900' },
+  amber:   { bg: 'bg-white', border: 'border-amber-100',  iconBg: 'bg-amber-50',   icon: 'text-amber-500',   value: 'text-slate-900' },
+  red:     { bg: 'bg-white', border: 'border-red-100',    iconBg: 'bg-red-50',     icon: 'text-red-500',     value: 'text-red-600' },
+  violet:  { bg: 'bg-white', border: 'border-violet-100', iconBg: 'bg-violet-50',  icon: 'text-violet-500',  value: 'text-slate-900' },
+  slate:   { bg: 'bg-white', border: 'border-slate-200',  iconBg: 'bg-slate-100',  icon: 'text-slate-500',   value: 'text-slate-900' },
 }
 
-export function MetricCard({ label, value, unit, meta, icon: Icon, tone = 'slate', children }: MetricCardProps) {
+const trendToneClasses: Record<MetricTrendTone, string> = {
+  positive: 'text-emerald-600',
+  negative: 'text-red-500',
+  neutral: 'text-slate-500',
+  alert: 'text-amber-600',
+}
+
+export function MetricCard({ label, value, unit, meta, trend, icon: Icon, tone = 'slate', children }: MetricCardProps) {
   const cls = toneClasses[tone]
   return (
-    <div className={`rounded-xl border border-slate-200 ${cls.bg} p-4`}>
-      <div className="flex items-start justify-between gap-2">
-        <span className="text-xs font-medium text-slate-500 uppercase tracking-wide">{label}</span>
-        {Icon && <Icon size={16} className={cls.icon} />}
+    <div className={`rounded-2xl border ${cls.border} ${cls.bg} px-4 py-3.5 shadow-sm`}>
+      <div className="flex items-start justify-between gap-3">
+        <div className="min-w-0">
+          <span className="block text-[11px] font-semibold uppercase tracking-wide text-slate-500">{label}</span>
+          <div className="mt-2 flex items-baseline gap-1.5">
+            <span className={`text-[2rem] font-bold leading-none ${cls.value}`}>{value}</span>
+            {unit && <span className="text-sm font-medium text-slate-500">{unit}</span>}
+          </div>
+        </div>
+        {Icon && (
+          <div className={`flex h-10 w-10 shrink-0 items-center justify-center rounded-full ${cls.iconBg}`}>
+            <Icon size={18} className={cls.icon} />
+          </div>
+        )}
       </div>
-      <div className="mt-1.5 flex items-baseline gap-1">
-        <span className={`text-2xl font-bold ${cls.text}`}>{value}</span>
-        {unit && <span className="text-sm font-medium text-slate-500">{unit}</span>}
-      </div>
-      {meta && <p className="mt-1 text-xs text-slate-500">{meta}</p>}
+      {(meta || trend) && (
+        <div className="mt-2 min-h-8">
+          {trend && (
+            <p className={`text-xs font-medium ${trendToneClasses[trend.tone ?? 'neutral']}`}>
+              {trend.value}
+            </p>
+          )}
+          {meta && <p className="mt-0.5 text-xs text-slate-500">{meta}</p>}
+        </div>
+      )}
       {children}
     </div>
   )

@@ -11,6 +11,7 @@ type LiveDataState = {
 
 export function useLiveData() {
   const [cameraId, setCameraId] = useState('cam_01')
+  const [refreshNonce, setRefreshNonce] = useState(0)
   const [state, setState] = useState<LiveDataState>({
     data: null,
     error: null,
@@ -45,11 +46,15 @@ export function useLiveData() {
       isMounted = false
       clearTimeout(timeoutId)
     }
-  }, [cameraId])
+  }, [cameraId, refreshNonce])
 
   const switchCamera = useCallback((id: string) => {
     setCameraId(id)
   }, [])
 
-  return { ...state, cameraId, switchCamera }
+  const refresh = useCallback(() => {
+    setRefreshNonce((value) => value + 1)
+  }, [])
+
+  return { ...state, cameraId, switchCamera, refresh }
 }

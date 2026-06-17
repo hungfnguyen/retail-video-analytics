@@ -132,6 +132,15 @@ export type TrafficSummary = {
   peak_time: string
 }
 
+export type LiveInsights = {
+  peak_hour?: string | null
+  peak_hour_visitors: number
+  avg_dwell_sec: number
+  avg_dwell_delta_sec: number
+  avg_queue_wait_sec_today: number
+  avg_queue_wait_delta_sec: number
+}
+
 export type ZoneHeatmapCell = {
   zone_row: string
   zone_col: number
@@ -153,6 +162,7 @@ export type LiveDashboardData = {
   selected_camera_id: string
   frame: LiveFrame
   stats: LiveStats
+  insights: LiveInsights
   alerts: Alert[]
   traffic: TrafficPoint[]
   traffic_summary: TrafficSummary
