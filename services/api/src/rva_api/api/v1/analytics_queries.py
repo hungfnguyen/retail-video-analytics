@@ -92,7 +92,8 @@ def summary_sql(days: int) -> str:
             COALESCE(SUM(track_count), 0) AS track_count,
             COALESCE(SUM(avg_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 0) AS avg_dwell_sec,
             COALESCE(SUM(long_dwell_tracks), 0) AS long_dwell_tracks,
-            COALESCE(SUM(short_dwell_tracks), 0) AS short_dwell_tracks
+            COALESCE(SUM(short_dwell_tracks), 0) AS short_dwell_tracks,
+            COALESCE(SUM(medium_dwell_tracks), 0) AS medium_dwell_tracks
           FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
           WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
         )
@@ -103,7 +104,8 @@ def summary_sql(days: int) -> str:
           COALESCE(traffic.total_detections / NULLIF(traffic.active_days, 0), 0) AS avg_detections_per_active_day,
           dwell.avg_dwell_sec,
           dwell.long_dwell_tracks,
-          dwell.short_dwell_tracks
+          dwell.short_dwell_tracks,
+          dwell.medium_dwell_tracks
         FROM traffic
         CROSS JOIN dwell
     """
@@ -156,52 +158,136 @@ def camera_sql(days: int) -> str:
 
 def daily_sql(days: int) -> str:
     return f"""
+        SELECT
+          CAST(metric_date AS varchar) AS date_label,
+          total_detections,
+          concat(lpad(CAST(peak_hour AS varchar), 2, '0'), ':00') AS peak,
+          COALESCE(avg_dwell_sec, 0) AS avg_dwell_sec,
+          COALESCE(avg_queue_wait_sec, 0) AS avg_queue_wait_sec,
+          COALESCE(total_alerts, 0) AS total_alerts
+        FROM lakehouse.rva_gold_serving.gold_serving_executive_daily
+        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        ORDER BY metric_date ASC
+    """
+
+
+def visitors_series_sql(days: int) -> str:
+    if days <= 1:
+        return f"""
+            SELECT
+              hour_label,
+              detections
+            FROM (
+              SELECT
+                concat(lpad(CAST(hour_of_day AS varchar), 2, '0'), ':00') AS hour_label,
+                SUM(detection_count) AS detections
+              FROM lakehouse.rva_gold_serving.gold_serving_traffic_hourly
+              WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+              GROUP BY hour_of_day
+            )
+            ORDER BY hour_label
+        """
+    return f"""
+        SELECT
+          CAST(metric_date AS varchar) AS date_label,
+          SUM(detection_count) AS detections
+        FROM lakehouse.rva_gold_serving.gold_serving_traffic_daily
+        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        GROUP BY metric_date
+        ORDER BY metric_date
+    """
+
+
+def weekday_pattern_sql(days: int) -> str:
+    return f"""
         WITH daily AS (
-          SELECT
-            metric_date,
-            SUM(detection_count) AS total_detections,
-            COALESCE(SUM(avg_conf * detection_count) / NULLIF(SUM(detection_count), 0), 0) AS avg_conf
+          SELECT metric_date, SUM(detection_count) AS visitors
           FROM lakehouse.rva_gold_serving.gold_serving_traffic_daily
           WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-          GROUP BY 1
-        ),
-        hourly AS (
-          SELECT metric_date, hour_of_day, SUM(detection_count) AS detections
-          FROM lakehouse.rva_gold_serving.gold_serving_traffic_hourly
-          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-          GROUP BY 1, 2
-        ),
-        hourly_ranked AS (
-          SELECT
-            metric_date,
-            hour_of_day,
-            detections,
-            ROW_NUMBER() OVER (PARTITION BY metric_date ORDER BY detections DESC, hour_of_day) AS rn
-          FROM hourly
-        ),
-        dwell AS (
-          SELECT
-            metric_date,
-            SUM(track_count) AS track_count,
-            COALESCE(SUM(avg_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 0) AS avg_dwell_sec
-          FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
-          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
-          GROUP BY 1
+          GROUP BY metric_date
         )
         SELECT
-          CAST(daily.metric_date AS varchar) AS date_label,
-          daily.total_detections,
-          concat(lpad(CAST(hourly_ranked.hour_of_day AS varchar), 2, '0'), ':00 (', CAST(hourly_ranked.detections AS varchar), ')') AS peak,
-          COALESCE(dwell.avg_dwell_sec, 0) AS avg_dwell_sec,
-          daily.avg_conf
+          CASE day_of_week(metric_date)
+            WHEN 1 THEN 'Mon'
+            WHEN 2 THEN 'Tue'
+            WHEN 3 THEN 'Wed'
+            WHEN 4 THEN 'Thu'
+            WHEN 5 THEN 'Fri'
+            WHEN 6 THEN 'Sat'
+            WHEN 7 THEN 'Sun'
+          END AS weekday,
+          day_of_week(metric_date) AS weekday_order,
+          CAST(ROUND(AVG(visitors)) AS BIGINT) AS avg_visitors
         FROM daily
-        LEFT JOIN hourly_ranked
-          ON daily.metric_date = hourly_ranked.metric_date
-         AND hourly_ranked.rn = 1
-        LEFT JOIN dwell
-          ON daily.metric_date = dwell.metric_date
-        ORDER BY daily.metric_date DESC
-        LIMIT 7
+        GROUP BY 1, 2
+        ORDER BY weekday_order
+    """
+
+
+def peak_heatmap_sql(days: int) -> str:
+    return f"""
+        SELECT
+          CASE day_of_week(metric_date)
+            WHEN 1 THEN 'Mon'
+            WHEN 2 THEN 'Tue'
+            WHEN 3 THEN 'Wed'
+            WHEN 4 THEN 'Thu'
+            WHEN 5 THEN 'Fri'
+            WHEN 6 THEN 'Sat'
+            WHEN 7 THEN 'Sun'
+          END AS weekday,
+          day_of_week(metric_date) AS weekday_order,
+          hour_of_day,
+          SUM(detection_count) AS visitors
+        FROM lakehouse.rva_gold_serving.gold_serving_traffic_hourly
+        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        GROUP BY 1, 2, 3
+        ORDER BY weekday_order, hour_of_day
+    """
+
+
+def top_zones_sql(days: int) -> str:
+    return f"""
+        WITH zones AS (
+          SELECT
+            zone_id,
+            REGEXP_REPLACE(zone_id, '_', ' ') AS zone_name,
+            SUM(detection_count) AS visitors,
+            AVG(avg_occupancy) AS avg_occupancy,
+            SUM(occupied_minutes) AS occupied_minutes
+          FROM lakehouse.rva_gold_serving.gold_serving_zone_daily
+          WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          GROUP BY zone_id
+        ),
+        totals AS (
+          SELECT SUM(visitors) AS total_visitors
+          FROM zones
+        )
+        SELECT
+          zones.zone_id,
+          zones.zone_name,
+          zones.visitors,
+          ROUND(zones.visitors * 100.0 / NULLIF(totals.total_visitors, 0), 1) AS share,
+          ROUND(zones.avg_occupancy, 1) AS avg_occupancy,
+          CAST(zones.occupied_minutes AS BIGINT) AS occupied_minutes
+        FROM zones
+        CROSS JOIN totals
+        ORDER BY zones.visitors DESC
+        LIMIT 5
+    """
+
+
+def dwell_trend_sql(days: int) -> str:
+    return f"""
+        SELECT
+          CAST(metric_date AS varchar) AS date_label,
+          ROUND(SUM(avg_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 1) AS avg_dwell_sec,
+          ROUND(SUM(p50_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 1) AS p50_dwell_sec,
+          ROUND(SUM(p90_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 1) AS p90_dwell_sec
+        FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
+        WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+        GROUP BY metric_date
+        ORDER BY metric_date
     """
 
 

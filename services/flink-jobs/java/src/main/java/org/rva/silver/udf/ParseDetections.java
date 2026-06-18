@@ -33,11 +33,13 @@ import java.time.format.DateTimeParseException;
         "anchor_type STRING, anchor_x INT, anchor_y INT, " +
         "anchor_x_norm DOUBLE, anchor_y_norm DOUBLE, " +
         "primary_zone_id STRING, primary_zone_type STRING, " +
-        "in_queue BOOLEAN, queue_zone_id STRING>"))
+        "in_queue BOOLEAN, queue_zone_id STRING, " +
+        "parse_status STRING, parse_error_reason STRING, capture_ts_raw STRING>"))
 public class ParseDetections extends TableFunction<Row> {
 
     private static final Logger LOG = LoggerFactory.getLogger(ParseDetections.class);
     private static final ObjectMapper MAPPER = new ObjectMapper();
+    private static final long INVALID_CAPTURE_MS = -1L;
 
     private transient Counter invalidRecordCounter;
 
@@ -54,7 +56,13 @@ public class ParseDetections extends TableFunction<Row> {
         try {
             JsonNode root = MAPPER.readTree(payload);
 
-            long captureMs = parseCaptureMs(root.path("capture_ts").asText(null));
+            String captureTsRaw = root.path("capture_ts").asText(null);
+            long captureMs = parseCaptureMs(captureTsRaw);
+            if (captureMs < 0) {
+                markInvalid();
+                emitInvalid("invalid_capture_ts", captureTsRaw);
+                return;
+            }
             int imgW = root.path("image_size").path("width").asInt(0);
             int imgH = root.path("image_size").path("height").asInt(0);
 
@@ -102,15 +110,36 @@ public class ParseDetections extends TableFunction<Row> {
                         anchorType, anchorX, anchorY,
                         anchorXNorm, anchorYNorm,
                         zone.zoneId, zone.zoneType,
-                        inQueue, queueZoneId
+                        inQueue, queueZoneId,
+                        "ok", null, captureTsRaw
                     ));
                 }
             }
         } catch (Exception e) {
             LOG.warn("Failed to parse detection payload ({}), skipping record", e.toString());
-            if (invalidRecordCounter != null) {
-                invalidRecordCounter.inc();
-            }
+            markInvalid();
+            emitInvalid("unparseable_json", null);
+        }
+    }
+
+    private void emitInvalid(String reason, String captureTsRaw) {
+        collect(Row.of(
+            INVALID_CAPTURE_MS, 0, 0,
+            null, null, -1, 0.0,
+            0, 0, 0, 0,
+            null, null, null,
+            null, false,
+            null, 0, 0,
+            0.0, 0.0,
+            null, null,
+            false, null,
+            "error", reason, captureTsRaw
+        ));
+    }
+
+    private void markInvalid() {
+        if (invalidRecordCounter != null) {
+            invalidRecordCounter.inc();
         }
     }
 
@@ -213,7 +242,7 @@ public class ParseDetections extends TableFunction<Row> {
     }
 
     private static long parseCaptureMs(String ts) {
-        if (ts == null) return System.currentTimeMillis();
+        if (ts == null) return INVALID_CAPTURE_MS;
         try {
             return Instant.parse(ts).toEpochMilli();
         } catch (DateTimeParseException ignore) {
@@ -222,7 +251,7 @@ public class ParseDetections extends TableFunction<Row> {
             return OffsetDateTime.parse(ts).toInstant().toEpochMilli();
         } catch (DateTimeParseException ignore) {
         }
-        return System.currentTimeMillis();
+        return INVALID_CAPTURE_MS;
     }
 
     private static class ZoneFields {

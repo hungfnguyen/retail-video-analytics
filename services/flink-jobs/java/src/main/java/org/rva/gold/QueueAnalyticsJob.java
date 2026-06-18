@@ -20,6 +20,7 @@ public class QueueAnalyticsJob {
                 .inStreamingMode()
                 .build();
         TableEnvironment tEnv = TableEnvironment.create(settings);
+        tEnv.getConfig().set("table.exec.state.ttl", "1 d");
 
         Map<String, String> cfg = new LinkedHashMap<>();
         cfg.put("type", "iceberg");

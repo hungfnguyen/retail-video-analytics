@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_heatmap_tile_5min  <- silver_detections_v2
 -- Parity with heatmap_presence_sql: class_id=0, is_predicted=false, anchors not null,
 -- tile clamp LEAST/GREATEST on a 32x24 grid.
@@ -33,6 +34,6 @@ FROM (
       AND anchor_x_norm IS NOT NULL
       AND anchor_y_norm IS NOT NULL
       AND capture_ts IS NOT NULL
-      AND CAST(capture_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
+      AND capture_date BETWEEN DATE '{start}' AND DATE '{end}'
 ) base
 GROUP BY store_id, camera_id, bucket_start, tile_x, tile_y;

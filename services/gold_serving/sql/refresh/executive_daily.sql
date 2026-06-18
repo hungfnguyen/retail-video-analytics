@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_executive_daily  <- store/day rollup of traffic + dwell/queue/alerts
 -- Anchored on the traffic spine; percentiles recomputed from gold base (not merged).
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_executive_daily
@@ -58,7 +59,7 @@ alerts AS (
            COUNT(*) FILTER (WHERE severity = 'high') AS high_alerts,
            CAST(MAX(event_ts) AS timestamp(6)) AS latest_alert_ts
     FROM lakehouse.rva.gold_alerts
-    WHERE event_ts IS NOT NULL AND CAST(event_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
+    WHERE event_ts IS NOT NULL AND event_date BETWEEN DATE '{start}' AND DATE '{end}'
     GROUP BY store_id, CAST(event_ts AS DATE)
 )
 SELECT

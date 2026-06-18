@@ -1,3 +1,4 @@
+-- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
 -- gold_serving_heatmap_tile_hour  <- gold_serving_heatmap_tile_5min (rollup)
 -- Additive: SUM(detection_count). avg_conf = weighted.
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_heatmap_tile_hour

@@ -1,14 +1,19 @@
 #!/usr/bin/env python3
-"""Refresh the current Gold serving tables via Trino.
+"""Legacy Trino fallback for Gold serving refresh.
+
+The scheduled/source-of-truth refresh path is now:
+
+Airflow -> services/flink-jobs/python/submit_batch_job.py -> Flink REST -> GoldServingBatchJob
+
+This script remains in the repo only as a manual/debug fallback and as a reference for
+the old Trino-based serving implementation.
 
 Usage:
-    python3 refresh_runner.py intraday              # today
-    python3 refresh_runner.py daily                 # yesterday (finalize)
-    python3 refresh_runner.py backfill --start 2026-06-01 --end 2026-06-12
+    python3 refresh_runner.py intraday --allow-legacy
+    python3 refresh_runner.py daily --allow-legacy
+    python3 refresh_runner.py backfill --start 2026-06-01 --end 2026-06-12 --allow-legacy
 
-This script still targets the physical `lakehouse.rva_gold_serving.*` tables that
-already exist in the repo. Architecturally, treat them as the current
-"Gold serving" implementation detail, not as a fourth medallion tier.
+It still targets the physical `lakehouse.rva_gold_serving.*` tables already in the repo.
 
 Each serving table: read its refresh .sql, inject the {start}/{end} window,
 run the DELETE+INSERT, then write a gold_serving_refresh_audit row (output count,
@@ -115,11 +120,23 @@ def main():
         action="store_true",
         help="skip the idempotent DDL bootstrap (e.g. when Airflow runs apply_ddl as a separate task)",
     )
+    ap.add_argument(
+        "--allow-legacy",
+        action="store_true",
+        help="acknowledge that this path is a legacy Trino fallback and not the scheduled source of truth",
+    )
     args = ap.parse_args()
+
+    if not args.allow_legacy and os.getenv("RVA_ALLOW_LEGACY_TRINO_REFRESH") != "1":
+        sys.exit(
+            "refresh_runner.py is a legacy Trino fallback. "
+            "Use --allow-legacy or set RVA_ALLOW_LEGACY_TRINO_REFRESH=1 for an intentional manual run."
+        )
 
     start, end = resolve_window(args)
     run_id = uuid.uuid4().hex[:12]
     only = set(args.only.split(",")) if args.only else None
+    print("warning: refresh_runner.py is a legacy Trino fallback; scheduled refresh uses Flink batch", file=sys.stderr)
     print(f"refresh mode={args.mode} window=[{start}..{end}] run_id={run_id}")
 
     # Self-heal: ensure the rva_gold_serving schema exists before any INSERT.

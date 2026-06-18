@@ -33,7 +33,7 @@ with DAG(
             external_task_id=external_task_id,
             allowed_states=["success"],
             failed_states=["failed", "upstream_failed"],
-            mode="reschedule",  # free the slot between pokes (required under SequentialExecutor)
+            mode="reschedule",  # free the worker slot between pokes while waiting on upstream daily refreshes
             poke_interval=30,
             timeout=60 * 60,
         )

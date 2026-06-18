@@ -1,11 +1,12 @@
 package org.rva.gold;
 
 import org.apache.flink.table.api.TableEnvironment;
-import org.apache.flink.table.api.TableResult;
 
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.charset.StandardCharsets;
 import java.util.LinkedHashMap;
 import java.util.Map;
-import java.util.UUID;
 import java.util.stream.Collectors;
 
 final class GoldServingSupport {
@@ -50,6 +51,21 @@ final class GoldServingSupport {
         return tEnv;
     }
 
+    static void configureBatchParallelism(TableEnvironment tEnv, String domain) {
+        // By default we respect the cluster's parallelism.default (=1) configured in
+        // infrastructure/flink/conf/flink-conf.yaml. On the shared local session
+        // cluster the always-on streaming jobs permanently hold most of the network
+        // buffer pool, so any batch shuffle with parallelism > 1 fails with
+        // "Insufficient number of network buffers". Batch data volume here is tiny,
+        // so p=1 is both correct and faster. Operators who run Gold serving on a
+        // dedicated/larger batch cluster can still raise parallelism per domain via
+        // RVA_GOLD_SERVING_PARALLELISM_<DOMAIN> or RVA_GOLD_SERVING_BATCH_PARALLELISM.
+        Integer override = resolveBatchParallelismOverride(domain);
+        if (override != null) {
+            tEnv.getConfig().set("table.exec.resource.default-parallelism", String.valueOf(override));
+        }
+    }
+
     static void ensureServingTables(TableEnvironment tEnv) {
         tEnv.executeSql(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS rva_gold_serving.gold_serving_heatmap_tile_5min (",
@@ -66,10 +82,9 @@ final class GoldServingSupport {
                 "  avg_conf DOUBLE,",
                 "  source_rows BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id, camera_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -86,10 +101,9 @@ final class GoldServingSupport {
                 "  detection_count BIGINT,",
                 "  avg_conf DOUBLE,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id, camera_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -105,10 +119,9 @@ final class GoldServingSupport {
                 "  max_people_count BIGINT,",
                 "  avg_conf DOUBLE,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -124,10 +137,9 @@ final class GoldServingSupport {
                 "  peak_hour INT,",
                 "  peak_hour_detections BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -147,10 +159,9 @@ final class GoldServingSupport {
                 "  sla_breach_count BIGINT,",
                 "  sla_threshold_sec INT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -168,10 +179,9 @@ final class GoldServingSupport {
                 "  sla_breach_count BIGINT,",
                 "  sla_threshold_sec INT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -188,10 +198,9 @@ final class GoldServingSupport {
                 "  detection_count BIGINT,",
                 "  occupied_minutes BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -207,10 +216,9 @@ final class GoldServingSupport {
                 "  detection_count BIGINT,",
                 "  occupied_minutes BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -228,10 +236,9 @@ final class GoldServingSupport {
                 "  medium_dwell_tracks BIGINT,",
                 "  long_dwell_tracks BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -256,10 +263,9 @@ final class GoldServingSupport {
                 "  source_min_ts TIMESTAMP(6),",
                 "  source_max_ts TIMESTAMP(6),",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -275,10 +281,9 @@ final class GoldServingSupport {
                 "  clip_count BIGINT,",
                 "  latest_alert_ts TIMESTAMP(6),",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -293,10 +298,9 @@ final class GoldServingSupport {
                 "  clip_count BIGINT,",
                 "  latest_alert_ts TIMESTAMP(6),",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'metric_date,bucket(16, camera_id)'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -317,10 +321,9 @@ final class GoldServingSupport {
                 "  started_at TIMESTAMP(6),",
                 "  finished_at TIMESTAMP(6),",
                 "  refreshed_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (partition_date) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'partition_date'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
 
@@ -336,10 +339,9 @@ final class GoldServingSupport {
                 "  observed_value STRING,",
                 "  expected_rule STRING,",
                 "  checked_at TIMESTAMP(6)",
-                ") WITH (",
+                ") PARTITIONED BY (partition_date) WITH (",
                 "  'format-version' = '2',",
-                "  'write.format.default' = 'parquet',",
-                "  'partitioning' = 'partition_date'",
+                "  'write.format.default' = 'parquet'",
                 ")"
         ));
     }
@@ -348,61 +350,19 @@ final class GoldServingSupport {
         tEnv.executeSql(sql);
     }
 
-    static long scalarLong(TableEnvironment tEnv, String sql) throws Exception {
-        try (var it = tEnv.executeSql(sql).collect()) {
-            if (it.hasNext()) {
-                var row = it.next();
-                Object v = row.getField(0);
-                if (v == null) {
-                    return 0L;
-                }
-                if (v instanceof Number) {
-                    return ((Number) v).longValue();
-                }
-                return Long.parseLong(String.valueOf(v));
+    static String renderSqlResource(String resourcePath, Map<String, String> replacements) {
+        try (InputStream input = GoldServingSupport.class.getClassLoader().getResourceAsStream(resourcePath)) {
+            if (input == null) {
+                throw new IllegalArgumentException("Missing SQL resource: " + resourcePath);
             }
-            return 0L;
+            String sql = new String(input.readAllBytes(), StandardCharsets.UTF_8);
+            for (Map.Entry<String, String> entry : replacements.entrySet()) {
+                sql = sql.replace(entry.getKey(), entry.getValue());
+            }
+            return sql;
+        } catch (IOException e) {
+            throw new RuntimeException("Failed to load SQL resource: " + resourcePath, e);
         }
-    }
-
-    static void writeAudit(
-            TableEnvironment tEnv,
-            String runId,
-            String runMode,
-            String tableName,
-            String sourceTable,
-            String start,
-            String end,
-            Long outputRowCount,
-            String status,
-            String errorMessage,
-            String startedAt,
-            String finishedAt
-    ) throws Exception {
-        String sql = String.join("\n",
-                "INSERT INTO rva_gold_serving.gold_serving_refresh_audit",
-                "SELECT",
-                "  'gold_serving_batch' AS job_name,",
-                "  " + sqlString(runId) + " AS run_id,",
-                "  " + sqlString(runMode) + " AS run_mode,",
-                "  " + sqlString(tableName) + " AS gold_serving_table,",
-                "  DATE " + sqlString(end) + " AS partition_date,",
-                "  CAST(TIMESTAMP " + sqlString(startedAt) + " AS TIMESTAMP(6)) AS refresh_window_start,",
-                "  CAST(TIMESTAMP " + sqlString(finishedAt) + " AS TIMESTAMP(6)) AS refresh_window_end,",
-                "  " + sqlString(sourceTable) + " AS source_table,",
-                "  CAST(NULL AS BIGINT) AS source_row_count,",
-                "  " + (outputRowCount == null ? "CAST(NULL AS BIGINT)" : outputRowCount.toString()) + " AS output_row_count,",
-                "  " + sqlString(status) + " AS status,",
-                "  " + sqlString(errorMessage) + " AS error_message,",
-                "  CAST(TIMESTAMP " + sqlString(startedAt) + " AS TIMESTAMP(6)) AS started_at,",
-                "  CAST(TIMESTAMP " + sqlString(finishedAt) + " AS TIMESTAMP(6)) AS finished_at,",
-                "  CAST(CURRENT_TIMESTAMP AS TIMESTAMP(6)) AS refreshed_at"
-        );
-        executeAndAwait(tEnv, sql);
-    }
-
-    static String newRunId() {
-        return UUID.randomUUID().toString().replace("-", "").substring(0, 12);
     }
 
     static String getenv(String k, String def) {
@@ -436,5 +396,34 @@ final class GoldServingSupport {
             return "NULL";
         }
         return "'" + value.replace("'", "''") + "'";
+    }
+
+    /**
+     * Returns an explicit batch parallelism override for the given domain, or {@code null}
+     * to fall back to the cluster's parallelism.default. Only env vars can raise it; there is
+     * no hard-coded per-domain elevation because that contradicts the local cluster's
+     * network-buffer budget (see {@link #configureBatchParallelism}).
+     */
+    private static Integer resolveBatchParallelismOverride(String domain) {
+        String specificEnv = System.getenv("RVA_GOLD_SERVING_PARALLELISM_" + domain.toUpperCase());
+        if (specificEnv != null && !specificEnv.isBlank()) {
+            return parsePositiveInt(specificEnv, 1);
+        }
+
+        String defaultEnv = System.getenv("RVA_GOLD_SERVING_BATCH_PARALLELISM");
+        if (defaultEnv != null && !defaultEnv.isBlank()) {
+            return parsePositiveInt(defaultEnv, 1);
+        }
+
+        return null;
+    }
+
+    private static int parsePositiveInt(String raw, int fallback) {
+        try {
+            int value = Integer.parseInt(raw.trim());
+            return value > 0 ? value : fallback;
+        } catch (NumberFormatException ignore) {
+            return fallback;
+        }
     }
 }

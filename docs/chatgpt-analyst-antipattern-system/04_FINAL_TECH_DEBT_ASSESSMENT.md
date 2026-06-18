@@ -198,25 +198,37 @@ submit_batch_job.py:
 Audit có thể ghi bằng Trino HTTP client hoặc một task Airflow riêng. Đây là observability rất
 đáng làm vì nó cho biết ngày/domain/table nào đã refresh xong.
 
-### D5. `INSERT OVERWRITE` cần chứng minh idempotency
+### D5. Gold serving refresh cần semantics idempotency rõ ràng
 
 Mức độ: **P0 correctness check**
 
-Gold serving batch đang dùng `INSERT OVERWRITE`. Cần verify rõ:
-
-- rerun cùng domain/date có giữ row count ổn định không
-- retry task có nhân đôi không
-- ngày không có output có clear partition cũ không
-- partial failure có để lại bảng ở trạng thái nửa cũ nửa mới không
-
-Nếu test cho thấy dynamic overwrite không clear partition rỗng, cần đổi sang strategy rõ hơn:
+`INSERT OVERWRITE` trong Flink/Iceberg là một vùng semantics dễ gây hiểu sai. Hướng rõ ràng hơn
+cho Gold serving là:
 
 ```text
 DELETE WHERE metric_date BETWEEN start AND end
 INSERT INTO ...
 ```
 
-hoặc giữ `INSERT OVERWRITE` nhưng ghi rõ giới hạn trong docs.
+Mục tiêu cần đảm bảo:
+
+- rerun cùng domain/date có giữ row count ổn định không
+- retry task có nhân đôi không
+- ngày không có output có clear partition cũ không
+- partial failure có để lại bảng ở trạng thái nửa cũ nửa mới không
+
+Quyết định hiện tại:
+
+```text
+DELETE WHERE metric_date BETWEEN start AND end
+INSERT INTO ...
+```
+
+Trade-off:
+
+- nếu fail sau `DELETE` nhưng trước khi batch insert hoàn tất, window đó sẽ tạm rỗng cho đến lần
+  retry kế tiếp
+- đổi lại, semantics refresh/idempotency minh bạch hơn và dễ audit hơn
 
 ### D6. Trino refresh path cũ còn tồn tại
 

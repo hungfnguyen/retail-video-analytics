@@ -11,8 +11,8 @@ from urllib.parse import urlparse
 
 from fastapi import APIRouter, HTTPException
 
+from rva_api.api.v1.analytics_queries import trino_query
 from core.settings import load_yaml_config
-from rva_api.api.v1.live_alerts import read_recent_alerts
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
 
@@ -33,6 +33,8 @@ _redis_client: Any | None = None
 _health_cache: list[dict[str, Any]] = []
 _health_cache_ts: float = 0.0
 HEALTH_CACHE_TTL = 10.0  # seconds — TCP checks are expensive, cache for 10s
+_insights_cache: dict[str, tuple[float, dict[str, Any]]] = {}
+INSIGHTS_CACHE_TTL = 60.0
 
 
 def _redis_config() -> RedisClientConfig:
@@ -302,6 +304,11 @@ def _safe_float(raw: Any, default: float = 0.0) -> float:
     except (TypeError, ValueError):
         return default
 
+
+
+def _validate_camera_id(camera_id: str) -> None:
+    if not camera_id or not camera_id.replace("_", "").replace("-", "").isalnum():
+        raise HTTPException(status_code=400, detail="Invalid camera_id")
 
 
 def _redis_get(client: Any, key: str, error_detail: str) -> Any:
@@ -720,6 +727,105 @@ def _traffic_from_redis(
     }
 
 
+def _live_insights_sql(camera_id: str) -> str:
+    return f"""
+        WITH peak_hour AS (
+          SELECT hour_of_day, SUM(detection_count) AS visitors
+          FROM lakehouse.rva_gold_serving.gold_serving_traffic_hourly
+          WHERE camera_id = '{camera_id}'
+            AND metric_date = CURRENT_DATE
+          GROUP BY hour_of_day
+          ORDER BY visitors DESC, hour_of_day
+          LIMIT 1
+        ),
+        dwell_today AS (
+          SELECT COALESCE(SUM(avg_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 0) AS value
+          FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
+          WHERE camera_id = '{camera_id}'
+            AND metric_date = CURRENT_DATE
+        ),
+        dwell_yesterday AS (
+          SELECT COALESCE(SUM(avg_dwell_sec * track_count) / NULLIF(SUM(track_count), 0), 0) AS value
+          FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
+          WHERE camera_id = '{camera_id}'
+            AND metric_date = CURRENT_DATE - INTERVAL '1' DAY
+        ),
+        queue_today AS (
+          SELECT COALESCE(SUM(avg_wait_sec * sessions) / NULLIF(SUM(sessions), 0), 0) AS value
+          FROM lakehouse.rva_gold_serving.gold_serving_queue_daily
+          WHERE camera_id = '{camera_id}'
+            AND metric_date = CURRENT_DATE
+        ),
+        queue_yesterday AS (
+          SELECT COALESCE(SUM(avg_wait_sec * sessions) / NULLIF(SUM(sessions), 0), 0) AS value
+          FROM lakehouse.rva_gold_serving.gold_serving_queue_daily
+          WHERE camera_id = '{camera_id}'
+            AND metric_date = CURRENT_DATE - INTERVAL '1' DAY
+        )
+        SELECT
+          peak_hour.hour_of_day,
+          COALESCE(peak_hour.visitors, 0) AS peak_hour_visitors,
+          COALESCE(dwell_today.value, 0) AS avg_dwell_sec,
+          COALESCE(dwell_today.value, 0) - COALESCE(dwell_yesterday.value, 0) AS avg_dwell_delta_sec,
+          COALESCE(queue_today.value, 0) AS avg_queue_wait_sec_today,
+          COALESCE(queue_today.value, 0) - COALESCE(queue_yesterday.value, 0) AS avg_queue_wait_delta_sec
+        FROM (SELECT 1) seed
+        LEFT JOIN peak_hour ON TRUE
+        CROSS JOIN dwell_today
+        CROSS JOIN dwell_yesterday
+        CROSS JOIN queue_today
+        CROSS JOIN queue_yesterday
+    """
+
+
+def _default_live_insights() -> dict[str, Any]:
+    return {
+        "peak_hour": None,
+        "peak_hour_visitors": 0,
+        "avg_dwell_sec": 0.0,
+        "avg_dwell_delta_sec": 0.0,
+        "avg_queue_wait_sec_today": 0.0,
+        "avg_queue_wait_delta_sec": 0.0,
+    }
+
+
+def _live_insights(camera_id: str) -> dict[str, Any]:
+    cached = _insights_cache.get(camera_id)
+    now_monotonic = time.perf_counter()
+    if cached and now_monotonic - cached[0] <= INSIGHTS_CACHE_TTL:
+        return cached[1]
+
+    try:
+        rows = trino_query(_live_insights_sql(camera_id), 5.0)
+    except Exception:
+        payload = _default_live_insights()
+        _insights_cache[camera_id] = (now_monotonic, payload)
+        return payload
+
+    if not rows:
+        payload = _default_live_insights()
+        _insights_cache[camera_id] = (now_monotonic, payload)
+        return payload
+
+    row = rows[0]
+    peak_hour_raw = row[0]
+    if peak_hour_raw is None:
+        peak_hour = None
+    else:
+        peak_hour = f"{_safe_int(peak_hour_raw):02d}:00"
+
+    payload = {
+        "peak_hour": peak_hour,
+        "peak_hour_visitors": _safe_int(row[1]),
+        "avg_dwell_sec": round(_safe_float(row[2]), 1),
+        "avg_dwell_delta_sec": round(_safe_float(row[3]), 1),
+        "avg_queue_wait_sec_today": round(_safe_float(row[4]), 1),
+        "avg_queue_wait_delta_sec": round(_safe_float(row[5]), 1),
+    }
+    _insights_cache[camera_id] = (now_monotonic, payload)
+    return payload
+
+
 def _health_endpoint(raw: str) -> tuple[str, int] | None:
     parsed = urlparse(raw)
     if parsed.hostname:
@@ -845,6 +951,7 @@ def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str
 
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)
 def get_live_dashboard(camera_id: str) -> LiveDashboardData:
+    _validate_camera_id(camera_id)
     client = _get_redis_client()
     now = datetime.now(timezone.utc)
 
@@ -914,6 +1021,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     )
 
     traffic_points, traffic_summary = _traffic_from_redis(client, camera_id)
+    insights = _live_insights(camera_id)
 
     data = {
         "store": store,
@@ -968,6 +1076,7 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
             "status": status,
             "updated_at": count_updated_at or now.isoformat(),
         },
+        "insights": insights,
         "alerts": _recent_alerts(client, camera_id),
         "traffic": traffic_points,
         "traffic_summary": {**traffic_summary, "current_total": current_count},

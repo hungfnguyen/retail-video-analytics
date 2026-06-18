@@ -31,12 +31,57 @@ export type DwellBand = {
   value: number
 }
 
+export type VisitorsSeriesPoint = {
+  label: string
+  visitors: number
+}
+
+export type WeekdayPatternPoint = {
+  weekday: string
+  visitors: number
+}
+
+export type PeakHeatmapPoint = {
+  weekday: string
+  weekday_order: number
+  hour: number
+  visitors: number
+}
+
+export type TopZonePoint = {
+  zone_id: string
+  zone_name: string
+  visitors: number
+  share: number
+  avg_occupancy: number
+  occupied_minutes: number
+}
+
+export type DwellTrendPoint = {
+  date: string
+  avg_dwell_sec: number
+  p50_dwell_sec: number
+  p90_dwell_sec: number
+}
+
 export type DailySummaryRow = {
   date: string
   detections: number
   peak: string
   avg_dwell_sec: number
   avg_confidence: number
+  avg_queue_wait_sec: number
+  alerts: number
+}
+
+export type PeakDaySummary = {
+  date: string
+  visitors: number
+}
+
+export type PeakHourSummary = {
+  hour: string
+  visitors: number
 }
 
 export type AnalyticsDashboardData = {
@@ -45,10 +90,19 @@ export type AnalyticsDashboardData = {
   data_status: 'ready' | 'empty' | 'error'
   error_message: string | null
   kpis: AnalyticsKpi[]
+  total_visitors: number
+  peak_day: PeakDaySummary | null
+  peak_hour: PeakHourSummary | null
+  avg_dwell_sec: number
   hourly_traffic: HourlyTrafficPoint[]
   camera_comparison: CameraComparisonPoint[]
+  visitors_over_time: VisitorsSeriesPoint[]
+  weekday_pattern: WeekdayPatternPoint[]
+  peak_hours_heatmap: PeakHeatmapPoint[]
+  top_zones: TopZonePoint[]
   heatmap: HeatmapCell[]
   dwell_bands: DwellBand[]
+  dwell_trend: DwellTrendPoint[]
   daily_summary: DailySummaryRow[]
 }
 

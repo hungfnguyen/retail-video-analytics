@@ -210,28 +210,28 @@ ORDER BY refreshed_at DESC
 LIMIT 10;
 ```
 
-### 3.2 Kiểm chứng `INSERT OVERWRITE`
+### 3.2 Chốt semantics idempotency cho Gold serving refresh
 
 Việc cần làm:
 
-- chọn một ngày có data.
-- chạy cùng domain 2 lần.
-- so sánh row count trước/sau.
-- chạy một ngày không có data để xem partition cũ có bị clear không.
+- đổi batch SQL sang `INSERT INTO`
+- để submitter chủ động:
+  - `DELETE` đúng `metric_date` window trên target
+  - submit Flink batch
+  - poll `jobId`
+  - ghi audit
+- chạy cùng domain 2 lần và so sánh row count trước/sau
 
-Nếu fail:
+Nếu verify fail:
 
-- đổi strategy cho Gold serving sang:
-
-```text
-DELETE WHERE metric_date BETWEEN start AND end
-INSERT INTO ...
-```
+- kiểm tra logic pre-delete window hoặc target partitioning
+- không quay lại `INSERT OVERWRITE` nếu chưa có lý do rất rõ
 
 Output:
 
 - note kết quả trong docs hoặc commit message
-- quyết định giữ `INSERT OVERWRITE` hoặc đổi sang delete+insert
+- xác nhận rerun không nhân đôi
+- xác nhận audit vẫn phản ánh đúng `ok/error`
 
 ## Phase 4 — Cleanup Old Paths & Docs
 

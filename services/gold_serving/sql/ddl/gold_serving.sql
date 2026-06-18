@@ -19,7 +19,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_heatmap_tile_
     avg_conf        DOUBLE,
     source_rows     BIGINT,
     refreshed_at    TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id', 'camera_id']);
 
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_heatmap_tile_hour (
     store_id        VARCHAR,
@@ -33,7 +33,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_heatmap_tile_
     detection_count BIGINT,
     avg_conf        DOUBLE,
     refreshed_at    TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id', 'camera_id']);
 
 -- ── Traffic ──────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_hourly (
@@ -47,7 +47,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_hourl
     max_people_count BIGINT,
     avg_conf         DOUBLE,
     refreshed_at     TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_daily (
     store_id             VARCHAR,
@@ -60,7 +60,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_daily
     peak_hour            INTEGER,
     peak_hour_detections BIGINT,
     refreshed_at         TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Queue ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_queue_hourly (
@@ -78,7 +78,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_queue_hourly 
     sla_breach_count   BIGINT,
     sla_threshold_sec  INTEGER,
     refreshed_at       TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_queue_daily (
     store_id           VARCHAR,
@@ -93,7 +93,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_queue_daily (
     sla_breach_count   BIGINT,
     sla_threshold_sec  INTEGER,
     refreshed_at       TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Zone (sourced directly from silver_detections_v2) ──────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_hourly (
@@ -108,7 +108,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_hourly (
     detection_count  BIGINT,
     occupied_minutes BIGINT,
     refreshed_at     TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_daily (
     store_id         VARCHAR,
@@ -121,7 +121,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_daily (
     detection_count  BIGINT,
     occupied_minutes BIGINT,
     refreshed_at     TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Dwell ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_dwell_daily (
@@ -137,7 +137,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_dwell_daily (
     medium_dwell_tracks BIGINT,
     long_dwell_tracks   BIGINT,
     refreshed_at        TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Executive (store/day) ──────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_executive_daily (
@@ -160,7 +160,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_executive_dai
     source_min_ts        TIMESTAMP(6),
     source_max_ts        TIMESTAMP(6),
     refreshed_at         TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Alert (incident counts from gold_alerts) ─────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_alert_hourly (
@@ -174,7 +174,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_alert_hourly 
     clip_count      BIGINT,
     latest_alert_ts TIMESTAMP(6),
     refreshed_at    TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_alert_daily (
     store_id        VARCHAR,
@@ -186,7 +186,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_alert_daily (
     clip_count      BIGINT,
     latest_alert_ts TIMESTAMP(6),
     refreshed_at    TIMESTAMP(6)
-) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'bucket(camera_id, 16)']);
+) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
 -- ── Audit / observability ────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_refresh_audit (
