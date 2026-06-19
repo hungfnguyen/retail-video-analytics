@@ -71,5 +71,6 @@ def test_daily_query_returns_dwell_and_quality_fields():
     sql = analytics_queries.daily_sql(7)
 
     assert "avg_dwell_sec" in sql
-    assert "avg_conf" in sql
+    assert "avg_queue_wait_sec" in sql
+    assert "total_alerts" in sql
     assert "unique_tracks" not in sql

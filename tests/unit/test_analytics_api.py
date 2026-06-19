@@ -60,6 +60,22 @@ def test_dashboard_error_response_is_not_cached(monkeypatch):
     assert "analytics:cache:v1:dashboard:days_7" not in cache.ttls
 
 
+def test_analytics_error_message_identifies_gold_serving_schema():
+    message = analytics._analytics_error_message(
+        RuntimeError("Schema 'rva_gold_serving' does not exist")
+    )
+
+    assert message.startswith("Gold serving schema unavailable:")
+
+
+def test_analytics_error_message_identifies_gold_serving_table():
+    message = analytics._analytics_error_message(
+        RuntimeError("Table 'gold_serving_traffic_daily' not found")
+    )
+
+    assert message.startswith("Gold serving table unavailable:")
+
+
 def test_queue_ready_response_uses_cache(monkeypatch):
     cache = FakeCache()
     calls = {"count": 0}

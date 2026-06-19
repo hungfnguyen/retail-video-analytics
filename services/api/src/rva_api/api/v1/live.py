@@ -305,6 +305,10 @@ def _safe_float(raw: Any, default: float = 0.0) -> float:
         return default
 
 
+def _wait_ms_from_seconds(raw: Any) -> int:
+    return max(0, int(round(_safe_float(raw) * 1000)))
+
+
 
 def _validate_camera_id(camera_id: str) -> None:
     if not camera_id or not camera_id.replace("_", "").replace("-", "").isalnum():
@@ -479,6 +483,7 @@ def _zone_counts_from_sources(
             if isinstance(item, dict)
         ]
         result = [item for item in result if item.get("zone_id")]
+        result = [_merge_zone_wait_fields(item, wait_fields) for item in result]
         _enrich_zone_counts_with_wait(result, client, camera_id)
         return result
 
@@ -530,8 +535,12 @@ def _enrich_zone_counts_with_wait(
         results = [{} for _ in queue_entries]
     for (_idx, zc), q in zip(queue_entries, results):
         q = q or {}
-        zc["avg_wait_ms"] = _safe_int(_decode_redis_value(q.get("avg_wait_ms") or q.get(b"avg_wait_ms") or "0")) or 0
-        zc["max_wait_ms"] = _safe_int(_decode_redis_value(q.get("max_wait_ms") or q.get(b"max_wait_ms") or "0")) or 0
+        avg_wait_raw = q.get("avg_wait_ms") or q.get(b"avg_wait_ms")
+        max_wait_raw = q.get("max_wait_ms") or q.get(b"max_wait_ms")
+        if avg_wait_raw is not None:
+            zc["avg_wait_ms"] = _safe_int(_decode_redis_value(avg_wait_raw)) or 0
+        if max_wait_raw is not None:
+            zc["max_wait_ms"] = _safe_int(_decode_redis_value(max_wait_raw)) or 0
 
 
 def _queue_wait_fields_from_sources(
@@ -602,8 +611,8 @@ def _merge_zone_wait_fields(
 ) -> dict[str, Any]:
     fields = wait_fields.get(str(zone.get("zone_id") or ""), {})
     if fields:
-        zone["avg_wait_seconds"] = fields["avg_wait_seconds"]
-        zone["max_wait_seconds"] = fields["max_wait_seconds"]
+        zone["avg_wait_ms"] = _wait_ms_from_seconds(fields["avg_wait_seconds"])
+        zone["max_wait_ms"] = _wait_ms_from_seconds(fields["max_wait_seconds"])
     return zone
 
 
@@ -629,8 +638,8 @@ def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]
             for global_id in global_track_ids
             if global_id is not None
         ] if isinstance(global_track_ids, list) else [],
-        "avg_wait_ms": _safe_int(item.get("avg_wait_ms")) or 0,
-        "max_wait_ms": _safe_int(item.get("max_wait_ms")) or 0,
+        "avg_wait_ms": _safe_int(item.get("avg_wait_ms")) or _wait_ms_from_seconds(item.get("avg_wait_seconds")),
+        "max_wait_ms": _safe_int(item.get("max_wait_ms")) or _wait_ms_from_seconds(item.get("max_wait_seconds")),
     }
 
 

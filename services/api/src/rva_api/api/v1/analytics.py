@@ -76,6 +76,22 @@ def _fmt_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _analytics_error_message(exc: BaseException) -> str:
+    raw = str(exc)
+    lower = raw.lower()
+    if isinstance(exc, URLError):
+        return f"Trino unavailable: {raw}"
+    if "schema" in lower and ("not found" in lower or "does not exist" in lower):
+        return f"Gold serving schema unavailable: {raw}"
+    if "table" in lower and ("not found" in lower or "does not exist" in lower):
+        return f"Gold serving table unavailable: {raw}"
+    return raw
+
+
+def _row_value(row: list[Any], index: int, default: Any = None) -> Any:
+    return row[index] if len(row) > index else default
+
+
 _CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -209,7 +225,7 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
             try:
                 rows[name] = future.result()
             except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-                errors[name] = str(exc)
+                errors[name] = _analytics_error_message(exc)
                 rows[name] = []
 
     return rows, errors
@@ -232,7 +248,7 @@ def get_alert_history(
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "error",
-            "error_message": str(exc),
+            "error_message": _analytics_error_message(exc),
             "records": [],
         }
         return AlertHistoryData.model_validate(payload)
@@ -296,7 +312,7 @@ def get_queue_analytics(
             try:
                 rows[name] = future.result()
             except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-                errors[name] = str(exc)
+                errors[name] = _analytics_error_message(exc)
                 rows[name] = []
 
     if errors:
@@ -403,14 +419,14 @@ def get_analytics_dashboard(
         return AnalyticsDashboardData.model_validate(payload)
 
     summary_row = rows["summary"][0] if rows["summary"] else []
-    hourly_rows = rows["hourly"]
-    camera_rows = rows["camera"]
-    daily_rows = rows["daily"]
-    visitors_series_rows = rows["visitors_series"]
-    weekday_pattern_rows = rows["weekday_pattern"]
-    peak_heatmap_rows = rows["peak_heatmap"]
-    top_zone_rows = rows["top_zones"]
-    dwell_trend_rows = rows["dwell_trend"]
+    hourly_rows = rows.get("hourly", [])
+    camera_rows = rows.get("camera", [])
+    daily_rows = rows.get("daily", [])
+    visitors_series_rows = rows.get("visitors_series", [])
+    weekday_pattern_rows = rows.get("weekday_pattern", [])
+    peak_heatmap_rows = rows.get("peak_heatmap", [])
+    top_zone_rows = rows.get("top_zones", [])
+    dwell_trend_rows = rows.get("dwell_trend", [])
 
     total_detections = _safe_int(summary_row[0] if len(summary_row) > 0 else 0)
     if total_detections == 0:
@@ -513,17 +529,17 @@ def get_analytics_dashboard(
         ],
         "weekday_pattern": [
             {
-                "weekday": str(row[0]),
-                "visitors": _safe_int(row[2]),
+                "weekday": str(_row_value(row, 0, "")),
+                "visitors": _safe_int(_row_value(row, 2, 0)),
             }
             for row in weekday_pattern_rows
         ],
         "peak_hours_heatmap": [
             {
-                "weekday": str(row[0]),
-                "weekday_order": _safe_int(row[1]),
-                "hour": _safe_int(row[2]),
-                "visitors": _safe_int(row[3]),
+                "weekday": str(_row_value(row, 0, "")),
+                "weekday_order": _safe_int(_row_value(row, 1, 0)),
+                "hour": _safe_int(_row_value(row, 2, 0)),
+                "visitors": _safe_int(_row_value(row, 3, 0)),
             }
             for row in peak_heatmap_rows
         ],
@@ -555,13 +571,13 @@ def get_analytics_dashboard(
         ],
         "daily_summary": [
             {
-                "date": str(row[0]),
-                "detections": _safe_int(row[1]),
-                "peak": str(row[2]),
-                "avg_dwell_sec": round(_safe_float(row[3]), 1),
+                "date": str(_row_value(row, 0, "")),
+                "detections": _safe_int(_row_value(row, 1, 0)),
+                "peak": str(_row_value(row, 2, "")),
+                "avg_dwell_sec": round(_safe_float(_row_value(row, 3, 0)), 1),
                 "avg_confidence": 0.0,
-                "avg_queue_wait_sec": round(_safe_float(row[4]), 1),
-                "alerts": _safe_int(row[5]),
+                "avg_queue_wait_sec": round(_safe_float(_row_value(row, 4, 0)), 1),
+                "alerts": _safe_int(_row_value(row, 5, 0)),
             }
             for row in daily_rows
         ],
@@ -605,7 +621,7 @@ def get_presence_heatmap(
     try:
         rows = trino_query(heatmap_presence_sql(camera_id, days), HEATMAP_QUERY_TIMEOUT)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-        return _empty("error", str(exc))
+        return _empty("error", _analytics_error_message(exc))
 
     if not rows:
         payload = {

@@ -22,9 +22,18 @@ export function useQueueData(days: number) {
   }, [days])
 
   useEffect(() => {
-    void refresh()
-    const intervalId = window.setInterval(() => { void refresh() }, POLL_INTERVAL_MS)
-    return () => { window.clearInterval(intervalId) }
+    const initialId = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+
+    const intervalId = window.setInterval(() => {
+      void refresh()
+    }, POLL_INTERVAL_MS)
+
+    return () => {
+      window.clearTimeout(initialId)
+      window.clearInterval(intervalId)
+    }
   }, [refresh])
 
   return { ...state, refresh }
