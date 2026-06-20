@@ -74,3 +74,29 @@ def test_daily_query_returns_dwell_and_quality_fields():
     assert "avg_queue_wait_sec" in sql
     assert "total_alerts" in sql
     assert "unique_tracks" not in sql
+
+
+def test_dashboard_queries_accept_camera_filter():
+    combined_sql = "\n".join(
+        [
+            analytics_queries.summary_sql(7, "cam_01"),
+            analytics_queries.hourly_sql(7, "cam_01"),
+            analytics_queries.daily_sql(7, "cam_01"),
+            analytics_queries.visitors_series_sql(7, "cam_01"),
+            analytics_queries.weekday_pattern_sql(7, "cam_01"),
+            analytics_queries.peak_heatmap_sql(7, "cam_01"),
+            analytics_queries.top_zones_sql(7, "cam_01"),
+            analytics_queries.dwell_trend_sql(7, "cam_01"),
+        ]
+    )
+
+    assert "camera_id = 'cam_01'" in combined_sql
+    camera_daily_sql = analytics_queries.daily_sql(7, "cam_01")
+    assert "avg_confidence" in camera_daily_sql
+    assert "gold_serving_executive_daily" not in camera_daily_sql
+
+
+def test_queue_and_alert_queries_accept_camera_filter():
+    assert "camera_id = 'cam_02'" in analytics_queries.queue_zone_summary_sql(7, "cam_02")
+    assert "camera_id = 'cam_02'" in analytics_queries.queue_wait_trend_sql(7, "cam_02")
+    assert "camera_id = 'cam_02'" in analytics_queries.alerts_history_sql(7, "cam_02")

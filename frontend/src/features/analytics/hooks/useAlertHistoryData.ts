@@ -6,17 +6,17 @@ const POLL_INTERVAL_MS = 60_000
 
 type State = { data: AlertHistoryData | null; error: string | null }
 
-export function useAlertHistoryData(days: number) {
+export function useAlertHistoryData(days: number, cameraId?: string | null) {
   const [state, setState] = useState<State>({ data: null, error: null })
 
   const refresh = useCallback(async () => {
     try {
-      const data = await getAlertHistoryData(days)
+      const data = await getAlertHistoryData(days, cameraId)
       setState({ data, error: null })
     } catch {
       setState({ data: null, error: 'Unable to load alert history.' })
     }
-  }, [days])
+  }, [cameraId, days])
 
   useEffect(() => {
     const initialId = window.setTimeout(() => {

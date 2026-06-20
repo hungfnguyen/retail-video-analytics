@@ -2,6 +2,9 @@ import { CalendarDays, RefreshCw } from 'lucide-react'
 import { datePresetLabels, type DatePreset } from '../datePresets'
 
 type AnalyticsFilterBarProps = {
+  cameraId: string
+  cameraOptions: string[]
+  onCameraChange: (cameraId: string) => void
   preset: DatePreset
   onPresetChange: (p: DatePreset) => void
   onRefresh: () => void
@@ -18,11 +21,32 @@ function StaticSelect({ label, value, disabled = false }: { label: string; value
   )
 }
 
-export function AnalyticsFilterBar({ preset, onPresetChange, onRefresh }: AnalyticsFilterBarProps) {
+export function AnalyticsFilterBar({
+  cameraId,
+  cameraOptions,
+  onCameraChange,
+  preset,
+  onPresetChange,
+  onRefresh,
+}: AnalyticsFilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <StaticSelect label="Store" value="Store A" />
-      <StaticSelect label="Camera" value="All Cameras" disabled />
+
+      <label className="flex min-w-[150px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 shadow-sm">
+        <span className="text-slate-400">Camera</span>
+        <select
+          className="min-w-0 bg-transparent font-medium text-slate-700 outline-none"
+          value={cameraId}
+          onChange={(e) => onCameraChange(e.target.value)}
+        >
+          <option value="all">All Cameras</option>
+          {cameraOptions.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </label>
+
       <StaticSelect label="Zone" value="All Zones" disabled />
 
       <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 shadow-sm">

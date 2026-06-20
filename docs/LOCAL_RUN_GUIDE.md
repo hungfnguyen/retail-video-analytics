@@ -97,6 +97,15 @@ docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva_gold_servi
 curl http://localhost:8000/api/v1/analytics/dashboard?days=7
 ```
 
+Airflow operational notes:
+
+- Unpause only `gold_serving_today_refresh` when you want the Analytics serving
+  tables to refresh automatically.
+- Keep `gold_serving_heatmap_intraday` separate from the Analytics refresh path;
+  it refreshes heatmap tiles less often so heatmap work cannot block KPI tables.
+- Leave other DAGs paused unless you explicitly need their daily backfill or
+  maintenance workflow.
+
 ## 8. Stop
 
 Stop Vision, API, and Frontend with `Ctrl+C` in their terminals.

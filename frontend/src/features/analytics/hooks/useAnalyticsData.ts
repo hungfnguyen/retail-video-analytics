@@ -9,7 +9,7 @@ type AnalyticsDataState = {
   error: string | null
 }
 
-export function useAnalyticsData(days: number) {
+export function useAnalyticsData(days: number, cameraId?: string | null) {
   const [state, setState] = useState<AnalyticsDataState>({
     data: null,
     error: null,
@@ -17,12 +17,12 @@ export function useAnalyticsData(days: number) {
 
   const refresh = useCallback(async () => {
     try {
-      const data = await getAnalyticsDashboardData(days)
+      const data = await getAnalyticsDashboardData(days, cameraId)
       setState({ data, error: null })
     } catch {
       setState({ data: null, error: 'Unable to load analytics dashboard data.' })
     }
-  }, [days])
+  }, [cameraId, days])
 
   useEffect(() => {
     const initialId = window.setTimeout(() => {

@@ -33,12 +33,15 @@ const TAB_ITEMS = [
 
 export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) {
   const [preset, setPreset] = useState<DatePreset>('last_7_days')
+  const [cameraId, setCameraId] = useState('all')
   const [activeTab, setActiveTab] = useState<AnalyticsTab>('overview')
 
   const days = datePresetToDays[preset]
-  const { data, error, refresh } = useAnalyticsData(days)
-  const { data: queueData, refresh: refreshQueue } = useQueueData(days)
-  const { data: alertHistoryData, refresh: refreshAlerts } = useAlertHistoryData(days)
+  const selectedCameraId = cameraId === 'all' ? null : cameraId
+  const { data, error, refresh } = useAnalyticsData(days, selectedCameraId)
+  const { data: queueData, refresh: refreshQueue } = useQueueData(days, selectedCameraId)
+  const { data: alertHistoryData, refresh: refreshAlerts } = useAlertHistoryData(days, selectedCameraId)
+  const cameraOptions = data?.camera_comparison.map((camera) => camera.camera_id) ?? []
 
   function refreshAll() {
     void refresh()
@@ -97,6 +100,9 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
         subtitle="Business insights from Gold layer"
         actions={
           <AnalyticsFilterBar
+            cameraId={cameraId}
+            cameraOptions={cameraOptions}
+            onCameraChange={setCameraId}
             preset={preset}
             onPresetChange={setPreset}
             onRefresh={refreshAll}
