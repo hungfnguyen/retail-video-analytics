@@ -26,6 +26,7 @@ spec.loader.exec_module(live_frame_publisher)
 
 LiveFramePublisher = live_frame_publisher.LiveFramePublisher
 LiveFramePublisherConfig = live_frame_publisher.LiveFramePublisherConfig
+RedisClientConfig = live_frame_publisher.RedisClientConfig
 
 
 def test_live_frame_publisher_writes_observability_metadata(tmp_path):
@@ -68,3 +69,56 @@ def test_live_frame_publisher_writes_observability_metadata(tmp_path):
     assert metadata["inference_ms"] == 390
     assert metadata["draw_ms"] == 2
     assert metadata["reader_drop_count"] == 10
+
+
+def test_live_frame_publisher_writes_latest_frame_to_redis(monkeypatch, tmp_path):
+    class FakeRedis:
+        def __init__(self) -> None:
+            self.values: dict[str, tuple[int, bytes | str]] = {}
+
+        def setex(self, key, ttl, value):
+            self.values[key] = (ttl, value)
+            return True
+
+    fake_redis = FakeRedis()
+    monkeypatch.setattr(
+        live_frame_publisher,
+        "create_redis_client",
+        lambda config: fake_redis,
+    )
+
+    publisher = LiveFramePublisher(
+        "cam_01",
+        LiveFramePublisherConfig(
+            output_dir=tmp_path,
+            transport="redis",
+            fps=1_000_000.0,
+            jpeg_quality=70,
+            redis_config=RedisClientConfig(
+                host="localhost",
+                port=6379,
+                decode_responses=False,
+            ),
+            redis_prefix="live:frame",
+            ttl_sec=9,
+        ),
+    )
+    frame = np.zeros((24, 32, 3), dtype=np.uint8)
+
+    assert publisher.publish(
+        frame,
+        frame_index=7,
+        capture_ts=datetime.now(timezone.utc),
+        detections_count=4,
+    )
+
+    frame_ttl, frame_bytes = fake_redis.values["live:frame:bytes:cam_01"]
+    metadata_ttl, metadata_json = fake_redis.values["live:frame:meta:cam_01"]
+
+    assert frame_ttl == 9
+    assert metadata_ttl == 9
+    assert isinstance(frame_bytes, bytes)
+    assert len(frame_bytes) > 0
+    metadata = json.loads(metadata_json)
+    assert metadata["frame_index"] == 7
+    assert metadata["detections_count"] == 4
