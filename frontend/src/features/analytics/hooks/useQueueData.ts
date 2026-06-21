@@ -9,22 +9,31 @@ type QueueDataState = {
   error: string | null
 }
 
-export function useQueueData(days: number) {
+export function useQueueData(days: number, cameraId?: string | null) {
   const [state, setState] = useState<QueueDataState>({ data: null, error: null })
 
   const refresh = useCallback(async () => {
     try {
-      const data = await getQueueAnalyticsData(days)
+      const data = await getQueueAnalyticsData(days, cameraId)
       setState({ data, error: null })
     } catch {
       setState({ data: null, error: 'Unable to load queue analytics data.' })
     }
-  }, [days])
+  }, [cameraId, days])
 
   useEffect(() => {
-    void refresh()
-    const intervalId = window.setInterval(() => { void refresh() }, POLL_INTERVAL_MS)
-    return () => { window.clearInterval(intervalId) }
+    const initialId = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+
+    const intervalId = window.setInterval(() => {
+      void refresh()
+    }, POLL_INTERVAL_MS)
+
+    return () => {
+      window.clearTimeout(initialId)
+      window.clearInterval(intervalId)
+    }
   }, [refresh])
 
   return { ...state, refresh }

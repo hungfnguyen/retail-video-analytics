@@ -1,22 +1,10 @@
 import { CalendarDays, RefreshCw } from 'lucide-react'
-
-export type DatePreset = 'today' | 'last_7_days' | 'last_14_days' | 'last_30_days'
-
-export const datePresetToDays: Record<DatePreset, number> = {
-  today: 1,
-  last_7_days: 7,
-  last_14_days: 14,
-  last_30_days: 30,
-}
-
-const presetLabels: Record<DatePreset, string> = {
-  today: 'Today',
-  last_7_days: 'Last 7 days',
-  last_14_days: 'Last 14 days',
-  last_30_days: 'Last 30 days',
-}
+import { datePresetLabels, type DatePreset } from '../datePresets'
 
 type AnalyticsFilterBarProps = {
+  cameraId: string
+  cameraOptions: string[]
+  onCameraChange: (cameraId: string) => void
   preset: DatePreset
   onPresetChange: (p: DatePreset) => void
   onRefresh: () => void
@@ -33,11 +21,32 @@ function StaticSelect({ label, value, disabled = false }: { label: string; value
   )
 }
 
-export function AnalyticsFilterBar({ preset, onPresetChange, onRefresh }: AnalyticsFilterBarProps) {
+export function AnalyticsFilterBar({
+  cameraId,
+  cameraOptions,
+  onCameraChange,
+  preset,
+  onPresetChange,
+  onRefresh,
+}: AnalyticsFilterBarProps) {
   return (
     <div className="flex flex-wrap items-center gap-2.5">
       <StaticSelect label="Store" value="Store A" />
-      <StaticSelect label="Camera" value="All Cameras" disabled />
+
+      <label className="flex min-w-[150px] items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 shadow-sm">
+        <span className="text-slate-400">Camera</span>
+        <select
+          className="min-w-0 bg-transparent font-medium text-slate-700 outline-none"
+          value={cameraId}
+          onChange={(e) => onCameraChange(e.target.value)}
+        >
+          <option value="all">All Cameras</option>
+          {cameraOptions.map((option) => (
+            <option key={option} value={option}>{option}</option>
+          ))}
+        </select>
+      </label>
+
       <StaticSelect label="Zone" value="All Zones" disabled />
 
       <label className="flex items-center gap-2 rounded-xl border border-slate-200 bg-white px-3.5 py-2.5 text-sm text-slate-700 shadow-sm">
@@ -47,7 +56,7 @@ export function AnalyticsFilterBar({ preset, onPresetChange, onRefresh }: Analyt
           value={preset}
           onChange={(e) => onPresetChange(e.target.value as DatePreset)}
         >
-          {(Object.entries(presetLabels) as [DatePreset, string][]).map(([value, label]) => (
+          {(Object.entries(datePresetLabels) as [DatePreset, string][]).map(([value, label]) => (
             <option key={value} value={value}>{label}</option>
           ))}
         </select>

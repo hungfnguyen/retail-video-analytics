@@ -153,9 +153,33 @@ def _safe_count(sql: str) -> int | None:
     return int(value)
 
 
+def _table_name_parts(qualified_name: str) -> tuple[str, str, str]:
+    parts = qualified_name.split(".")
+    if len(parts) != 3 or not all(parts):
+        raise ValueError(f"Expected catalog.schema.table, got: {qualified_name}")
+    return parts[0], parts[1], parts[2]
+
+
+def _target_table_exists(target: str) -> bool:
+    catalog, schema, table = _table_name_parts(target)
+    rows = _trino_run(
+        "SELECT COUNT(*) FROM "
+        f"{catalog}.information_schema.tables "
+        f"WHERE table_schema = {_sql_string(schema)} "
+        f"AND table_name = {_sql_string(table)}",
+        timeout_sec=30,
+    )
+    if not rows or not rows[0]:
+        return False
+    return int(rows[0][0] or 0) > 0
+
+
 def _delete_target_window(domain: str, start: str, end: str) -> None:
     spec = DOMAIN_SPECS[domain]
     target = spec["target"]
+    if not _target_table_exists(target):
+        print(f"skip_pre_delete_missing_target domain={domain} table={target}")
+        return
     sql = (
         f"DELETE FROM {target} "
         f"WHERE metric_date BETWEEN DATE {_sql_string(start)} AND DATE {_sql_string(end)}"
@@ -215,7 +239,10 @@ def _write_audit(
 def _upload_jar(session: requests.Session, jar_path: Path) -> str:
     with jar_path.open("rb") as fh:
         response = session.post(f"{_flink_rest_url()}/jars/upload", files={"jarfile": fh}, timeout=120)
-    response.raise_for_status()
+    if not response.ok:
+        raise RuntimeError(
+            f"Flink JAR upload failed status={response.status_code}: {response.text[:5000]}"
+        )
     payload = response.json()
     filename = payload.get("filename")
     if not filename:
@@ -229,7 +256,11 @@ def _run_job(session: requests.Session, jar_id: str, entry_class: str, program_a
         json={"entryClass": entry_class, "programArgsList": program_args},
         timeout=120,
     )
-    response.raise_for_status()
+    if not response.ok:
+        raise RuntimeError(
+            f"Flink JAR run failed status={response.status_code} "
+            f"entry_class={entry_class} jar_id={jar_id}: {response.text[:5000]}"
+        )
     payload = response.json()
     job_id = payload.get("jobid")
     if not job_id:

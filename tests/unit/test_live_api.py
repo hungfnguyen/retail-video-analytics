@@ -170,8 +170,8 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.reader_queue_size == 1
     assert data.frame.reader_drop_count == 7
     assert data.frame.zone_counts[0].zone_id == "checkout_queue_01"
-    assert data.frame.zone_counts[0].avg_wait_ms == 0
-    assert data.frame.zone_counts[0].max_wait_ms == 0
+    assert data.frame.zone_counts[0].avg_wait_ms == 12_500
+    assert data.frame.zone_counts[0].max_wait_ms == 18_000
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0

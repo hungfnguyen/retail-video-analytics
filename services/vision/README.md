@@ -24,23 +24,25 @@ adapters around Supervision or Roboflow Trackers instead.
 
 ```text
 services/vision/
-├── main.py
-├── worker.py
-├── reader.py
-├── config/settings.py
-├── detect/supervision_yolo_detector.py
-├── track/roboflow_tracker.py
-├── track/track_memory.py
-├── features/detections.py
-├── zones/zone_manager.py
-├── emit/pulsar_emitter.py
-└── media/live_frame_publisher.py
+|-- main.py
+|-- worker.py
+|-- reader.py
+|-- config/settings.py
+|-- detect/supervision_yolo_detector.py
+|-- track/roboflow_tracker.py
+|-- track/track_memory.py
+|-- features/detections.py
+|-- zones/zone_manager.py
+|-- emit/pulsar_emitter.py
+`-- media/live_frame_publisher.py
 ```
 
 ## Configuration
 
-Production uses `configs/cameras.yaml` and `configs/zones.yaml`. The important
-Vision defaults are:
+Production should use `configs/cameras.yaml` and `configs/zones.yaml`. When
+`configs/cameras.yaml` is missing, the loader uses `configs/cameras.yaml.example`
+as a development fallback before falling back to single-camera `.env` settings.
+The important Vision defaults are:
 
 ```yaml
 settings:
