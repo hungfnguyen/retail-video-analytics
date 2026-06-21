@@ -41,6 +41,7 @@ def test_live_frame_publisher_writes_observability_metadata(tmp_path):
         capture_ts=datetime.now(timezone.utc),
         detections_count=2,
     )
+    publisher._last_publish_monotonic = 0.0
     assert publisher.publish(
         frame,
         frame_index=2,

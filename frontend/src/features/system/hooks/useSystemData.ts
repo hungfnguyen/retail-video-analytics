@@ -25,12 +25,16 @@ export function useSystemData(cameraId = 'cam_01') {
   }, [cameraId])
 
   useEffect(() => {
-    void refresh()
+    const initialId = window.setTimeout(() => {
+      void refresh()
+    }, 0)
+
     const intervalId = window.setInterval(() => {
       void refresh()
     }, POLL_INTERVAL_MS)
 
     return () => {
+      window.clearTimeout(initialId)
       window.clearInterval(intervalId)
     }
   }, [refresh])

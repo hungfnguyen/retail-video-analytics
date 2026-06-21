@@ -20,6 +20,7 @@ This directory documents the current implementation of the project. It intention
 | [11_VISION_MULTI_CAMERA_FLOW.md](./11_VISION_MULTI_CAMERA_FLOW.md) | Multi-camera Vision architecture |
 | [12_DATA_EXTRACTION_DESIGN.md](./12_DATA_EXTRACTION_DESIGN.md) | How raw video becomes structured metadata |
 | [13_FLINK_API_GUIDE.md](./13_FLINK_API_GUIDE.md) | Flink API choices and job patterns |
+| [15_ALERT_PIPELINE_DESIGN.md](./15_ALERT_PIPELINE_DESIGN.md) | Alert state, media artifacts, and alert-serving flow |
 | [LOCAL_RUN_GUIDE.md](./LOCAL_RUN_GUIDE.md) | Local run and verification checklist |
 
 ## Current Architecture Summary
@@ -42,6 +43,7 @@ FastAPI
 React frontend
   -> Live page connected to realtime data
   -> Analytics page backed by Gold aggregate tables
+  -> Heatmap page backed by silver_detections_v2 presence coordinates
   -> System page backed by service health data
 ```
 
@@ -56,8 +58,6 @@ lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
 lakehouse.rva.gold_alert_events
-lakehouse.rva.gold_alerts
-lakehouse.rva_gold_serving.gold_serving_*
 ```
 
 `lakehouse.rva_gold_serving.*` is the physical namespace for Gold serving tables.
@@ -70,7 +70,11 @@ stats:count:{camera_id}
 live:frame:{camera_id}
 heatmap:live:{camera_id}
 track:active:{camera_id}:{track_id}
+queue:live:{camera_id}:{zone_id}
+line:hist:{camera_id}:{YYYYMMDDHHMM}
 alerts:recent:{camera_id}
 alerts:recent:store:{store_id}
 alerts:cooldown:{camera_id}:{alert_type}
+alert:live:{camera_id}
+alert:item:{alert_id}
 ```

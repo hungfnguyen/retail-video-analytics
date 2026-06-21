@@ -47,6 +47,7 @@ class FakeRedis:
             "stats:count:cam_01": "1",
         }
         self.alerts = []
+        self.alert_items: dict[str, dict[str, object]] = {}
         self.track_keys = ["track:active:cam_01:42"]
         self.heatmap = [("35,36", 4.0), ("10,12", 2.0)]
 
@@ -60,14 +61,40 @@ class FakeRedis:
         yield from [key for key in self.track_keys if key.startswith(match.rstrip("*"))]
 
     def zrevrange(self, key, start, end, withscores=False):
-        assert key == "heatmap:live:cam_01"
-        members = self.heatmap[start : end + 1]
-        return members if withscores else [member for member, _ in members]
+        if key == "heatmap:live:cam_01":
+            members = self.heatmap[start : end + 1]
+            return members if withscores else [member for member, _ in members]
+        if key == "alert:live:cam_01":
+            alert_ids = []
+            for raw in self.alerts:
+                alert = json.loads(raw)
+                alert_ids.append(alert["alert_id"])
+            return alert_ids[start : end + 1]
+        raise AssertionError(key)
 
     def lrange(self, key, start, end):
         if key not in {"alerts:recent:cam_01", "alerts:recent:store:store_001"}:
             return []
         return self.alerts[start : end + 1]
+
+    def pipeline(self, transaction=False):
+        for raw in self.alerts:
+            alert = json.loads(raw)
+            self.alert_items[f"alert:item:{alert['alert_id']}"] = alert
+        return FakePipeline(self)
+
+
+class FakePipeline:
+    def __init__(self, redis):
+        self.redis = redis
+        self.keys = []
+
+    def hgetall(self, key):
+        self.keys.append(key)
+        return self
+
+    def execute(self):
+        return [self.redis.alert_items.get(key, {}) for key in self.keys]
 
 
 @pytest.fixture(autouse=True)
@@ -143,8 +170,8 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.reader_queue_size == 1
     assert data.frame.reader_drop_count == 7
     assert data.frame.zone_counts[0].zone_id == "checkout_queue_01"
-    assert data.frame.zone_counts[0].avg_wait_seconds == 12.5
-    assert data.frame.zone_counts[0].max_wait_seconds == 18
+    assert data.frame.zone_counts[0].avg_wait_ms == 12_500
+    assert data.frame.zone_counts[0].max_wait_ms == 18_000
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0

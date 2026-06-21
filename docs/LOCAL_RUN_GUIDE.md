@@ -29,13 +29,14 @@ aws s3 ls s3://retail-video-analytics-prod/
 
 ```bash
 cd D:\workspace\retail-video-analytics
-docker compose -f docker-compose.dev.yml up -d --build
 docker compose up -d --build
 docker compose ps
 ```
 
 Expected services:
 
+- `postgres`
+- `airflow`
 - `pulsar-broker`
 - `pulsar-init`
 - `flink-jobmanager`
@@ -90,7 +91,20 @@ docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_det
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions"
 docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva_gold_serving"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva_gold_serving.gold_serving_traffic_daily"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva_gold_serving.gold_serving_executive_daily"
+
+curl http://localhost:8000/api/v1/analytics/dashboard?days=7
 ```
+
+Airflow operational notes:
+
+- Unpause only `gold_serving_today_refresh` when you want the Analytics serving
+  tables to refresh automatically.
+- Keep `gold_serving_heatmap_intraday` separate from the Analytics refresh path;
+  it refreshes heatmap tiles less often so heatmap work cannot block KPI tables.
+- Leave other DAGs paused unless you explicitly need their daily backfill or
+  maintenance workflow.
 
 ## 8. Stop
 

@@ -3,7 +3,7 @@
 Data Engineering project for retail video analytics. The current implementation is an as-built realtime + lakehouse system:
 
 ```text
-YOLO11 + BoTSORT
+YOLO11 + Roboflow ByteTrack
   -> Pulsar
   -> Flink dual path
       -> Redis realtime state
@@ -19,15 +19,23 @@ The project focuses on metadata extracted from video, not storing raw video as a
 
 Implemented now:
 
-- Multi-camera Vision worker from `configs/cameras.yaml`.
-- Detection and tracking with YOLO11 + BoTSORT/ByteTrack.
+- Multi-camera Vision worker from `configs/cameras.yaml`, with
+  `configs/cameras.yaml.example` used as a development fallback when the main
+  YAML file is missing.
+- Detection and tracking with YOLO11 + Roboflow ByteTrack, plus TrackMemory
+  global id stabilization.
 - Pulsar metadata ingestion.
-- Flink lakehouse path: `bronze_raw`, `silver_detections`, `gold_track_summary`, dashboard Gold aggregate tables, and `gold_alert_events`.
-- Flink realtime path: Redis count, active tracks, heatmap, latest frame snapshot, recent alerts, DLQ.
+- Flink lakehouse path: `bronze_raw`, `silver_detections`,
+  `silver_detections_v2`, `gold_track_summary`, `gold_track_summary_v2`,
+  dashboard Gold aggregate tables, queue/zone Gold tables, `gold_alert_events`,
+  and media alert history in `gold_alerts`.
+- Flink realtime path: Redis count, active tracks, heatmap, latest frame
+  snapshot, queue state, line-crossing history, recent alerts, DLQ.
 - AWS S3 storage for Iceberg tables and optional sampled frames/clips.
 - Trino SQL query over Iceberg.
-- FastAPI live dashboard and media serving endpoints.
-- React frontend with Live, Analytics, and System pages. Live is connected to realtime data; Analytics reads Trino-backed lakehouse summaries; System uses backend-driven health data.
+- FastAPI live dashboard, analytics, heatmap, alert, system, and media serving
+  endpoints.
+- React frontend with Live, Analytics, Heatmap, and System pages.
 
 ## Runtime Services
 
@@ -57,10 +65,15 @@ Pulsar events
   |-- RealtimeMetricsJob -> Redis + DLQ
 
 bronze_raw -> SilverJob -> lakehouse.rva.silver_detections
+bronze_raw -> SilverJob -> lakehouse.rva.silver_detections_v2
 silver_detections -> GoldTrackSummaryJob -> lakehouse.rva.gold_track_summary
-silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables + alert history
+silver_detections_v2 -> GoldTrackSummaryJob -> lakehouse.rva.gold_track_summary_v2
+silver_detections_v2 -> QueueAnalyticsJob -> queue and zone Gold tables
+silver_detections + gold_track_summary -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables + density alert history
+media-events -> GoldAlertsJob -> lakehouse.rva.gold_alerts
 
-Trino queries compact Gold aggregate tables for the Analytics dashboard.
+Trino queries compact Gold aggregate tables and v2 detection tables for the
+Analytics and Heatmap dashboards.
 FastAPI reads Redis/live frames/Trino-facing data and serves the React frontend.
 ```
 
@@ -100,6 +113,11 @@ ICEBERG_WAREHOUSE=s3a://retail-video-analytics-prod/lakehouse
 ```
 
 Vision media upload now reads bucket and credentials from `.env` (`S3_BUCKET`, `S3_*`).
+
+For multi-camera Vision, create `configs/cameras.yaml` from
+`configs/cameras.yaml.example` when you want local camera paths and runtime
+settings to be explicit. If `configs/cameras.yaml` is absent, the Vision loader
+uses the example YAML as a development fallback.
 
 ## Start Project
 
@@ -159,9 +177,13 @@ Redis realtime state:
 
 ```bash
 docker exec redis redis-cli GET stats:count:cam_01
+docker exec redis redis-cli GET live:frame:cam_01
 docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
 docker exec redis redis-cli KEYS 'track:active:cam_01:*'
+docker exec redis redis-cli KEYS 'queue:live:cam_01:*'
+docker exec redis redis-cli KEYS 'line:hist:cam_01:*'
 docker exec redis redis-cli LRANGE alerts:recent:cam_01 0 5
+docker exec redis redis-cli ZREVRANGE alert:live:cam_01 0 5
 ```
 
 Iceberg tables through Trino:
@@ -170,11 +192,16 @@ Iceberg tables through Trino:
 docker exec trino trino --execute "SHOW TABLES FROM lakehouse.rva"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_hourly_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_dwell"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_alert_events"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_zone_minute_metrics"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_alerts"
 ```
 
 AWS S3 layout:
