@@ -47,9 +47,10 @@ class FakeRedis:
             "stats:count:cam_01": "1",
         }
         self.alerts = []
-        self.alert_items: dict[str, dict[str, object]] = {}
         self.track_keys = ["track:active:cam_01:42"]
         self.heatmap = [("35,36", 4.0), ("10,12", 2.0)]
+        self.alert_ids: list[str] = []
+        self.alert_items: dict[str, dict[str, str]] = {}
 
     def ping(self):
         return True
@@ -65,36 +66,35 @@ class FakeRedis:
             members = self.heatmap[start : end + 1]
             return members if withscores else [member for member, _ in members]
         if key == "alert:live:cam_01":
-            alert_ids = []
-            for raw in self.alerts:
-                alert = json.loads(raw)
-                alert_ids.append(alert["alert_id"])
-            return alert_ids[start : end + 1]
-        raise AssertionError(key)
+            return self.alert_ids[start : end + 1]
+        raise AssertionError(f"Unexpected sorted-set key: {key}")
+
+    def hgetall(self, key):
+        prefix = "alert:item:"
+        if key.startswith(prefix):
+            return self.alert_items.get(key[len(prefix) :], {})
+        return {}
+
+    def pipeline(self, transaction=False):
+        outer = self
+
+        class FakePipeline:
+            def __init__(self) -> None:
+                self.keys: list[str] = []
+
+            def hgetall(self, key):
+                self.keys.append(key)
+                return self
+
+            def execute(self):
+                return [outer.hgetall(key) for key in self.keys]
+
+        return FakePipeline()
 
     def lrange(self, key, start, end):
         if key not in {"alerts:recent:cam_01", "alerts:recent:store:store_001"}:
             return []
         return self.alerts[start : end + 1]
-
-    def pipeline(self, transaction=False):
-        for raw in self.alerts:
-            alert = json.loads(raw)
-            self.alert_items[f"alert:item:{alert['alert_id']}"] = alert
-        return FakePipeline(self)
-
-
-class FakePipeline:
-    def __init__(self, redis):
-        self.redis = redis
-        self.keys = []
-
-    def hgetall(self, key):
-        self.keys.append(key)
-        return self
-
-    def execute(self):
-        return [self.redis.alert_items.get(key, {}) for key in self.keys]
 
 
 @pytest.fixture(autouse=True)
@@ -189,25 +189,23 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
 
 def test_live_dashboard_maps_recent_alerts(monkeypatch):
     fake_redis = FakeRedis()
-    fake_redis.alerts = [
-        json.dumps(
-            {
-                "alert_id": "cam_01_1500_density_high",
-                "store_id": "store_001",
-                "camera_id": "cam_01",
-                "alert_type": "density_high",
-                "title": "High density detected",
-                "description": "Current count 12 exceeded threshold 10.",
-                "severity": "high",
-                "zone": "Entrance",
-                "event_ts": datetime.now(timezone.utc).isoformat(),
-                "status": "new",
-                "trigger_value": 12,
-                "threshold": 10,
-                "clip_s3_uri": "s3://warehouse/clips/2026-06-05/store_001/cam_01/cam_01_1500_density_high.mp4",
-            }
-        )
-    ]
+    alert_id = "cam_01_1500_density_high"
+    fake_redis.alert_ids = [alert_id]
+    fake_redis.alert_items[alert_id] = {
+        "alert_id": alert_id,
+        "store_id": "store_001",
+        "camera_id": "cam_01",
+        "alert_type": "density_high",
+        "title": "High density detected",
+        "description": "Current count 12 exceeded threshold 10.",
+        "severity": "high",
+        "zone": "Entrance",
+        "event_ts": datetime.now(timezone.utc).isoformat(),
+        "status": "new",
+        "trigger_value": "12",
+        "threshold": "10",
+        "clip_s3_uri": "s3://warehouse/clips/2026-06-05/store_001/cam_01/cam_01_1500_density_high.mp4",
+    }
     monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
     monkeypatch.setattr(
         live,

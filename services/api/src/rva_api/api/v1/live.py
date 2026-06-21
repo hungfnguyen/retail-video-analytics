@@ -214,6 +214,22 @@ def _parse_live_frame(raw: str | None) -> dict[str, Any] | None:
     return frame
 
 
+def _live_media_transport() -> str:
+    return str(
+        os.getenv("RVA_LIVE_MEDIA_TRANSPORT")
+        or os.getenv("LIVE_MEDIA_TRANSPORT")
+        or "file"
+    ).strip().lower()
+
+
+def _live_media_prefix() -> str:
+    return str(
+        os.getenv("RVA_LIVE_MEDIA_REDIS_PREFIX")
+        or os.getenv("LIVE_MEDIA_REDIS_PREFIX")
+        or "live:frame"
+    )
+
+
 def _default_media_dir() -> Path:
     for parent in Path(__file__).resolve().parents:
         if (parent / "configs" / "cameras.yaml").exists():
@@ -227,12 +243,22 @@ def _media_dir() -> Path:
 
 
 def _read_media_metadata(camera_id: str) -> dict[str, Any]:
+    if _live_media_transport() == "redis":
+        try:
+            client = _get_redis_client()
+            if client is not None:
+                raw = client.get(f"{_live_media_prefix()}:meta:{camera_id}")
+                if raw:
+                    metadata = json.loads(raw)
+                    return metadata if isinstance(metadata, dict) else {}
+        except Exception:
+            pass
+        return {}
     metadata_path = _media_dir() / f"{camera_id}.json"
     try:
         raw = metadata_path.read_text(encoding="utf-8")
     except (FileNotFoundError, OSError):
         return {}
-
     try:
         metadata = json.loads(raw)
     except json.JSONDecodeError:

@@ -22,6 +22,7 @@ ALERT_STORE_MAX = 25
 _evaluator_client: Any | None = None
 _s3_client: Any | None = None
 _s3_bucket: str = ""
+_live_media_redis_client: Any | None = None
 
 
 def _redis_config() -> RedisClientConfig:
@@ -38,6 +39,60 @@ def _get_client() -> Any:
     if _evaluator_client is None:
         _evaluator_client = create_redis_client(_redis_config())
     return _evaluator_client
+
+
+def _live_media_transport() -> str:
+    return str(
+        os.getenv("RVA_LIVE_MEDIA_TRANSPORT")
+        or os.getenv("LIVE_MEDIA_TRANSPORT")
+        or "file"
+    ).strip().lower()
+
+
+def _live_media_redis_prefix() -> str:
+    return str(
+        os.getenv("RVA_LIVE_MEDIA_REDIS_PREFIX")
+        or os.getenv("LIVE_MEDIA_REDIS_PREFIX")
+        or "live:frame"
+    )
+
+
+def _live_media_redis_config() -> RedisClientConfig:
+    return RedisClientConfig(
+        host=str(
+            os.getenv("RVA_LIVE_REDIS_HOST")
+            or os.getenv("LIVE_REDIS_HOST")
+            or os.getenv("REDIS_HOST", "localhost")
+        ),
+        port=int(
+            os.getenv("RVA_LIVE_REDIS_PORT")
+            or os.getenv("LIVE_REDIS_PORT")
+            or os.getenv("REDIS_HOST_PORT")
+            or os.getenv("REDIS_PORT", "16379")
+        ),
+        password=os.getenv("RVA_LIVE_REDIS_PASSWORD")
+        or os.getenv("LIVE_REDIS_PASSWORD")
+        or os.getenv("REDIS_PASSWORD")
+        or None,
+        db=int(
+            os.getenv("RVA_LIVE_REDIS_DB")
+            or os.getenv("LIVE_REDIS_DB")
+            or os.getenv("REDIS_DB", "0")
+        ),
+        decode_responses=False,
+    )
+
+
+def _get_live_media_client() -> Any | None:
+    global _live_media_redis_client
+    if _live_media_redis_client is not None:
+        return _live_media_redis_client
+    _live_media_redis_client = create_redis_client(_live_media_redis_config())
+    return _live_media_redis_client
+
+
+def _live_media_frame_key(cam: str) -> str:
+    return f"{_live_media_redis_prefix()}:bytes:{cam}"
 
 
 def _get_s3() -> tuple[Any, str] | tuple[None, str]:
@@ -66,17 +121,26 @@ def _get_s3() -> tuple[Any, str] | tuple[None, str]:
 
 def _upload_snapshot(cam: str, alert_id: str) -> str:
     """Read the current live JPEG for cam and upload to S3. Returns S3 key or ''."""
-    live_frames_dir = os.getenv("LIVE_FRAMES_DIR", "runtime/live_frames")
-    frame_path = Path(live_frames_dir) / f"{cam}.jpg"
-    if not frame_path.exists():
-        return ""
+    if _live_media_transport() == "redis":
+        live_media_client = _get_live_media_client()
+        if live_media_client is None:
+            return ""
+        frame_bytes = live_media_client.get(_live_media_frame_key(cam))
+        if not frame_bytes:
+            return ""
+    else:
+        live_frames_dir = os.getenv("LIVE_FRAMES_DIR", "runtime/live_frames")
+        frame_path = Path(live_frames_dir) / f"{cam}.jpg"
+        if not frame_path.exists():
+            return ""
+        frame_bytes = frame_path.read_bytes()
+
     s3, bucket = _get_s3()
     if s3 is None:
         return ""
     key = f"snapshots/{cam}/{alert_id}.jpg"
     try:
-        with open(frame_path, "rb") as f:
-            s3.put_object(Bucket=bucket, Key=key, Body=f.read(), ContentType="image/jpeg")
+        s3.put_object(Bucket=bucket, Key=key, Body=frame_bytes, ContentType="image/jpeg")
         log.debug("snapshot uploaded: %s", key)
         return key
     except Exception:
