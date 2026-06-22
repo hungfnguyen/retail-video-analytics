@@ -337,6 +337,9 @@ services:
       # which also unlocks parallel task execution via LocalExecutor.
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB_NAME}"
       AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      # Give gunicorn more time to start on resource-constrained EC2 instances
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+      AIRFLOW__WEBSERVER__WORKERS: "2"
     depends_on:
       trino:
         condition: service_healthy
