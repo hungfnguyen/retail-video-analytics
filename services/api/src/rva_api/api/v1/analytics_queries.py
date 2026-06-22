@@ -117,7 +117,8 @@ def summary_sql(days: int, camera_id: str | None = None) -> str:
           dwell.avg_dwell_sec,
           dwell.long_dwell_tracks,
           dwell.short_dwell_tracks,
-          dwell.medium_dwell_tracks
+          dwell.medium_dwell_tracks,
+          dwell.track_count
         FROM traffic
         CROSS JOIN dwell
     """
@@ -275,8 +276,8 @@ def visitors_series_sql(days: int, camera_id: str | None = None) -> str:
     return f"""
         SELECT
           CAST(metric_date AS varchar) AS date_label,
-          SUM(detection_count) AS detections
-        FROM lakehouse.rva_gold_serving.gold_serving_traffic_daily
+          COALESCE(SUM(track_count), 0) AS detections
+        FROM lakehouse.rva_gold_serving.gold_serving_dwell_daily
         WHERE metric_date >= CURRENT_DATE - INTERVAL '{days}' DAY
           {_camera_filter(camera_id)}
         GROUP BY metric_date

@@ -471,6 +471,8 @@ def get_analytics_dashboard(
     long_dwell_tracks = _safe_int(summary_row[5] if len(summary_row) > 5 else 0)
     short_dwell_tracks = _safe_int(summary_row[6] if len(summary_row) > 6 else 0)
     medium_dwell_tracks = _safe_int(summary_row[7] if len(summary_row) > 7 else 0)
+    total_visitors = _safe_int(summary_row[8] if len(summary_row) > 8 else 0)
+    avg_visitors_per_active_day = round(total_visitors / active_days, 1) if active_days else 0.0
 
     peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0]
     selected_camera_row = next((row for row in camera_rows if str(row[0]) == camera_id), None)
@@ -482,11 +484,18 @@ def get_analytics_dashboard(
         "range_label": f"Last {days} days",
         "data_status": "ready",
         "error_message": None,
-        "total_visitors": total_detections,
+        "total_visitors": total_visitors,
         "peak_day": (
             {
                 "date": str(peak_day_row[0]),
-                "visitors": _safe_int(peak_day_row[1]),
+                "visitors": (
+                    next(
+                        (_safe_int(r[1]) for r in visitors_series_rows if str(r[0]) == str(peak_day_row[0])),
+                        0,
+                    )
+                    if days > 1 and visitors_series_rows
+                    else total_visitors
+                ),
             }
             if peak_day_row
             else None
@@ -498,15 +507,15 @@ def get_analytics_dashboard(
         "avg_dwell_sec": round(avg_dwell_sec, 1),
         "kpis": [
             {
-                "label": "Total detections",
-                "value": _fmt_int(total_detections),
-                "meta": f"{active_days} active days, {_fmt_int(round(avg_per_active_day))}/active day",
+                "label": "Total visitors",
+                "value": _fmt_int(total_visitors),
+                "meta": f"{active_days} active day(s), {_fmt_int(round(avg_visitors_per_active_day))}/day",
                 "tone": "blue",
             },
             {
-                "label": "Avg per active day",
-                "value": _fmt_int(round(avg_per_active_day)),
-                "meta": f"{active_days} active days",
+                "label": "Avg visitors/day",
+                "value": _fmt_int(round(avg_visitors_per_active_day)),
+                "meta": f"{active_days} active day(s)",
                 "tone": "emerald",
             },
             {
