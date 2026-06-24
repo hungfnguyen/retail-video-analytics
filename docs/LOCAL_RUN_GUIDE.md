@@ -127,5 +127,5 @@ Restart notes:
   stopping the stack, then writes `runtime/flink/restore-manifest.tsv`.
 - `restart-stack-up.sh` starts the stack and lets `flink-job-submitter` restore
   stateful jobs from that manifest when compatible savepoints are available.
-- `FLINK_CHECKPOINTS_URI` and `FLINK_SAVEPOINTS_URI` must point to writable
-  object-storage paths.
+- `FLINK_CHECKPOINTS_URI` and `FLINK_SAVEPOINTS_URI` should use `s3a://...`
+  writable object-storage paths with the current Flink image.
