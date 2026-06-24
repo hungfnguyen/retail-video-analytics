@@ -500,15 +500,14 @@ def _fallback_single_camera() -> Dict[str, Any]:
             or os.getenv("LIVE_REDIS_DB")
             or os.getenv("REDIS_DB", "0")
         ),
-        "media_upload_enabled": _get_bool("media_upload_enabled", global_settings, False),
-        "s3_endpoint": os.getenv("S3_ENDPOINT") or global_settings.get("s3_endpoint", ""),
-        "s3_region": os.getenv("S3_REGION") or global_settings.get("s3_region", "us-east-1"),
-        "s3_bucket": os.getenv("S3_BUCKET") or global_settings.get("s3_bucket", "warehouse"),
-        # Empty string → None so boto3 falls back to default credential chain
-        # (instance profile / ~/.aws/credentials) when no explicit key is set.
-        "s3_access_key": os.getenv("S3_ACCESS_KEY") or global_settings.get("s3_access_key") or None,
-        "s3_secret_key": os.getenv("S3_SECRET_KEY") or global_settings.get("s3_secret_key") or None,
-        "s3_path_style": _get_bool("s3_path_style", global_settings, False),
+        "media_upload_enabled": _get_s3_bool("media_upload_enabled", global_settings, False),
+        "s3_endpoint": _get_s3_optional("s3_endpoint", global_settings) or "",
+        "s3_region": _get_s3_optional("s3_region", global_settings) or "us-east-1",
+        "s3_bucket": _get_s3_optional("s3_bucket", global_settings) or "warehouse",
+        # None → boto3 falls back to default credential chain when no key is set.
+        "s3_access_key": _get_s3_credential("s3_access_key", global_settings),
+        "s3_secret_key": _get_s3_credential("s3_secret_key", global_settings),
+        "s3_path_style": _get_s3_bool("s3_path_style", global_settings, False),
         "frame_sampling_enabled": _get_bool("frame_sampling_enabled", global_settings, True),
         "frame_sample_interval_sec": _get_float("frame_sample_interval_sec", global_settings, 1.0),
         "frame_jpeg_quality": _get_int("frame_jpeg_quality", global_settings, 85),

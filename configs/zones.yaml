@@ -45,30 +45,20 @@ stores:
           width: 1280
           height: 720
         zones:
-          - zone_id: aisle_01
-            zone_name: Aisle 01
+          - zone_id: main_aisle
+            zone_name: Main Aisle
             zone_type: aisle
             priority: 70
             trigger_anchor: bottom_center
             polygon_norm:
-              - [0.08, 0.32]
-              - [0.42, 0.30]
-              - [0.48, 0.92]
-              - [0.04, 0.94]
-          - zone_id: promo_area_02
-            zone_name: Promotion Area 02
-            zone_type: dwell
-            priority: 50
-            trigger_anchor: bottom_center
-            polygon_norm:
-              - [0.50, 0.35]
-              - [0.90, 0.34]
-              - [0.94, 0.88]
-              - [0.46, 0.90]
+              - [0.44, 0.22]
+              - [0.68, 0.22]
+              - [0.68, 0.96]
+              - [0.44, 0.96]
         lines:
-          - line_id: aisle_crossing_01
-            line_name: Aisle Crossing 01
+          - line_id: aisle_crossing
+            line_name: Aisle Crossing
             line_type: aisle_transition
-            start_norm: [0.45, 0.50]
-            end_norm: [0.90, 0.50]
-            direction_in: left_to_right
+            start_norm: [0.44, 0.60]
+            end_norm: [0.68, 0.60]
+            direction_in: top_to_bottom
