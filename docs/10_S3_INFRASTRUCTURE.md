@@ -4,7 +4,7 @@
 
 | Item | Value |
 |---|---|
-| Bucket | `retail-video-analytics-prod` |
+| Bucket | `s3-retail-video-analytics` |
 | Region | `ap-southeast-2` |
 | Path style | `false` |
 | Endpoint | `https://s3.ap-southeast-2.amazonaws.com` |
@@ -12,7 +12,7 @@
 ## Top-Level Layout
 
 ```text
-s3://retail-video-analytics-prod/
+s3://s3-retail-video-analytics/
 ├── lakehouse/       Iceberg warehouse root
 ├── frames/          optional sampled JPEG frames
 └── clips/           optional alert clips
@@ -25,7 +25,7 @@ Flink checkpoint/savepoint storage currently uses Docker/Flink state configurati
 The configured warehouse is:
 
 ```text
-s3a://retail-video-analytics-prod/lakehouse
+s3a://s3-retail-video-analytics/lakehouse
 ```
 
 The Java jobs and Trino append `/iceberg` when creating or reading the Iceberg REST catalog warehouse, so physical Iceberg table objects are under the warehouse-managed prefix.
@@ -67,7 +67,7 @@ S3_PATH_STYLE=false
 S3_REGION=ap-southeast-2
 S3_ACCESS_KEY=CHANGE_ME
 S3_SECRET_KEY=CHANGE_ME
-ICEBERG_WAREHOUSE=s3a://retail-video-analytics-prod/lakehouse
+ICEBERG_WAREHOUSE=s3a://s3-retail-video-analytics/lakehouse
 ```
 
 The same values must be available to:
@@ -92,7 +92,7 @@ For local development with one IAM user, use bucket-scoped access:
       "Action": [
         "s3:ListBucket"
       ],
-      "Resource": "arn:aws:s3:::retail-video-analytics-prod"
+      "Resource": "arn:aws:s3:::s3-retail-video-analytics"
     },
     {
       "Effect": "Allow",
@@ -101,7 +101,7 @@ For local development with one IAM user, use bucket-scoped access:
         "s3:PutObject",
         "s3:DeleteObject"
       ],
-      "Resource": "arn:aws:s3:::retail-video-analytics-prod/*"
+      "Resource": "arn:aws:s3:::s3-retail-video-analytics/*"
     }
   ]
 }
@@ -112,7 +112,7 @@ Add `s3:ListAllMyBuckets` only if the user must run plain `aws s3 ls` without a 
 ## Verification
 
 ```bash
-aws s3 ls s3://retail-video-analytics-prod/
-aws s3 ls s3://retail-video-analytics-prod/lakehouse/ --recursive | head
-aws s3 ls s3://retail-video-analytics-prod/frames/ --recursive | head
+aws s3 ls s3://s3-retail-video-analytics/
+aws s3 ls s3://s3-retail-video-analytics/lakehouse/ --recursive | head
+aws s3 ls s3://s3-retail-video-analytics/frames/ --recursive | head
 ```

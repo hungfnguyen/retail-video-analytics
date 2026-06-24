@@ -22,7 +22,7 @@ Verify AWS access:
 
 ```bash
 aws sts get-caller-identity
-aws s3 ls s3://retail-video-analytics-prod/
+aws s3 ls s3://s3-retail-video-analytics/
 ```
 
 ## 3. Start Infrastructure
