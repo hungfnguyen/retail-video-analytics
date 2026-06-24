@@ -58,6 +58,7 @@ weights/
 
 # Frontend build cache
 frontend/.vite/
+cloud_deploy/
 
 # Jupyter
 notebooks/.ipynb_checkpoints/

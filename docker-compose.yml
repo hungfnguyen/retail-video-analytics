@@ -253,6 +253,62 @@ services:
     networks:
       - retail-net
 
+  api:
+    build:
+      context: .
+      dockerfile: services/api/Dockerfile
+    container_name: api
+    environment:
+      REDIS_HOST: redis
+      REDIS_PORT: "6379"
+      TRINO_URL: "http://trino:8080"
+      CORS_ORIGINS: ${CORS_ORIGINS:-http://localhost:5173}
+      LIVE_MEDIA_TRANSPORT: ${LIVE_MEDIA_TRANSPORT:-file}
+      LIVE_MEDIA_REDIS_PREFIX: ${LIVE_MEDIA_REDIS_PREFIX:-live:frame}
+      LIVE_MEDIA_TTL_SEC: ${LIVE_MEDIA_TTL_SEC:-10}
+      RVA_CAMERA_CONFIG: /app/configs/cameras.yaml
+      RVA_LIVE_MEDIA_DIR: /app/runtime/live_frames
+      RVA_LOGS_DIR: /app/logs
+      PULSAR_SERVICE_URL: pulsar://pulsar-broker:6650
+      S3_BUCKET: ${S3_BUCKET:-}
+      S3_REGION: ${S3_REGION:-us-east-1}
+      S3_ENDPOINT: ${S3_ENDPOINT:-}
+      S3_ACCESS_KEY: ${S3_ACCESS_KEY:-}
+      S3_SECRET_KEY: ${S3_SECRET_KEY:-}
+      S3_PATH_STYLE: ${S3_PATH_STYLE:-false}
+    volumes:
+      - ./runtime:/app/runtime
+      - ./logs:/app/logs
+      - ./configs:/app/configs:ro
+    depends_on:
+      redis:
+        condition: service_healthy
+      trino:
+        condition: service_healthy
+    healthcheck:
+      test: ["CMD", "curl", "-fsS", "http://localhost:8000/health"]
+      interval: 15s
+      timeout: 5s
+      retries: 10
+    restart: unless-stopped
+    networks:
+      - retail-net
+
+  nginx:
+    image: nginx:1.27-alpine
+    container_name: nginx
+    ports:
+      - "80:80"
+    volumes:
+      - ./frontend/dist:/usr/share/nginx/html:ro
+      - ./infrastructure/nginx/nginx.conf:/etc/nginx/nginx.conf:ro
+    depends_on:
+      api:
+        condition: service_healthy
+    restart: unless-stopped
+    networks:
+      - retail-net
+
   airflow:
     build:
       context: .
@@ -288,6 +344,9 @@ services:
       # which also unlocks parallel task execution via LocalExecutor.
       AIRFLOW__DATABASE__SQL_ALCHEMY_CONN: "postgresql+psycopg2://${AIRFLOW_DB_USER}:${AIRFLOW_DB_PASSWORD}@postgres:5432/${AIRFLOW_DB_NAME}"
       AIRFLOW__CORE__EXECUTOR: "LocalExecutor"
+      # Give gunicorn more time to start on resource-constrained EC2 instances
+      AIRFLOW__WEBSERVER__WEB_SERVER_MASTER_TIMEOUT: "300"
+      AIRFLOW__WEBSERVER__WORKERS: "2"
     depends_on:
       trino:
         condition: service_healthy

@@ -76,6 +76,22 @@ def _fmt_percent(value: float) -> str:
     return f"{value * 100:.1f}%"
 
 
+def _analytics_error_message(exc: BaseException) -> str:
+    raw = str(exc)
+    lower = raw.lower()
+    if isinstance(exc, URLError):
+        return f"Trino unavailable: {raw}"
+    if "schema" in lower and ("not found" in lower or "does not exist" in lower):
+        return f"Gold serving schema unavailable: {raw}"
+    if "table" in lower and ("not found" in lower or "does not exist" in lower):
+        return f"Gold serving table unavailable: {raw}"
+    return raw
+
+
+def _row_value(row: list[Any], index: int, default: Any = None) -> Any:
+    return row[index] if len(row) > index else default
+
+
 _CAMERA_ID_RE = re.compile(r"^[A-Za-z0-9_.-]+$")
 
 
@@ -110,7 +126,11 @@ def _get_cache_client() -> Any | None:
 
 def _cache_key(name: str, *parts: str) -> str:
     normalized = [part.replace(" ", "_") for part in parts]
-    return ":".join(["analytics", "cache", "v1", name, *normalized])
+    return ":".join(["analytics", "cache", "v2", name, *normalized])
+
+
+def _camera_cache_parts(camera_id: str | None) -> tuple[str, ...]:
+    return (f"camera_{camera_id}",) if camera_id else ()
 
 
 def _cache_get(model_cls: type[Any], key: str) -> Any | None:
@@ -164,9 +184,9 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
         "peak_hour": None,
         "avg_dwell_sec": 0,
         "kpis": [
-            {"label": "Total detections", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
-            {"label": "Avg per active day", "value": "0", "meta": "Waiting for daily traffic aggregates", "tone": "emerald"},
-            {"label": "Peak hour", "value": "--", "meta": "Waiting for hourly metrics", "tone": "amber"},
+            {"label": "Total visitors", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
+            {"label": "Avg visitors/day", "value": "0", "meta": "Waiting for daily visitor aggregates", "tone": "emerald"},
+            {"label": "Peak hour", "value": "--", "meta": "Waiting for hourly visitor metrics", "tone": "amber"},
             {"label": "Busiest camera", "value": "--", "meta": "No camera rows", "tone": "violet"},
             {"label": "Avg dwell", "value": "0s", "meta": "Waiting for dwell aggregates", "tone": "emerald"},
             {"label": "Avg confidence", "value": "0.0%", "meta": "Waiting for model quality metrics", "tone": "blue"},
@@ -184,17 +204,30 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
     }
 
 
-def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[str, str]]:
+def _daily_summary_item(row: list[Any]) -> dict[str, Any]:
+    return {
+        "date": str(_row_value(row, 0, "")),
+        "visitors": _safe_int(_row_value(row, 1, 0)),
+        "detections": _safe_int(_row_value(row, 2, 0)),
+        "peak": str(_row_value(row, 3, "—") or "—"),
+        "avg_dwell_sec": round(_safe_float(_row_value(row, 4, 0)), 1),
+        "avg_confidence": round(_safe_float(_row_value(row, 5, 0)), 3),
+        "avg_queue_wait_sec": round(_safe_float(_row_value(row, 6, 0)), 1),
+        "alerts": _safe_int(_row_value(row, 7, 0)),
+    }
+
+
+def _run_dashboard_queries(days: int, camera_id: str | None = None) -> tuple[dict[str, list[list[Any]]], dict[str, str]]:
     queries = {
-        "summary": (summary_sql(days), None),
-        "hourly": (hourly_sql(days), None),
+        "summary": (summary_sql(days, camera_id), None),
+        "hourly": (hourly_sql(days, camera_id), None),
         "camera": (camera_sql(days), None),
-        "daily": (daily_sql(days), None),
-        "visitors_series": (visitors_series_sql(days), None),
-        "weekday_pattern": (weekday_pattern_sql(days), None),
-        "peak_heatmap": (peak_heatmap_sql(days), None),
-        "top_zones": (top_zones_sql(days), None),
-        "dwell_trend": (dwell_trend_sql(days), None),
+        "daily": (daily_sql(days, camera_id), None),
+        "visitors_series": (visitors_series_sql(days, camera_id), None),
+        "weekday_pattern": (weekday_pattern_sql(days, camera_id), None),
+        "peak_heatmap": (peak_heatmap_sql(days, camera_id), None),
+        "top_zones": (top_zones_sql(days, camera_id), None),
+        "dwell_trend": (dwell_trend_sql(days, camera_id), None),
     }
     rows: dict[str, list[list[Any]]] = {}
     errors: dict[str, str] = {}
@@ -209,7 +242,7 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
             try:
                 rows[name] = future.result()
             except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-                errors[name] = str(exc)
+                errors[name] = _analytics_error_message(exc)
                 rows[name] = []
 
     return rows, errors
@@ -218,21 +251,24 @@ def _run_dashboard_queries(days: int) -> tuple[dict[str, list[list[Any]]], dict[
 @router.get("/alerts", response_model=AlertHistoryData)
 def get_alert_history(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
+    camera_id: str | None = None,
 ) -> AlertHistoryData:
-    cache_key = _cache_key("alerts", f"days_{days}")
+    if camera_id:
+        _validate_camera_id(camera_id)
+    cache_key = _cache_key("alerts", f"days_{days}", *_camera_cache_parts(camera_id))
     cached = _cache_get(AlertHistoryData, cache_key)
     if cached is not None:
         return cached
 
     now = datetime.now(timezone.utc)
     try:
-        rows = trino_query(alerts_history_sql(days), 10.0)
+        rows = trino_query(alerts_history_sql(days, camera_id), 10.0)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
         payload = {
             "generated_at": now.isoformat(),
             "range_label": f"Last {days} days",
             "data_status": "error",
-            "error_message": str(exc),
+            "error_message": _analytics_error_message(exc),
             "records": [],
         }
         return AlertHistoryData.model_validate(payload)
@@ -276,8 +312,11 @@ def get_alert_history(
 @router.get("/queue", response_model=QueueAnalyticsData)
 def get_queue_analytics(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
+    camera_id: str | None = None,
 ) -> QueueAnalyticsData:
-    cache_key = _cache_key("queue", f"days_{days}")
+    if camera_id:
+        _validate_camera_id(camera_id)
+    cache_key = _cache_key("queue", f"days_{days}", *_camera_cache_parts(camera_id))
     cached = _cache_get(QueueAnalyticsData, cache_key)
     if cached is not None:
         return cached
@@ -288,15 +327,15 @@ def get_queue_analytics(
 
     with ThreadPoolExecutor(max_workers=2) as executor:
         futures = {
-            executor.submit(trino_query, queue_zone_summary_sql(days), 10.0): "zone_summary",
-            executor.submit(trino_query, queue_wait_trend_sql(days), 10.0): "wait_trend",
+            executor.submit(trino_query, queue_zone_summary_sql(days, camera_id), 10.0): "zone_summary",
+            executor.submit(trino_query, queue_wait_trend_sql(days, camera_id), 10.0): "wait_trend",
         }
         for future in as_completed(futures):
             name = futures[future]
             try:
                 rows[name] = future.result()
             except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-                errors[name] = str(exc)
+                errors[name] = _analytics_error_message(exc)
                 rows[name] = []
 
     if errors:
@@ -391,26 +430,29 @@ def get_queue_analytics(
 @router.get("/dashboard", response_model=AnalyticsDashboardData)
 def get_analytics_dashboard(
     days: int = Query(default=7, ge=1, le=MAX_DAYS),
+    camera_id: str | None = None,
 ) -> AnalyticsDashboardData:
-    cache_key = _cache_key("dashboard", f"days_{days}")
+    if camera_id:
+        _validate_camera_id(camera_id)
+    cache_key = _cache_key("dashboard", f"days_{days}", *_camera_cache_parts(camera_id))
     cached = _cache_get(AnalyticsDashboardData, cache_key)
     if cached is not None:
         return cached
 
-    rows, errors = _run_dashboard_queries(days)
+    rows, errors = _run_dashboard_queries(days, camera_id)
     if errors:
         payload = _empty_dashboard(days, "error", "; ".join(errors.values()))
         return AnalyticsDashboardData.model_validate(payload)
 
     summary_row = rows["summary"][0] if rows["summary"] else []
-    hourly_rows = rows["hourly"]
-    camera_rows = rows["camera"]
-    daily_rows = rows["daily"]
-    visitors_series_rows = rows["visitors_series"]
-    weekday_pattern_rows = rows["weekday_pattern"]
-    peak_heatmap_rows = rows["peak_heatmap"]
-    top_zone_rows = rows["top_zones"]
-    dwell_trend_rows = rows["dwell_trend"]
+    hourly_rows = rows.get("hourly", [])
+    camera_rows = rows.get("camera", [])
+    daily_rows = rows.get("daily", [])
+    visitors_series_rows = rows.get("visitors_series", [])
+    weekday_pattern_rows = rows.get("weekday_pattern", [])
+    peak_heatmap_rows = rows.get("peak_heatmap", [])
+    top_zone_rows = rows.get("top_zones", [])
+    dwell_trend_rows = rows.get("dwell_trend", [])
 
     total_detections = _safe_int(summary_row[0] if len(summary_row) > 0 else 0)
     if total_detections == 0:
@@ -425,9 +467,12 @@ def get_analytics_dashboard(
     long_dwell_tracks = _safe_int(summary_row[5] if len(summary_row) > 5 else 0)
     short_dwell_tracks = _safe_int(summary_row[6] if len(summary_row) > 6 else 0)
     medium_dwell_tracks = _safe_int(summary_row[7] if len(summary_row) > 7 else 0)
+    total_visitors = _safe_int(summary_row[8] if len(summary_row) > 8 else 0)
+    avg_visitors_per_active_day = round(total_visitors / active_days, 1) if active_days else 0.0
 
-    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0]
-    busiest_camera = camera_rows[0] if camera_rows else ["--", 0, 0, 0]
+    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0, 0]
+    selected_camera_row = next((row for row in camera_rows if str(row[0]) == camera_id), None)
+    busiest_camera = selected_camera_row or (camera_rows[0] if camera_rows else ["--", 0, 0, 0])
     peak_day_row = max(daily_rows, key=lambda row: _safe_int(row[1])) if daily_rows else None
 
     data = {
@@ -435,7 +480,7 @@ def get_analytics_dashboard(
         "range_label": f"Last {days} days",
         "data_status": "ready",
         "error_message": None,
-        "total_visitors": total_detections,
+        "total_visitors": total_visitors,
         "peak_day": (
             {
                 "date": str(peak_day_row[0]),
@@ -451,21 +496,21 @@ def get_analytics_dashboard(
         "avg_dwell_sec": round(avg_dwell_sec, 1),
         "kpis": [
             {
-                "label": "Total detections",
-                "value": _fmt_int(total_detections),
-                "meta": f"{active_days} active days, {_fmt_int(round(avg_per_active_day))}/active day",
+                "label": "Total visitors",
+                "value": _fmt_int(total_visitors),
+                "meta": f"{active_days} active day(s), {_fmt_int(round(avg_visitors_per_active_day))}/day",
                 "tone": "blue",
             },
             {
-                "label": "Avg per active day",
-                "value": _fmt_int(round(avg_per_active_day)),
-                "meta": f"{active_days} active days",
+                "label": "Avg visitors/day",
+                "value": _fmt_int(round(avg_visitors_per_active_day)),
+                "meta": f"{active_days} active day(s)",
                 "tone": "emerald",
             },
             {
                 "label": "Peak hour",
                 "value": str(peak_row[0]),
-                "meta": f"{_fmt_int(_safe_int(peak_row[1]))} detections",
+                "meta": f"{_fmt_int(_safe_int(peak_row[1]))} visitors",
                 "tone": "amber",
             },
             {
@@ -490,8 +535,9 @@ def get_analytics_dashboard(
         "hourly_traffic": [
             {
                 "hour": str(row[0]),
-                "detections": _safe_int(row[1]),
-                "average": _safe_int(row[2]),
+                "visitors": _safe_int(row[1]),
+                "avg_visitors": _safe_int(row[2]),
+                "detections": _safe_int(row[3]),
             }
             for row in hourly_rows
         ],
@@ -513,17 +559,17 @@ def get_analytics_dashboard(
         ],
         "weekday_pattern": [
             {
-                "weekday": str(row[0]),
-                "visitors": _safe_int(row[2]),
+                "weekday": str(_row_value(row, 0, "")),
+                "visitors": _safe_int(_row_value(row, 2, 0)),
             }
             for row in weekday_pattern_rows
         ],
         "peak_hours_heatmap": [
             {
-                "weekday": str(row[0]),
-                "weekday_order": _safe_int(row[1]),
-                "hour": _safe_int(row[2]),
-                "visitors": _safe_int(row[3]),
+                "weekday": str(_row_value(row, 0, "")),
+                "weekday_order": _safe_int(_row_value(row, 1, 0)),
+                "hour": _safe_int(_row_value(row, 2, 0)),
+                "visitors": _safe_int(_row_value(row, 3, 0)),
             }
             for row in peak_heatmap_rows
         ],
@@ -532,9 +578,10 @@ def get_analytics_dashboard(
                 "zone_id": str(row[0]),
                 "zone_name": str(row[1]),
                 "visitors": _safe_int(row[2]),
-                "share": _safe_float(row[3]),
-                "avg_occupancy": _safe_float(row[4]),
-                "occupied_minutes": _safe_int(row[5]),
+                "detections": _safe_int(row[3]),
+                "share": _safe_float(row[4]),
+                "avg_occupancy": _safe_float(row[5]),
+                "occupied_minutes": _safe_int(row[6]),
             }
             for row in top_zone_rows
         ],
@@ -554,15 +601,7 @@ def get_analytics_dashboard(
             for row in dwell_trend_rows
         ],
         "daily_summary": [
-            {
-                "date": str(row[0]),
-                "detections": _safe_int(row[1]),
-                "peak": str(row[2]),
-                "avg_dwell_sec": round(_safe_float(row[3]), 1),
-                "avg_confidence": 0.0,
-                "avg_queue_wait_sec": round(_safe_float(row[4]), 1),
-                "alerts": _safe_int(row[5]),
-            }
+            _daily_summary_item(row)
             for row in daily_rows
         ],
     }
@@ -605,7 +644,7 @@ def get_presence_heatmap(
     try:
         rows = trino_query(heatmap_presence_sql(camera_id, days), HEATMAP_QUERY_TIMEOUT)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
-        return _empty("error", str(exc))
+        return _empty("error", _analytics_error_message(exc))
 
     if not rows:
         payload = {

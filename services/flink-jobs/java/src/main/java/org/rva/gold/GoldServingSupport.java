@@ -118,6 +118,7 @@ final class GoldServingSupport {
                 "  avg_people_count DOUBLE,",
                 "  max_people_count BIGINT,",
                 "  avg_conf DOUBLE,",
+                "  unique_tracks BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
                 ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
@@ -136,6 +137,7 @@ final class GoldServingSupport {
                 "  avg_conf DOUBLE,",
                 "  peak_hour INT,",
                 "  peak_hour_detections BIGINT,",
+                "  unique_tracks BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
                 ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
@@ -197,6 +199,7 @@ final class GoldServingSupport {
                 "  max_occupancy BIGINT,",
                 "  detection_count BIGINT,",
                 "  occupied_minutes BIGINT,",
+                "  unique_tracks BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
                 ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
@@ -215,12 +218,18 @@ final class GoldServingSupport {
                 "  max_occupancy BIGINT,",
                 "  detection_count BIGINT,",
                 "  occupied_minutes BIGINT,",
+                "  unique_tracks BIGINT,",
                 "  refreshed_at TIMESTAMP(6)",
                 ") PARTITIONED BY (metric_date, store_id) WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet'",
                 ")"
         ));
+
+        ensureColumn(tEnv, "rva_gold_serving.gold_serving_traffic_hourly", "unique_tracks BIGINT");
+        ensureColumn(tEnv, "rva_gold_serving.gold_serving_traffic_daily", "unique_tracks BIGINT");
+        ensureColumn(tEnv, "rva_gold_serving.gold_serving_zone_hourly", "unique_tracks BIGINT");
+        ensureColumn(tEnv, "rva_gold_serving.gold_serving_zone_daily", "unique_tracks BIGINT");
 
         tEnv.executeSql(String.join("\n",
                 "CREATE TABLE IF NOT EXISTS rva_gold_serving.gold_serving_dwell_daily (",
@@ -344,6 +353,18 @@ final class GoldServingSupport {
                 "  'write.format.default' = 'parquet'",
                 ")"
         ));
+    }
+
+    private static void ensureColumn(TableEnvironment tEnv, String tableName, String columnDefinition) {
+        try {
+            tEnv.executeSql("ALTER TABLE " + tableName + " ADD (" + columnDefinition + ")");
+        } catch (Exception exc) {
+            String message = String.valueOf(exc.getMessage()).toLowerCase();
+            if (message.contains("already exists") || message.contains("duplicate")) {
+                return;
+            }
+            throw exc;
+        }
     }
 
     static void executeAndAwait(TableEnvironment tEnv, String sql) throws Exception {

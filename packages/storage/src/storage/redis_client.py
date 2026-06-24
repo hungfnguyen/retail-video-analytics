@@ -17,6 +17,7 @@ class RedisClientConfig:
     db: int = 0
     socket_timeout: float = 2.0
     socket_connect_timeout: float = 2.0
+    decode_responses: bool = True
 
 
 def create_redis_client(config: RedisClientConfig) -> Any | None:
@@ -37,7 +38,7 @@ def create_redis_client(config: RedisClientConfig) -> Any | None:
         "db": config.db,
         "socket_timeout": config.socket_timeout,
         "socket_connect_timeout": config.socket_connect_timeout,
-        "decode_responses": True,
+        "decode_responses": config.decode_responses,
     }
     if config.password:
         client_kwargs["password"] = config.password

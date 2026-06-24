@@ -7,8 +7,7 @@ import { HeatmapInsightsPanel } from './components/HeatmapInsightsPanel'
 import { HeatmapSettingsPanel } from './components/HeatmapSettingsPanel'
 import { HeatmapViewer } from './components/HeatmapViewer'
 import { TopHotspotsList } from './components/TopHotspotsList'
-import { datePresetToDays } from '../analytics/components/AnalyticsFilterBar'
-import type { DatePreset } from '../analytics/components/AnalyticsFilterBar'
+import { datePresetLabels, datePresetToDays, type DatePreset } from '../analytics/datePresets'
 
 type HeatmapPageProps = {
   activePage: AppPage
@@ -17,13 +16,6 @@ type HeatmapPageProps = {
 
 // Static list — future API-driven camera list can replace this constant
 const CAMERA_IDS = ['cam_01', 'cam_02']
-
-const PRESET_LABELS: Record<DatePreset, string> = {
-  today: 'Today',
-  last_7_days: 'Last 7 days',
-  last_14_days: 'Last 14 days',
-  last_30_days: 'Last 30 days',
-}
 
 export function HeatmapPage({ activePage, onPageChange }: HeatmapPageProps) {
   const [cameraId, setCameraId] = useState(CAMERA_IDS[0])
@@ -60,7 +52,7 @@ export function HeatmapPage({ activePage, onPageChange }: HeatmapPageProps) {
               value={preset}
               onChange={(e) => setPreset(e.target.value as DatePreset)}
             >
-              {(Object.entries(PRESET_LABELS) as [DatePreset, string][]).map(([value, label]) => (
+              {(Object.entries(datePresetLabels) as [DatePreset, string][]).map(([value, label]) => (
                 <option key={value} value={value}>{label}</option>
               ))}
             </select>

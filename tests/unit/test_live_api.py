@@ -49,6 +49,8 @@ class FakeRedis:
         self.alerts = []
         self.track_keys = ["track:active:cam_01:42"]
         self.heatmap = [("35,36", 4.0), ("10,12", 2.0)]
+        self.alert_ids: list[str] = []
+        self.alert_items: dict[str, dict[str, str]] = {}
 
     def ping(self):
         return True
@@ -60,9 +62,34 @@ class FakeRedis:
         yield from [key for key in self.track_keys if key.startswith(match.rstrip("*"))]
 
     def zrevrange(self, key, start, end, withscores=False):
-        assert key == "heatmap:live:cam_01"
-        members = self.heatmap[start : end + 1]
-        return members if withscores else [member for member, _ in members]
+        if key == "heatmap:live:cam_01":
+            members = self.heatmap[start : end + 1]
+            return members if withscores else [member for member, _ in members]
+        if key == "alert:live:cam_01":
+            return self.alert_ids[start : end + 1]
+        raise AssertionError(f"Unexpected sorted-set key: {key}")
+
+    def hgetall(self, key):
+        prefix = "alert:item:"
+        if key.startswith(prefix):
+            return self.alert_items.get(key[len(prefix) :], {})
+        return {}
+
+    def pipeline(self, transaction=False):
+        outer = self
+
+        class FakePipeline:
+            def __init__(self) -> None:
+                self.keys: list[str] = []
+
+            def hgetall(self, key):
+                self.keys.append(key)
+                return self
+
+            def execute(self):
+                return [outer.hgetall(key) for key in self.keys]
+
+        return FakePipeline()
 
     def lrange(self, key, start, end):
         if key not in {"alerts:recent:cam_01", "alerts:recent:store:store_001"}:
@@ -143,8 +170,8 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
     assert data.frame.reader_queue_size == 1
     assert data.frame.reader_drop_count == 7
     assert data.frame.zone_counts[0].zone_id == "checkout_queue_01"
-    assert data.frame.zone_counts[0].avg_wait_seconds == 12.5
-    assert data.frame.zone_counts[0].max_wait_seconds == 18
+    assert data.frame.zone_counts[0].avg_wait_ms == 12_500
+    assert data.frame.zone_counts[0].max_wait_ms == 18_000
     assert data.frame.detections[0].track_id == 42
     assert data.frame.detections[0].bbox_norm.w == 0.1
     assert data.frame.heatmap_points[0].intensity == 1.0
@@ -162,25 +189,23 @@ def test_live_dashboard_maps_redis_state(monkeypatch):
 
 def test_live_dashboard_maps_recent_alerts(monkeypatch):
     fake_redis = FakeRedis()
-    fake_redis.alerts = [
-        json.dumps(
-            {
-                "alert_id": "cam_01_1500_density_high",
-                "store_id": "store_001",
-                "camera_id": "cam_01",
-                "alert_type": "density_high",
-                "title": "High density detected",
-                "description": "Current count 12 exceeded threshold 10.",
-                "severity": "high",
-                "zone": "Entrance",
-                "event_ts": datetime.now(timezone.utc).isoformat(),
-                "status": "new",
-                "trigger_value": 12,
-                "threshold": 10,
-                "clip_s3_uri": "s3://warehouse/clips/2026-06-05/store_001/cam_01/cam_01_1500_density_high.mp4",
-            }
-        )
-    ]
+    alert_id = "cam_01_1500_density_high"
+    fake_redis.alert_ids = [alert_id]
+    fake_redis.alert_items[alert_id] = {
+        "alert_id": alert_id,
+        "store_id": "store_001",
+        "camera_id": "cam_01",
+        "alert_type": "density_high",
+        "title": "High density detected",
+        "description": "Current count 12 exceeded threshold 10.",
+        "severity": "high",
+        "zone": "Entrance",
+        "event_ts": datetime.now(timezone.utc).isoformat(),
+        "status": "new",
+        "trigger_value": "12",
+        "threshold": "10",
+        "clip_s3_uri": "s3://warehouse/clips/2026-06-05/store_001/cam_01/cam_01_1500_density_high.mp4",
+    }
     monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
     monkeypatch.setattr(
         live,

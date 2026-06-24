@@ -13,16 +13,22 @@ async function fetchJson<T>(url: string): Promise<T> {
   return response.json() as Promise<T>
 }
 
-export function getAnalyticsDashboardData(days = 7): Promise<AnalyticsDashboardData> {
-  return fetchJson(`${API_BASE_URL}/api/v1/analytics/dashboard?days=${encodeURIComponent(days)}`)
+function analyticsUrl(path: string, days: number, cameraId?: string | null): string {
+  const params = new URLSearchParams({ days: String(days) })
+  if (cameraId) params.set('camera_id', cameraId)
+  return `${API_BASE_URL}/api/v1/analytics/${path}?${params.toString()}`
 }
 
-export function getQueueAnalyticsData(days = 7): Promise<QueueAnalyticsData> {
-  return fetchJson(`${API_BASE_URL}/api/v1/analytics/queue?days=${encodeURIComponent(days)}`)
+export function getAnalyticsDashboardData(days = 7, cameraId?: string | null): Promise<AnalyticsDashboardData> {
+  return fetchJson(analyticsUrl('dashboard', days, cameraId))
 }
 
-export function getAlertHistoryData(days = 7): Promise<AlertHistoryData> {
-  return fetchJson(`${API_BASE_URL}/api/v1/analytics/alerts?days=${encodeURIComponent(days)}`)
+export function getQueueAnalyticsData(days = 7, cameraId?: string | null): Promise<QueueAnalyticsData> {
+  return fetchJson(analyticsUrl('queue', days, cameraId))
+}
+
+export function getAlertHistoryData(days = 7, cameraId?: string | null): Promise<AlertHistoryData> {
+  return fetchJson(analyticsUrl('alerts', days, cameraId))
 }
 
 export function getPresenceHeatmapData(cameraId: string, days = 7): Promise<PresenceHeatmapData> {

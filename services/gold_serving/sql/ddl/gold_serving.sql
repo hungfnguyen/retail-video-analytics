@@ -46,6 +46,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_hourl
     avg_people_count DOUBLE,
     max_people_count BIGINT,
     avg_conf         DOUBLE,
+    unique_tracks    BIGINT,
     refreshed_at     TIMESTAMP(6)
 ) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
@@ -59,6 +60,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_traffic_daily
     avg_conf             DOUBLE,
     peak_hour            INTEGER,
     peak_hour_detections BIGINT,
+    unique_tracks        BIGINT,
     refreshed_at         TIMESTAMP(6)
 ) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
@@ -107,6 +109,7 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_hourly (
     max_occupancy    BIGINT,
     detection_count  BIGINT,
     occupied_minutes BIGINT,
+    unique_tracks    BIGINT,
     refreshed_at     TIMESTAMP(6)
 ) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
 
@@ -120,8 +123,21 @@ CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_zone_daily (
     max_occupancy    BIGINT,
     detection_count  BIGINT,
     occupied_minutes BIGINT,
+    unique_tracks    BIGINT,
     refreshed_at     TIMESTAMP(6)
 ) WITH (format = 'PARQUET', format_version = 2, partitioning = ARRAY['metric_date', 'store_id']);
+
+ALTER TABLE lakehouse.rva_gold_serving.gold_serving_traffic_hourly
+ADD COLUMN IF NOT EXISTS unique_tracks BIGINT;
+
+ALTER TABLE lakehouse.rva_gold_serving.gold_serving_traffic_daily
+ADD COLUMN IF NOT EXISTS unique_tracks BIGINT;
+
+ALTER TABLE lakehouse.rva_gold_serving.gold_serving_zone_hourly
+ADD COLUMN IF NOT EXISTS unique_tracks BIGINT;
+
+ALTER TABLE lakehouse.rva_gold_serving.gold_serving_zone_daily
+ADD COLUMN IF NOT EXISTS unique_tracks BIGINT;
 
 -- ── Dwell ────────────────────────────────────────────────────────────────────
 CREATE TABLE IF NOT EXISTS lakehouse.rva_gold_serving.gold_serving_dwell_daily (

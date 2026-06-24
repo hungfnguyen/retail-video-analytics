@@ -195,9 +195,34 @@ def load_cameras_config(path: str | None = None) -> Dict[str, Any]:
         "live_media_dir": _resolve_project_path(
             _get_optional("live_media_dir", global_settings) or "runtime/live_frames"
         ),
+        "live_media_transport": str(
+            _get_optional("live_media_transport", global_settings) or "file"
+        ).lower(),
+        "live_media_redis_prefix": str(
+            _get_optional("live_media_redis_prefix", global_settings) or "live:frame"
+        ),
+        "live_media_ttl_sec": _get_int("live_media_ttl_sec", global_settings, 10),
         "live_media_fps": _get_float("live_media_fps", global_settings, 10.0),
         "live_media_jpeg_quality": _get_int(
             "live_media_jpeg_quality", global_settings, 80
+        ),
+        "live_redis_host": str(
+            _get_optional("live_redis_host", global_settings)
+            or os.getenv("REDIS_HOST")
+            or "localhost"
+        ),
+        "live_redis_port": int(
+            _get_optional("live_redis_port", global_settings)
+            or os.getenv("REDIS_HOST_PORT")
+            or 16379
+        ),
+        "live_redis_password": _get_optional("live_redis_password", global_settings)
+        or os.getenv("REDIS_PASSWORD")
+        or None,
+        "live_redis_db": _get_int(
+            "live_redis_db",
+            global_settings,
+            int(os.getenv("REDIS_DB", "0")),
         ),
         "media_upload_enabled": _get_bool(
             "media_upload_enabled", global_settings, False
@@ -443,25 +468,56 @@ def _fallback_single_camera() -> Dict[str, Any]:
             os.getenv("RVA_LIVE_MEDIA_DIR")
             or os.getenv("LIVE_MEDIA_DIR", "runtime/live_frames")
         ),
+        "live_media_transport": str(
+            os.getenv("RVA_LIVE_MEDIA_TRANSPORT")
+            or os.getenv("LIVE_MEDIA_TRANSPORT", "file")
+        ).lower(),
+        "live_media_redis_prefix": str(
+            os.getenv("RVA_LIVE_MEDIA_REDIS_PREFIX")
+            or os.getenv("LIVE_MEDIA_REDIS_PREFIX", "live:frame")
+        ),
+        "live_media_ttl_sec": _get_int("live_media_ttl_sec", {}, 10),
         "live_media_fps": _get_float("live_media_fps", {}, 10.0),
         "live_media_jpeg_quality": _get_int("live_media_jpeg_quality", {}, 80),
-        "media_upload_enabled": _get_bool("media_upload_enabled", {}, False),
-        "s3_endpoint": os.getenv("S3_ENDPOINT", ""),
-        "s3_region": os.getenv("S3_REGION", "us-east-1"),
-        "s3_bucket": os.getenv("S3_BUCKET", "warehouse"),
-        "s3_access_key": os.getenv("S3_ACCESS_KEY", ""),
-        "s3_secret_key": os.getenv("S3_SECRET_KEY", ""),
-        "s3_path_style": _get_bool("s3_path_style", {}, False),
-        "frame_sampling_enabled": _get_bool("frame_sampling_enabled", {}, True),
-        "frame_sample_interval_sec": _get_float("frame_sample_interval_sec", {}, 1.0),
-        "frame_jpeg_quality": _get_int("frame_jpeg_quality", {}, 85),
-        "frame_upload_workers": _get_int("frame_upload_workers", {}, 2),
-        "frame_upload_inflight_limit": _get_int("frame_upload_inflight_limit", {}, 8),
-        "alert_clip_enabled": _get_bool("alert_clip_enabled", {}, False),
-        "alert_density_threshold": _get_int("alert_density_threshold", {}, 10),
-        "alert_pre_buffer_sec": _get_int("alert_pre_buffer_sec", {}, 5),
-        "alert_post_buffer_sec": _get_int("alert_post_buffer_sec", {}, 5),
-        "alert_cooldown_sec": _get_int("alert_cooldown_sec", {}, 30),
-        "clip_jpeg_quality": _get_int("clip_jpeg_quality", {}, 80),
-        "clip_upload_workers": _get_int("clip_upload_workers", {}, 1),
+        "live_redis_host": str(
+            os.getenv("RVA_LIVE_REDIS_HOST")
+            or os.getenv("LIVE_REDIS_HOST")
+            or os.getenv("REDIS_HOST")
+            or "localhost"
+        ),
+        "live_redis_port": int(
+            os.getenv("RVA_LIVE_REDIS_PORT")
+            or os.getenv("LIVE_REDIS_PORT")
+            or os.getenv("REDIS_HOST_PORT")
+            or 16379
+        ),
+        "live_redis_password": os.getenv("RVA_LIVE_REDIS_PASSWORD")
+        or os.getenv("LIVE_REDIS_PASSWORD")
+        or os.getenv("REDIS_PASSWORD")
+        or None,
+        "live_redis_db": int(
+            os.getenv("RVA_LIVE_REDIS_DB")
+            or os.getenv("LIVE_REDIS_DB")
+            or os.getenv("REDIS_DB", "0")
+        ),
+        "media_upload_enabled": _get_s3_bool("media_upload_enabled", global_settings, False),
+        "s3_endpoint": _get_s3_optional("s3_endpoint", global_settings) or "",
+        "s3_region": _get_s3_optional("s3_region", global_settings) or "us-east-1",
+        "s3_bucket": _get_s3_optional("s3_bucket", global_settings) or "warehouse",
+        # None → boto3 falls back to default credential chain when no key is set.
+        "s3_access_key": _get_s3_credential("s3_access_key", global_settings),
+        "s3_secret_key": _get_s3_credential("s3_secret_key", global_settings),
+        "s3_path_style": _get_s3_bool("s3_path_style", global_settings, False),
+        "frame_sampling_enabled": _get_bool("frame_sampling_enabled", global_settings, True),
+        "frame_sample_interval_sec": _get_float("frame_sample_interval_sec", global_settings, 1.0),
+        "frame_jpeg_quality": _get_int("frame_jpeg_quality", global_settings, 85),
+        "frame_upload_workers": _get_int("frame_upload_workers", global_settings, 2),
+        "frame_upload_inflight_limit": _get_int("frame_upload_inflight_limit", global_settings, 8),
+        "alert_clip_enabled": _get_bool("alert_clip_enabled", global_settings, False),
+        "alert_density_threshold": _get_int("alert_density_threshold", global_settings, 10),
+        "alert_pre_buffer_sec": _get_int("alert_pre_buffer_sec", global_settings, 5),
+        "alert_post_buffer_sec": _get_int("alert_post_buffer_sec", global_settings, 5),
+        "alert_cooldown_sec": _get_int("alert_cooldown_sec", global_settings, 60),
+        "clip_jpeg_quality": _get_int("clip_jpeg_quality", global_settings, 80),
+        "clip_upload_workers": _get_int("clip_upload_workers", global_settings, 1),
     }

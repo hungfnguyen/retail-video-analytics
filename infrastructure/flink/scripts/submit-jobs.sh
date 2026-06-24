@@ -136,7 +136,7 @@ main() {
   fi
 
   echo "[submit-jobs] === Submitting Silver Layer ==="
-  if ! submit_job "org.rva.silver.SilverJob" "${USR_LIB}/silver-job.jar" "Silver"; then
+  if ! submit_job "org.rva.silver.SilverRealtimeJob" "${USR_LIB}/silver-job.jar" "Silver-Realtime"; then
     echo "[submit-jobs] ERROR: Silver job failed, aborting."
     exit 1
   fi

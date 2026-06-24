@@ -97,7 +97,10 @@ type Props = {
 export function HeatmapCanvas({ cells, gridRows, gridCols, opacity = 100 }: Props) {
   const canvasRef = useRef<HTMLCanvasElement>(null)
   const propsRef = useRef({ cells, gridRows, gridCols, opacity })
-  propsRef.current = { cells, gridRows, gridCols, opacity }
+
+  useEffect(() => {
+    propsRef.current = { cells, gridRows, gridCols, opacity }
+  }, [cells, gridRows, gridCols, opacity])
 
   useEffect(() => {
     const canvas = canvasRef.current

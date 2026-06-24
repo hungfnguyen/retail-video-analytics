@@ -58,6 +58,53 @@ def test_mjpeg_frames_yields_jpeg_part(monkeypatch, tmp_path):
     assert part.endswith(b"jpeg-bytes\r\n")
 
 
+def test_live_snapshot_reads_latest_jpeg_from_redis(monkeypatch):
+    class FakeRedis:
+        def get(self, key):
+            values = {
+                "live:frame:bytes:cam_01": b"jpeg-bytes",
+                "live:frame:meta:cam_01": b'{"frame_index":1}',
+            }
+            return values.get(key)
+
+    monkeypatch.setenv("RVA_LIVE_MEDIA_TRANSPORT", "redis")
+    monkeypatch.setattr(live_video, "_live_media_redis_client", FakeRedis())
+
+    response = live_video.get_live_snapshot("cam_01")
+
+    assert response.media_type == "image/jpeg"
+    assert response.body == b"jpeg-bytes"
+
+
+def test_mjpeg_frames_redis_yields_jpeg_part(monkeypatch):
+    class FakeRedis:
+        def __init__(self):
+            self.calls = 0
+
+        def get(self, key):
+            if key == "live:frame:meta:cam_01":
+                self.calls += 1
+                return f'{{"frame_index":{self.calls}}}'.encode("utf-8")
+            if key == "live:frame:bytes:cam_01":
+                return b"jpeg-bytes"
+            return None
+
+    monkeypatch.setenv("RVA_LIVE_MEDIA_TRANSPORT", "redis")
+    monkeypatch.setenv("RVA_LIVE_MEDIA_POLL_INTERVAL_SEC", "0.02")
+    monkeypatch.setattr(live_video, "_live_media_redis_client", FakeRedis())
+
+    stream = live_video._mjpeg_frames_redis("cam_01")
+    try:
+        part = next(stream)
+    finally:
+        stream.close()
+
+    assert part.startswith(b"--frame\r\n")
+    assert b"Content-Type: image/jpeg\r\n" in part
+    assert b"Content-Length: 10\r\n" in part
+    assert part.endswith(b"jpeg-bytes\r\n")
+
+
 def test_webrtc_fps_env_is_clamped(monkeypatch):
     monkeypatch.setenv("RVA_WEBRTC_VIDEO_FPS", "120")
 
