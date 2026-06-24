@@ -9,8 +9,9 @@ export type AnalyticsKpi = {
 
 export type HourlyTrafficPoint = {
   hour: string
+  visitors: number
+  avg_visitors: number
   detections: number
-  average: number
 }
 
 export type CameraComparisonPoint = {
@@ -52,6 +53,7 @@ export type TopZonePoint = {
   zone_id: string
   zone_name: string
   visitors: number
+  detections: number
   share: number
   avg_occupancy: number
   occupied_minutes: number
@@ -66,6 +68,7 @@ export type DwellTrendPoint = {
 
 export type DailySummaryRow = {
   date: string
+  visitors: number
   detections: number
   peak: string
   avg_dwell_sec: number

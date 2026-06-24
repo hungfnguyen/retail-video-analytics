@@ -72,7 +72,7 @@ export function OverviewTab({ data, queueData, alertData }: OverviewTabProps) {
           )}
         </SectionCard>
 
-        <SectionCard title="Visitors by Day of Week" subtitle="Average traffic per weekday">
+        <SectionCard title="Visitors by Day of Week" subtitle="Average unique visitors per weekday">
           {weekdayData.length === 0 ? (
             <EmptyState title="Need at least one full day of traffic" />
           ) : (
@@ -93,8 +93,8 @@ export function OverviewTab({ data, queueData, alertData }: OverviewTabProps) {
 
       <div className="grid grid-cols-[1.05fr_0.95fr] gap-5">
         <SectionCard
-          title="Peak Hours (By Avg Visitors)"
-          subtitle="Day-hour traffic concentration"
+          title="Peak Hours (By Visitors)"
+          subtitle="Day-hour visitor concentration across the selected period"
           actions={
             <div className="flex items-center gap-2 text-xs text-slate-500">
               <span>Low</span>
@@ -135,7 +135,7 @@ export function OverviewTab({ data, queueData, alertData }: OverviewTabProps) {
           )}
         </SectionCard>
 
-        <SectionCard title="Top Zones (By Visitors)" subtitle="Highest traffic concentration by zone">
+        <SectionCard title="Top Zones (By Visitors)" subtitle="Highest unique visitor concentration by zone">
           {topZones.length === 0 ? (
             <EmptyState title="No zone ranking available yet" />
           ) : (

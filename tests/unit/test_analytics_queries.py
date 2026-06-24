@@ -38,7 +38,7 @@ def test_dashboard_queries_read_gold_aggregate_tables():
     assert "gold_camera_daily_metrics" not in combined_sql
 
 
-def test_dashboard_queries_do_not_read_unique_track_metrics():
+def test_dashboard_queries_use_unique_track_metrics_for_visitor_views():
     combined_sql = "\n".join(
         [
             analytics_queries.summary_sql(7),
@@ -48,10 +48,9 @@ def test_dashboard_queries_do_not_read_unique_track_metrics():
         ]
     )
 
-    assert "unique_tracks" not in combined_sql
+    assert "unique_tracks" in combined_sql
     assert "unique_hll" not in combined_sql
-    assert "COUNT(DISTINCT CONCAT(" not in combined_sql
-    assert "lakehouse.rva.silver_detections_v2" not in combined_sql
+    assert "lakehouse.rva_gold_serving.gold_serving_traffic_daily" in combined_sql
 
 
 def test_heatmap_and_queue_queries_read_marts():
@@ -73,7 +72,8 @@ def test_daily_query_returns_dwell_and_quality_fields():
     assert "avg_dwell_sec" in sql
     assert "avg_queue_wait_sec" in sql
     assert "total_alerts" in sql
-    assert "unique_tracks" not in sql
+    assert "total_visitors" in sql
+    assert "unique_tracks" in sql
 
 
 def test_dashboard_queries_accept_camera_filter():

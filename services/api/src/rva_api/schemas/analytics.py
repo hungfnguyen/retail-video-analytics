@@ -12,8 +12,9 @@ class AnalyticsKpi(BaseModel):
 
 class HourlyTrafficPoint(BaseModel):
     hour: str
+    visitors: int
+    avg_visitors: int
     detections: int
-    average: int
 
 
 class CameraComparisonPoint(BaseModel):
@@ -55,6 +56,7 @@ class TopZonePoint(BaseModel):
     zone_id: str
     zone_name: str
     visitors: int
+    detections: int
     share: float
     avg_occupancy: float
     occupied_minutes: int
@@ -69,6 +71,7 @@ class DwellTrendPoint(BaseModel):
 
 class DailySummaryRow(BaseModel):
     date: str
+    visitors: int
     detections: int
     peak: str
     avg_dwell_sec: float
