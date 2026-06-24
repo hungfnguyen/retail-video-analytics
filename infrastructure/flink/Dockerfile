@@ -35,7 +35,8 @@ COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/gold-
 COPY --from=builder /build/target/silver-job-0.1.0.jar "$FLINK_USR_LIB_DIR/realtime-job.jar"
 
 # Copy script tự động submit jobs
+COPY infrastructure/flink/scripts/bootstrap-flink.sh /opt/flink/bin/bootstrap-flink.sh
 COPY infrastructure/flink/scripts/submit-jobs.sh /opt/flink/bin/submit-jobs.sh
-RUN chmod +x /opt/flink/bin/submit-jobs.sh
+RUN chmod +x /opt/flink/bin/bootstrap-flink.sh /opt/flink/bin/submit-jobs.sh
 
 EXPOSE 6123 8081

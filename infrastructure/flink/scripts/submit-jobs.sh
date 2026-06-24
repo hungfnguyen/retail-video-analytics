@@ -5,6 +5,8 @@ set -euo pipefail
 
 FLINK_HOME=${FLINK_HOME:-/opt/flink}
 USR_LIB=${FLINK_USR_LIB_DIR:-/opt/flink/usrlib}
+FLINK_JOB_REGISTRY=${FLINK_JOB_REGISTRY:-/opt/flink/runtime/job-registry.tsv}
+FLINK_SAVEPOINT_MANIFEST=${FLINK_SAVEPOINT_MANIFEST:-/opt/flink/runtime/restore-manifest.tsv}
 
 wait_for_jobmanager() {
   echo "[submit-jobs] Waiting for JobManager..."
@@ -67,12 +69,38 @@ get_running_job_ids() {
     | grep -oE '"jid":"[0-9a-f]+"' | grep -oE '[0-9a-f]{32}' | sort || true
 }
 
+restore_path_for_class() {
+  local class_name=$1
+  if [ ! -f "${FLINK_SAVEPOINT_MANIFEST}" ]; then
+    return 0
+  fi
+  awk -F'|' -v class_name="${class_name}" '$1 == class_name {print $2}' "${FLINK_SAVEPOINT_MANIFEST}" | tail -n 1
+}
+
+record_job_registry() {
+  local class_name=$1
+  local job_name=$2
+  local job_id=$3
+  local stateful=$4
+  mkdir -p "$(dirname "${FLINK_JOB_REGISTRY}")"
+  printf '%s|%s|%s|%s\n' "${class_name}" "${job_name}" "${job_id}" "${stateful}" >> "${FLINK_JOB_REGISTRY}"
+}
+
 submit_job() {
   local class_name=$1
   local jar_file=$2
   local job_name=$3
+  local stateful=${4:-false}
   local max_retries=3
   local retry=0
+  local restore_path=""
+
+  if [ "${stateful}" = "true" ]; then
+    restore_path=$(restore_path_for_class "${class_name}")
+    if [ -n "${restore_path}" ]; then
+      echo "[submit-jobs] ${job_name} will restore from savepoint ${restore_path}."
+    fi
+  fi
 
   while [ "${retry}" -lt "${max_retries}" ]; do
     echo "[submit-jobs] Submitting ${job_name}..."
@@ -83,7 +111,13 @@ submit_job() {
     before_ids=$(get_running_job_ids)
 
     local out=""
-    if ! out=$(timeout 120s "${FLINK_HOME}/bin/flink" run -d -c "${class_name}" "${jar_file}" 2>&1); then
+    local cmd=("${FLINK_HOME}/bin/flink" run -d)
+    if [ -n "${restore_path}" ]; then
+      cmd+=(-s "${restore_path}")
+    fi
+    cmd+=(-c "${class_name}" "${jar_file}")
+
+    if ! out=$(timeout 120s "${cmd[@]}" 2>&1); then
       out=""
     fi
 
@@ -111,6 +145,7 @@ submit_job() {
 
     echo "[submit-jobs] ${job_name} submitted with JobID ${job_id}."
     if check_job_status_by_id "${job_id}"; then
+      record_job_registry "${class_name}" "${job_name}" "${job_id}" "${stateful}"
       return 0
     fi
 
@@ -125,6 +160,8 @@ submit_job() {
 
 main() {
   wait_for_jobmanager || exit 1
+  mkdir -p "$(dirname "${FLINK_JOB_REGISTRY}")"
+  : > "${FLINK_JOB_REGISTRY}"
 
   echo "[submit-jobs] Waiting for TaskManager registration..."
   sleep 10
@@ -141,19 +178,19 @@ main() {
     exit 1
   fi
 
+  echo "[submit-jobs] === Submitting RealtimeMetrics Job ==="
+  if ! submit_job "org.rva.realtime.RealtimeMetricsJob" "${USR_LIB}/realtime-job.jar" "RealtimeMetrics"; then
+    echo "[submit-jobs] WARN: RealtimeMetrics failed, continuing anyway."
+  fi
+
   echo "[submit-jobs] === Submitting Gold Layer ==="
-  if ! submit_job "org.rva.gold.GoldTrackSummaryJob" "${USR_LIB}/gold-jobs.jar" "Gold-TrackSummary"; then
+  if ! submit_job "org.rva.gold.GoldTrackSummaryJob" "${USR_LIB}/gold-jobs.jar" "Gold-TrackSummary" "true"; then
     echo "[submit-jobs] WARN: Gold-TrackSummary failed, continuing anyway."
   fi
 
   echo "[submit-jobs] === Submitting Queue Analytics Gold Layer ==="
-  if ! submit_job "org.rva.gold.QueueAnalyticsJob" "${USR_LIB}/gold-jobs.jar" "Gold-QueueAnalytics"; then
+  if ! submit_job "org.rva.gold.QueueAnalyticsJob" "${USR_LIB}/gold-jobs.jar" "Gold-QueueAnalytics" "true"; then
     echo "[submit-jobs] WARN: Gold-QueueAnalytics failed, continuing anyway."
-  fi
-
-  echo "[submit-jobs] === Submitting RealtimeMetrics Job ==="
-  if ! submit_job "org.rva.realtime.RealtimeMetricsJob" "${USR_LIB}/realtime-job.jar" "RealtimeMetrics"; then
-    echo "[submit-jobs] WARN: RealtimeMetrics failed, continuing anyway."
   fi
 
   echo "[submit-jobs] === Submitting Gold Alerts Job ==="

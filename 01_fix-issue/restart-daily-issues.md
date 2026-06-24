@@ -2,7 +2,7 @@
 
 **Ngày phát hiện:** 2026-06-24  
 **Bối cảnh:** Hệ thống không chạy liên tục — mỗi ngày stop rồi start lại  
-**Status:** Đã phân tích, chưa fix
+**Status:** Đã verify với codebase; fix đã implement trong code, pending runtime verification
 
 ---
 
@@ -16,9 +16,9 @@ Thiết kế ban đầu của một số thành phần giả định hệ thốn
 
 ## 2. Issues
 
-### Issue 1 — Analytics charts trống tối đa 30 phút sau restart (CRITICAL)
+### Issue 1 — Analytics thiếu data hôm nay tối đa 30 phút sau restart (HIGH)
 
-**Triệu chứng:** Sau khi `docker compose up`, mọi chart trên Analytics dashboard (traffic, dwell, queue, zone) hiện data của ngày hôm qua hoặc trống hoàn toàn trong khoảng 30 phút.
+**Triệu chứng:** Sau khi `docker compose up`, Analytics dashboard chưa có slice của ngày hôm nay trong khoảng tối đa 30 phút. Trong trạng thái vận hành bình thường, UI mặc định vẫn còn data các ngày trước; nếu vừa reset hoặc chưa có historical data thì chart có thể trống hoàn toàn.
 
 **Root cause:**
 
@@ -27,19 +27,20 @@ DAG `gold_serving_today_refresh` schedule `*/30 * * * *` với `catchup=False`:
 ```
 Stack restart lúc 9:00
   → First DAG run: 9:30 (hoặc 10:00 nếu vừa lỡ 30-min slot)
-  → Trong window đó: gold_serving tables KHÔNG có data hôm nay
-  → Analytics API query → trả về 0 hoặc data ngày cũ
+  → Trong window đó: gold_serving tables chưa có partition intraday mới cho hôm nay
+  → Analytics API query → trả về data ngày cũ hoặc thiếu phần hôm nay
 ```
 
 **File liên quan:**
 - `infrastructure/airflow/dags/gold_serving_today_refresh.py` — schedule `*/30 * * * *`, catchup=False
-- `services/gold_serving/sql/refresh/` — SQL refresh cho từng domain
+- `frontend/src/features/analytics/AnalyticsPage.tsx` — preset mặc định là `last_7_days`
+- `services/api/src/rva_api/api/v1/analytics_queries.py` — query theo range ngày, không chỉ `today`
 
 ---
 
-### Issue 2 — Live dashboard ~90 giây dead time sau restart (MEDIUM)
+### Issue 2 — Live dashboard có cold-start gap sau restart (MEDIUM)
 
-**Triệu chứng:** Ngay sau khi stack start, Live Monitor hiện occupancy = 0, heatmap trống, không có track nào.
+**Triệu chứng:** Ngay sau khi stack start, Live Monitor có thể hiện occupancy = 0, heatmap trống, không có track nào cho đến khi Vision phát frame mới và `RealtimeMetricsJob` bắt đầu ghi Redis.
 
 **Root cause:**
 
@@ -52,40 +53,56 @@ docker compose up
   → submit Bronze → wait RUNNING
   → submit SilverRealtimeJob → wait RUNNING
   → submit Gold jobs...
-  ≈ 90 giây tổng cộng trước khi data chảy vào Redis
+  → submit RealtimeMetricsJob
+  → chỉ sau đó Redis live keys mới bắt đầu được ghi
 ```
 
-Trong 90s này:
+Trong giai đoạn cold start này:
 - `stats:count:{cam}` không tồn tại → API trả về 0 người
 - `heatmap:live:{cam}` trống → Heatmap page empty
-- Alert evaluator phát hiện pipeline lag → bắn alert giả
+
+**Lưu ý quan trọng:** con số `~90 giây` chỉ là estimate theo flow submit job, không phải bound tin cậy. Thời gian thực tế còn phụ thuộc vào việc Vision service có được khởi động chưa, vì Vision đang chạy thủ công ngoài `docker compose`.
 
 **File liên quan:**
 - `infrastructure/flink/scripts/submit-jobs.sh` — sequential job submission
 - `services/flink-jobs/java/src/main/java/org/rva/realtime/RealtimeMetricsJob.java` — writes Redis live keys
+- `services/api/src/rva_api/alert_evaluator.py` — cold start **không** tự bắn `pipeline_lag` nếu `live:frame:{cam}` chưa tồn tại
 
 ---
 
-### Issue 3 — GoldTrackSummaryJob mất state → dwell analytics sai (MEDIUM)
+### Issue 3 — Restart có thể làm dwell analytics bị lệch / visit bị cắt đôi (MEDIUM)
 
-**Triệu chứng:** `duration_sec` của các track bị ngắt giữa chừng bởi restart bằng 0 hoặc rất nhỏ. Tỉ lệ `short dwell` tăng bất thường sau mỗi ngày restart.
+**Triệu chứng:** Các visit đang diễn ra tại thời điểm restart có thể bị chia làm 2 đoạn độc lập trước/sau restart. Hệ quả là `duration_sec` bị ngắn hơn thực tế và tỉ lệ `short dwell` có thể tăng bất thường.
 
 **Root cause:**
 
-`GoldTrackSummaryJob` là streaming aggregation job, **không có Flink savepoint**:
+Có **hai nguyên nhân độc lập**:
+
+1. `GoldTrackSummaryJob` là streaming aggregation job và checkpoint hiện được cấu hình:
+
+- `execution.checkpointing.interval: 30s`
+- `execution.checkpointing.externalized-checkpoint-retention: DELETE_ON_CANCELLATION`
+
+Điều này nghĩa là khi job bị cancel bởi restart / `docker compose down`, externalized checkpoint sẽ bị xóa. `submit-jobs.sh` cũng không restore từ savepoint/checkpoint khi submit lại.
+
+2. Vision tạo `pipeline_run_id` mới mỗi lần worker start. `global_track_id` cũng không chứa `pipeline_run_id`, mà chỉ có dạng `cam_xx_g_000001`. Vì `GoldTrackSummaryJob` group theo `(store_id, camera_id, pipeline_run_id, global_track_id)`, cùng một người trước và sau restart sẽ bị coi là hai track summary khác nhau.
 
 ```
 Người vào store lúc 9:05, hệ thống stop lúc 9:10
-  → Job state bị xóa (flink_state volume chứa checkpoint nhưng không restore)
-  → Restart hôm sau: track đó không còn trong Flink state
-  → duration_sec không được ghi, track bị drop khỏi gold_track_summary_v2
+  → Job bị cancel, externalized checkpoint bị xóa
+  → Vision restart tạo pipeline_run_id mới
+  → Restart xong: track đang dang dở không còn aggregate state cũ
+  → Cùng một người trước/sau restart bị tách thành 2 summary rows
 
-Kết quả: dwell_band bị lệch về "short" (<30s) dù thực tế người đứng lâu hơn
+Kết quả: dwell_band có thể bị lệch về "short" dù thực tế người đứng lâu hơn
 ```
 
 **File liên quan:**
 - `services/flink-jobs/java/src/main/java/org/rva/gold/GoldTrackSummaryJob.java`
-- `infrastructure/flink/scripts/submit-jobs.sh` — submit không dùng `-s <savepoint>`
+- `infrastructure/flink/conf/flink-conf.yaml` — `DELETE_ON_CANCELLATION`
+- `infrastructure/flink/scripts/submit-jobs.sh` — submit không dùng `-s <savepoint>` / restore path
+- `services/vision/worker.py` — tạo `pipeline_run_id` mới mỗi lần start
+- `services/vision/features/detections.py` — `global_track_id` không gắn `pipeline_run_id`
 
 ---
 
@@ -117,7 +134,7 @@ Alert evaluator repopulate sau ~10s nhưng **chỉ tạo alert mới** khi có t
 
 ### Issue 5 — SilverRealtimeJob xử lý Pulsar backlog chậm (INFO)
 
-**Triệu chứng:** Trong ~5–10 phút đầu sau restart, Silver và Gold tables nhận data chậm hơn bình thường dù Vision đã chạy.
+**Triệu chứng:** Sau restart, Silver và các Gold jobs downstream **có thể** nhận data chậm hơn bình thường nếu Pulsar còn backlog chưa được ack từ lần chạy trước.
 
 **Root cause:**
 
@@ -125,12 +142,11 @@ Alert evaluator repopulate sau ~10s nhưng **chỉ tạo alert mới** khi có t
 
 ```
 Stop lúc 11:00 PM, restart lúc 9:00 AM hôm sau
-  → 10h backlog trong Pulsar (pulsar_data volume còn giữ)
-  → Silver job process backlog trước
-  → Gold serving data đổ vào chậm hơn ~5-10 phút
+  → backlog cũ trong Pulsar vẫn còn
+  → Silver job phải consume phần backlog đó trước khi bám sát realtime hoàn toàn
 ```
 
-Đây là hành vi **đúng về correctness** (không mất data), nhưng gây delay initial analytics.
+Đây là hành vi **đúng về correctness** (không mất data), nhưng có thể gây delay initial analytics. Con số `5-10 phút` hiện chưa được benchmark trong repo, nên chỉ nên coi là estimate.
 
 **File liên quan:**
 - `services/flink-jobs/java/src/main/java/org/rva/silver/SilverRealtimeJob.java` — subscription `flink-silver-realtime-ok`
@@ -142,12 +158,13 @@ Stop lúc 11:00 PM, restart lúc 9:00 AM hôm sau
 ```
 T+0s    docker compose up
 T+30s   Flink JobManager healthy, Redis/Pulsar/Trino ready
-T+90s   Tất cả Flink jobs RUNNING → pipeline hoạt động
-T+10m   Vision service khởi động thủ công → live frame/count có data
-T+30m*  gold_serving_today_refresh chạy lần đầu → analytics charts có data hôm nay
+T+60-120s*  Các Flink jobs lần lượt RUNNING
+T+?     Vision service khởi động thủ công → live frame/count bắt đầu có data
+T+30m** gold_serving_today_refresh chạy lần đầu → analytics có slice hôm nay
 T+24h   @daily DAGs (dwell/queue/zone) chạy → data ngày hôm qua hoàn chỉnh
 
-* worst case: restart đúng lúc vừa lỡ 30-min slot → phải chờ đến slot tiếp theo
+* chỉ là estimate theo trình tự submit hiện tại, không phải SLA cứng
+** worst case: restart đúng lúc vừa lỡ 30-min slot → phải chờ đến slot tiếp theo
 ```
 
 ---
@@ -164,12 +181,12 @@ T+24h   @daily DAGs (dwell/queue/zone) chạy → data ngày hôm qua hoàn ch�
 
 ---
 
-## 5. Hướng xử lí (chưa implement)
+## 5. Hướng xử lí
 
 | Issue | Hướng fix | Độ phức tạp |
 |---|---|---|
-| Analytics trống 30 phút | Trigger `gold_serving_today_refresh` ngay khi stack start (startup script hoặc Airflow sensor) | Thấp |
-| Live dead time 90s | Chấp nhận cho demo — hoặc pre-warm Redis với last known values trước khi Flink ready | Trung bình |
-| Dwell sai do restart | Bật Flink savepoint/checkpoint recovery cho GoldTrackSummaryJob | Cao |
+| Analytics thiếu slice hôm nay | Trigger `gold_serving_today_refresh` ngay khi stack start (startup script hoặc Airflow sensor) | Thấp |
+| Live cold-start gap | Chấp nhận cho demo, hoặc pre-warm Redis / tự động start Vision sớm hơn / submit `RealtimeMetricsJob` sớm hơn | Trung bình |
+| Dwell lệch do restart | Giữ checkpoint khi cancel hoặc restore từ savepoint; đồng thời làm rõ semantics identity qua restart | Cao |
 | Alert history mất | Thêm `redis_data` volume + Redis persistence (`appendonly yes`) | Thấp |
 | Pulsar backlog delay | Thêm lag metric monitoring — không cần fix, chỉ cần document | Không cần fix |
