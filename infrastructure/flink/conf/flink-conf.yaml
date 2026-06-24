@@ -48,11 +48,11 @@ table.exec.iceberg.infer-source-parallelism: false
 blob.server.port: 6124
 query.server.port: 6125
 
-# -- CHECKPOINT & STATE BACKEND (FIXED) --
-# Sử dụng Filesystem backend nhưng lưu trên S3 thay vì Local File
+# -- CHECKPOINT & STATE BACKEND --
+# Giá trị thực được render từ env bởi bootstrap-flink.sh vào runtime conf dir.
 state.backend.type: filesystem
-state.checkpoints.dir: file:///opt/flink/state/checkpoints
-state.savepoints.dir: file:///opt/flink/state/savepoints
+state.checkpoints.dir: __FLINK_CHECKPOINTS_URI__
+state.savepoints.dir: __FLINK_SAVEPOINTS_URI__
 
 # Cấu hình S3 cho Flink System (Checkpointing)
 # AWS S3 mode: endpoint is auto-resolved by AWS SDK
@@ -64,11 +64,10 @@ execution.checkpointing.interval: 30s
 execution.checkpointing.min-pause: 15s
 execution.checkpointing.timeout: 1200s
 execution.checkpointing.tolerable-failed-checkpoints: 5
-execution.checkpointing.externalized-checkpoint-retention: DELETE_ON_CANCELLATION
+execution.checkpointing.externalized-checkpoint-retention: RETAIN_ON_CANCELLATION
 
 # -- Java Options (Fix Java 17+ Access Issues) --
 # Cho phép truy cập module java.util để Kryo serializer hoạt động
 env.java.opts: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
 env.java.opts.jobmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
 env.java.opts.taskmanager: "--add-opens=java.base/java.util=ALL-UNNAMED --add-opens=java.base/java.lang=ALL-UNNAMED --add-opens=java.base/java.nio=ALL-UNNAMED --add-opens=java.base/sun.nio.ch=ALL-UNNAMED"
-

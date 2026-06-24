@@ -46,12 +46,13 @@ services:
       context: .
       dockerfile: infrastructure/flink/Dockerfile
     container_name: flink-jobmanager
-    command: jobmanager
+    command: /opt/flink/bin/bootstrap-flink.sh jobmanager
     ports:
       - "8081:8081"
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
       - flink_state:/opt/flink/state
+      - ./runtime/flink:/opt/flink/runtime
       - ./services/flink-jobs/sql:/opt/flink/usrlib/sql
       - ./logs/flink:/opt/flink/log
     environment:
@@ -66,6 +67,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://retail-video-analytics-prod/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://retail-video-analytics-prod/flink/savepoints}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -84,12 +87,13 @@ services:
       context: .
       dockerfile: infrastructure/flink/Dockerfile
     container_name: flink-taskmanager
-    command: taskmanager
+    command: /opt/flink/bin/bootstrap-flink.sh taskmanager
     depends_on:
       - flink-jobmanager
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
       - flink_state:/opt/flink/state
+      - ./runtime/flink:/opt/flink/runtime
     environment:
       AWS_REGION: ${S3_REGION}
       AWS_DEFAULT_REGION: ${S3_REGION}
@@ -102,6 +106,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://retail-video-analytics-prod/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://retail-video-analytics-prod/flink/savepoints}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -117,7 +123,7 @@ services:
       context: .
       dockerfile: infrastructure/flink/Dockerfile
     container_name: flink-job-submitter
-    command: /opt/flink/bin/submit-jobs.sh
+    command: /opt/flink/bin/bootstrap-flink.sh submitter
     depends_on:
       flink-jobmanager:
         condition: service_healthy
@@ -141,12 +147,17 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://retail-video-analytics-prod/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://retail-video-analytics-prod/flink/savepoints}
+      FLINK_JOB_REGISTRY: /opt/flink/runtime/job-registry.tsv
+      FLINK_SAVEPOINT_MANIFEST: /opt/flink/runtime/restore-manifest.tsv
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
       PULSAR_DLQ_TOPIC: persistent://retail/metadata/dlq-events
     volumes:
       - ./infrastructure/flink/conf:/opt/flink/conf
+      - ./runtime/flink:/opt/flink/runtime
     networks:
       - retail-net
     restart: "no"
@@ -154,8 +165,11 @@ services:
   redis:
     image: redis:7-alpine
     container_name: redis
+    command: ["redis-server", "--appendonly", "yes", "--dir", "/data"]
     ports:
       - "${REDIS_HOST_PORT:-16379}:6379"
+    volumes:
+      - redis_data:/data
     healthcheck:
       test: ["CMD", "redis-cli", "ping"]
       interval: 5s
@@ -362,6 +376,8 @@ volumes:
   flink_state:
     driver: local
   pulsar_data:
+    driver: local
+  redis_data:
     driver: local
   airflow_data:
     driver: local

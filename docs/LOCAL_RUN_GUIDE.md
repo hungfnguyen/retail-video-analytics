@@ -28,8 +28,7 @@ aws s3 ls s3://retail-video-analytics-prod/
 ## 3. Start Infrastructure
 
 ```bash
-cd D:\workspace\retail-video-analytics
-docker compose up -d --build
+./scripts/restart-stack-up.sh
 docker compose ps
 ```
 
@@ -99,8 +98,8 @@ curl http://localhost:8000/api/v1/analytics/dashboard?days=7
 
 Airflow operational notes:
 
-- Unpause only `gold_serving_today_refresh` when you want the Analytics serving
-  tables to refresh automatically.
+- `restart-stack-up.sh` unpauses and triggers `gold_serving_today_refresh` once
+  so Analytics gets today's serving slice immediately after startup.
 - Keep `gold_serving_heatmap_intraday` separate from the Analytics refresh path;
   it refreshes heatmap tiles less often so heatmap work cannot block KPI tables.
 - Leave other DAGs paused unless you explicitly need their daily backfill or
@@ -113,7 +112,7 @@ Stop Vision, API, and Frontend with `Ctrl+C` in their terminals.
 Stop infrastructure:
 
 ```bash
-docker compose down
+./scripts/restart-stack-down.sh
 ```
 
 Reset infrastructure state:
@@ -121,3 +120,12 @@ Reset infrastructure state:
 ```bash
 docker compose down -v
 ```
+
+Restart notes:
+
+- `restart-stack-down.sh` creates savepoints for stateful Flink jobs before
+  stopping the stack, then writes `runtime/flink/restore-manifest.tsv`.
+- `restart-stack-up.sh` starts the stack and lets `flink-job-submitter` restore
+  stateful jobs from that manifest when compatible savepoints are available.
+- `FLINK_CHECKPOINTS_URI` and `FLINK_SAVEPOINTS_URI` must point to writable
+  object-storage paths.
