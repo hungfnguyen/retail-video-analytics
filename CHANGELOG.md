@@ -2,6 +2,10 @@
 
 Ghi lại tất cả các công việc đã hoàn thành trong dự án Retail Video Analytics.
 
+## 2026-06-24
+
+- **2026-06-24: Add evenly distributed Vision evaluation frame extraction at scripts/extract_vision_eval_frames.py - Supports one or more videos and prepares representative images for Precision, Recall, and F1-score evaluation (completed).**
+
 ## 2026-06-07
 
 - **2026-06-07: Fix Vision CI import verification at .github/workflows/test.yml - Updated the pull request import smoke test to use the current rva-vision modules instead of removed legacy tracker, detector, and ingest imports (completed).**
