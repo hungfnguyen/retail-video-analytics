@@ -54,7 +54,7 @@ Media artifacts are separate from analytical metadata.
 Pulsar raw JSON -> bronze_raw
 bronze_raw payload -> ParseDetections UDTF -> silver_detections_v2
 silver_detections_v2 -> track aggregate -> gold_track_summary_v2
-silver_detections_v2 -> queue aggregate -> gold_queue_sessions
+silver_detections_v2 -> queue aggregate -> gold_queue_sessions_v2
 media-events -> clip incident aggregate -> gold_alerts
 Gold facts / Silver -> Gold serving -> rva_gold_serving.gold_serving_*
 ```

@@ -25,10 +25,11 @@ Table gold_track_summary_v2 {
   camera_id       varchar
   Note: '1 global track (dwell/visit lifecycle).'
 }
-Table gold_queue_sessions {
+Table gold_queue_sessions_v2 {
+  pipeline_run_id varchar
   global_track_id varchar
   queue_zone_id   varchar
-  Note: '1 queue session per track.'
+  Note: '1 queue session per track within a pipeline run.'
 }
 Table gold_camera_hourly_metrics {
   camera_id varchar
@@ -70,7 +71,7 @@ Ref: bronze_raw.event_id < silver_detections_v2.event_id
 
 // ───── FLOW: Silver -> Gold facts ─────
 Ref: silver_detections_v2.global_track_id < gold_track_summary_v2.global_track_id
-Ref: silver_detections_v2.global_track_id < gold_queue_sessions.global_track_id
+Ref: silver_detections_v2.global_track_id < gold_queue_sessions_v2.global_track_id
 Ref: silver_detections_v2.camera_id < gold_camera_hourly_metrics.camera_id
 Ref: silver_detections_v2.camera_id < gold_camera_daily_metrics.camera_id
 Ref: silver_detections_v2.camera_id < gold_alert_events.camera_id
@@ -81,7 +82,7 @@ Ref: silver_detections_v2.camera_id < gold_serving_heatmap_tile_5min.camera_id
 Ref: gold_serving_heatmap_tile_5min.camera_id < gold_serving_heatmap_tile_hour.camera_id
 Ref: silver_detections_v2.camera_id < gold_serving_traffic_hourly.camera_id
 Ref: gold_serving_traffic_hourly.camera_id < gold_serving_traffic_daily.camera_id
-Ref: gold_queue_sessions.queue_zone_id < gold_serving_queue_hourly.queue_zone_id
+Ref: gold_queue_sessions_v2.queue_zone_id < gold_serving_queue_hourly.queue_zone_id
 Ref: gold_serving_queue_hourly.queue_zone_id < gold_serving_queue_daily.queue_zone_id
 Ref: silver_detections_v2.camera_id < gold_serving_zone_hourly.camera_id
 Ref: gold_serving_zone_hourly.camera_id < gold_serving_zone_daily.camera_id
@@ -94,7 +95,7 @@ TableGroup Bronze { bronze_raw }
 TableGroup Silver { silver_detections_v2 }
 TableGroup "Gold facts" {
   gold_track_summary_v2
-  gold_queue_sessions
+  gold_queue_sessions_v2
   gold_camera_hourly_metrics
   gold_camera_daily_metrics
   gold_camera_daily_dwell

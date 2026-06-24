@@ -80,9 +80,10 @@ Table gold_track_summary_v2 {
   Note: 'Grain: 1 global track (dwell/visit lifecycle).'
 }
 
-Table gold_queue_sessions {
+Table gold_queue_sessions_v2 {
   store_id           varchar
   camera_id          varchar
+  pipeline_run_id    varchar
   queue_zone_id      varchar
   global_track_id    varchar
   visit_date         date
@@ -94,9 +95,9 @@ Table gold_queue_sessions {
   last_track_id      bigint
   raw_track_id_count bigint
   indexes {
-    (store_id, camera_id, queue_zone_id, global_track_id) [pk]
+    (store_id, camera_id, pipeline_run_id, queue_zone_id, global_track_id) [pk]
   }
-  Note: 'Grain: 1 queue session per track.'
+  Note: 'Grain: 1 queue session per track within a pipeline run.'
 }
 
 Table gold_camera_hourly_metrics {
@@ -407,7 +408,7 @@ TableGroup Silver {
 }
 TableGroup "Gold facts" {
   gold_track_summary_v2
-  gold_queue_sessions
+  gold_queue_sessions_v2
   gold_camera_hourly_metrics
   gold_camera_daily_metrics
   gold_camera_daily_dwell

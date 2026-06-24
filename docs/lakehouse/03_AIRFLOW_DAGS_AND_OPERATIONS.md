@@ -45,7 +45,7 @@ Dùng khi:
 
 Ví dụ:
 
-- `gold_queue_sessions -> gold_serving_queue_daily`
+- `gold_queue_sessions_v2 -> gold_serving_queue_daily`
 - `silver_detections_v2 -> gold_serving_zone_hourly`
 - `gold_camera_hourly_metrics -> gold_serving_traffic_daily`
 - `gold_alerts -> gold_serving_alert_hourly`

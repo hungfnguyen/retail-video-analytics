@@ -48,7 +48,7 @@ queue AS (
            AVG(CAST(wait_time_sec AS DOUBLE)) AS avg_queue_wait_sec,
            CAST(approx_percentile(wait_time_sec, 0.9) AS DOUBLE) AS p90_queue_wait_sec,
            CAST(MAX(wait_time_sec) AS DOUBLE) AS max_queue_wait_sec
-    FROM lakehouse.rva.gold_queue_sessions
+    FROM lakehouse.rva.gold_queue_sessions_v2
     WHERE wait_time_sec >= 0 AND enter_ts IS NOT NULL
       AND CAST(enter_ts AS DATE) BETWEEN DATE '{start}' AND DATE '{end}'
     GROUP BY store_id, CAST(enter_ts AS DATE)

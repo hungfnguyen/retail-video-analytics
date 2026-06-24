@@ -85,7 +85,7 @@ Bảng hiện tại trong codebase:
 | Tier | Table | Grain | Vai trò |
 |---|---|---|---|
 | Gold facts | `lakehouse.rva.gold_track_summary_v2` | 1 row = 1 global track | lifecycle / dwell / visit summary |
-| Gold facts | `lakehouse.rva.gold_queue_sessions` | 1 row = 1 queue session | queue wait analytics |
+| Gold facts | `lakehouse.rva.gold_queue_sessions_v2` | 1 row = 1 queue session within a pipeline run | queue wait analytics |
 | Gold facts | `lakehouse.rva.gold_camera_hourly_metrics` | 1 row = 1 camera + 1 hour | traffic aggregate theo giờ |
 | Gold facts | `lakehouse.rva.gold_camera_daily_metrics` | 1 row = 1 camera + 1 day | traffic aggregate theo ngày |
 | Gold facts | `lakehouse.rva.gold_camera_daily_dwell` | 1 row = 1 camera + 1 day | dwell aggregate theo ngày |
@@ -137,7 +137,7 @@ Ghi chú thực tế:
 | `BronzeIngestJob` | Pulsar `events` | `bronze_raw` | ingest liên tục, raw stream |
 | `SilverJob` | `bronze_raw` | `silver_detections_v2` | parse/flatten/enrich liên tục |
 | `GoldTrackSummaryJob` | `silver_detections_v2` | `gold_track_summary_v2` | track lifecycle là stateful/incremental |
-| `QueueAnalyticsJob` | `silver_detections_v2` | `gold_queue_sessions` | queue session là stateful/incremental |
+| `QueueAnalyticsJob` | `silver_detections_v2` | `gold_queue_sessions_v2` | queue session là stateful/incremental |
 | `GoldDashboardAggregateJob` | `silver_detections_v2`, `gold_track_summary_v2` | `gold_camera_hourly_metrics`, `gold_camera_daily_metrics`, `gold_camera_daily_dwell`, `gold_alert_events` | near-real-time facts cho traffic/dwell/alerts |
 | `RealtimeMetricsJob` | Pulsar `events` | Redis | low-latency live serving |
 
@@ -187,8 +187,8 @@ Dùng khi:
 |---|---|---|---|
 | `gold_serving_traffic_hourly_refresh` | `gold_camera_hourly_metrics` | `gold_serving_traffic_hourly` | simple rollup / filter / select |
 | `gold_serving_traffic_daily_refresh` | `gold_camera_daily_metrics` | `gold_serving_traffic_daily` | bounded daily serving |
-| `gold_serving_queue_hourly_refresh` | `gold_queue_sessions` | `gold_serving_queue_hourly` | aggregate batch đơn giản |
-| `gold_serving_queue_daily_refresh` | `gold_queue_sessions` | `gold_serving_queue_daily` | aggregate batch đơn giản |
+| `gold_serving_queue_hourly_refresh` | `gold_queue_sessions_v2` | `gold_serving_queue_hourly` | aggregate batch đơn giản |
+| `gold_serving_queue_daily_refresh` | `gold_queue_sessions_v2` | `gold_serving_queue_daily` | aggregate batch đơn giản |
 | `gold_serving_executive_daily_refresh` | nhiều `gold facts` | `gold_serving_executive_daily` | serving rollup cho dashboard |
 | `heatmap_serving_refresh` | `silver_detections_v2` | `gold_serving_heatmap_tile_*` | nếu logic chỉ là bounded aggregate theo tile |
 | `iceberg_optimize` | Iceberg tables | same tables | maintenance |

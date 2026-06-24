@@ -30,7 +30,7 @@ Bronze / Silver / Gold facts:
 lakehouse.rva.bronze_raw
 lakehouse.rva.silver_detections_v2
 lakehouse.rva.gold_track_summary_v2
-lakehouse.rva.gold_queue_sessions
+lakehouse.rva.gold_queue_sessions_v2
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell
@@ -118,14 +118,14 @@ store_id + camera_id + pipeline_run_id + global_track_id
 
 Used for dwell and visit lifecycle analytics.
 
-### `gold_queue_sessions`
+### `gold_queue_sessions_v2`
 
 Purpose: aggregate queue wait sessions from queue detections in `silver_detections_v2`.
 
 Grain:
 
 ```text
-store_id + camera_id + queue_zone_id + global_track_id
+store_id + camera_id + pipeline_run_id + queue_zone_id + global_track_id
 ```
 
 Used by queue analytics and Gold serving queue tables.
