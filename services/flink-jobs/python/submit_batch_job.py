@@ -153,38 +153,28 @@ def _safe_count(sql: str) -> int | None:
     return int(value)
 
 
-def _table_name_parts(qualified_name: str) -> tuple[str, str, str]:
-    parts = qualified_name.split(".")
-    if len(parts) != 3 or not all(parts):
-        raise ValueError(f"Expected catalog.schema.table, got: {qualified_name}")
-    return parts[0], parts[1], parts[2]
-
-
-def _target_table_exists(target: str) -> bool:
-    catalog, schema, table = _table_name_parts(target)
-    rows = _trino_run(
-        "SELECT COUNT(*) FROM "
-        f"{catalog}.information_schema.tables "
-        f"WHERE table_schema = {_sql_string(schema)} "
-        f"AND table_name = {_sql_string(table)}",
-        timeout_sec=30,
+def _is_missing_table_error(exc: Exception) -> bool:
+    message = str(exc).lower()
+    return (
+        "table" in message
+        and ("does not exist" in message or "not found" in message)
     )
-    if not rows or not rows[0]:
-        return False
-    return int(rows[0][0] or 0) > 0
 
 
 def _delete_target_window(domain: str, start: str, end: str) -> None:
     spec = DOMAIN_SPECS[domain]
     target = spec["target"]
-    if not _target_table_exists(target):
-        print(f"skip_pre_delete_missing_target domain={domain} table={target}")
-        return
     sql = (
         f"DELETE FROM {target} "
         f"WHERE metric_date BETWEEN DATE {_sql_string(start)} AND DATE {_sql_string(end)}"
     )
-    _trino_run(sql, timeout_sec=300)
+    try:
+        _trino_run(sql, timeout_sec=300)
+    except Exception as exc:
+        if _is_missing_table_error(exc):
+            print(f"skip_pre_delete_missing_target domain={domain} table={target}")
+            return
+        raise
 
 
 def _write_audit(
