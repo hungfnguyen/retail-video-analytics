@@ -36,7 +36,7 @@ visitor_stats AS (
     TO_TIMESTAMP(DATE_FORMAT(CAST(capture_ts AS TIMESTAMP(3)), 'yyyy-MM-dd HH:00:00')) AS bucket_hour,
     CAST(capture_ts AS DATE) AS metric_date,
     CAST(EXTRACT(HOUR FROM capture_ts) AS INT) AS hour_of_day,
-    COUNT(DISTINCT global_track_id) AS unique_tracks
+    COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
   FROM rva.silver_detections_v2
   WHERE class_id = 0
     AND is_predicted = FALSE

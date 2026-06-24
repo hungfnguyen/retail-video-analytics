@@ -22,7 +22,7 @@ daily_visitors AS (
         store_id,
         camera_id,
         CAST(capture_ts AS DATE) AS metric_date,
-        COUNT(DISTINCT global_track_id) AS unique_tracks
+        COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
     FROM lakehouse.rva.silver_detections_v2
     WHERE class_id = 0
       AND is_predicted = false
