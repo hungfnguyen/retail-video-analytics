@@ -10,10 +10,10 @@ import java.util.Map;
 import java.util.stream.Collectors;
 
 /**
- * Always-on Bronze -> Silver stream for fresh data only.
+ * Always-on Pulsar -> Silver stream for fresh data only.
  *
  * This job is intentionally realtime-only:
- * - it tails new Bronze snapshots from the time the job starts
+ * - it tails the metadata event stream from Pulsar
  * - it does not repair historical gaps
  * - it does not run heavy bounded dedup / catch-up logic
  *
@@ -55,6 +55,14 @@ public class SilverRealtimeJob {
         tEnv.executeSql("USE rva");
 
         SilverSchema.ensureTables(tEnv);
+        createPulsarSource(tEnv, "pulsar_source_ok", getenv(
+            "SILVER_PULSAR_OK_SUBSCRIPTION",
+            "flink-silver-realtime-ok"
+        ));
+        createPulsarSource(tEnv, "pulsar_source_errors", getenv(
+            "SILVER_PULSAR_ERRORS_SUBSCRIPTION",
+            "flink-silver-realtime-errors"
+        ));
 
         String insertV2Sql = String.join("\n",
             "INSERT INTO rva.silver_detections_v2",
@@ -146,10 +154,20 @@ public class SilverRealtimeJob {
             "    CURRENT_TIMESTAMP AS processing_ts,",
             "    CAST(TO_TIMESTAMP_LTZ(t.capture_ts_ms, 3) AS DATE) AS capture_date,",
             "    t.parse_status AS parse_status",
-            "  FROM rva.bronze_raw " + bronzeStreamingReadHint() + " AS b,",
+            "  FROM (",
+            "    SELECT",
+            "      JSON_VALUE(raw_payload, '$.schema_version') AS schema_version,",
+            "      JSON_VALUE(raw_payload, '$.event_id') AS event_id,",
+            "      JSON_VALUE(raw_payload, '$.pipeline_run_id') AS pipeline_run_id,",
+            "      CAST(JSON_VALUE(raw_payload, '$.frame_index') AS BIGINT) AS frame_index,",
+            "      raw_payload AS payload,",
+            "      JSON_VALUE(raw_payload, '$.source.camera_id') AS camera_id,",
+            "      JSON_VALUE(raw_payload, '$.source.store_id') AS store_id",
+            "    FROM pulsar_source_ok",
+            "  ) AS b,",
             "       LATERAL TABLE(parse_detections(b.payload)) AS t",
             "  WHERE",
-            "    JSON_VALUE(b.payload, '$.frame_index') IS NOT NULL",
+            "    b.frame_index IS NOT NULL",
             "    AND COALESCE(b.event_id, JSON_VALUE(b.payload, '$.event_id')) IS NOT NULL",
             "    AND t.capture_ts_ms > 0",
             "    AND b.camera_id IS NOT NULL",
@@ -176,7 +194,17 @@ public class SilverRealtimeJob {
             "  t.capture_ts_raw AS capture_ts_raw,",
             "  b.payload AS raw_payload,",
             "  CURRENT_TIMESTAMP AS processing_ts",
-            "FROM rva.bronze_raw " + bronzeStreamingReadHint() + " AS b,",
+            "FROM (",
+            "  SELECT",
+            "    JSON_VALUE(raw_payload, '$.schema_version') AS schema_version,",
+            "    JSON_VALUE(raw_payload, '$.event_id') AS event_id,",
+            "    JSON_VALUE(raw_payload, '$.pipeline_run_id') AS pipeline_run_id,",
+            "    CAST(JSON_VALUE(raw_payload, '$.frame_index') AS BIGINT) AS frame_index,",
+            "    raw_payload AS payload,",
+            "    JSON_VALUE(raw_payload, '$.source.camera_id') AS camera_id,",
+            "    JSON_VALUE(raw_payload, '$.source.store_id') AS store_id",
+            "  FROM pulsar_source_errors",
+            ") AS b,",
             "     LATERAL TABLE(parse_detections(b.payload)) AS t",
             "WHERE t.parse_status = 'error'"
         );
@@ -185,6 +213,36 @@ public class SilverRealtimeJob {
         statements.addInsertSql(insertV2Sql);
         statements.addInsertSql(insertParseErrorsSql);
         statements.execute();
+    }
+
+    private static void createPulsarSource(
+        TableEnvironment tEnv,
+        String tableName,
+        String subscriptionName
+    ) {
+        String serviceUrl = getenv("PULSAR_SERVICE_URL", "pulsar://pulsar-broker:6650");
+        String topic = firstNotBlank(
+            System.getenv("SILVER_PULSAR_TOPIC"),
+            System.getenv("PULSAR_TOPIC"),
+            System.getenv("PULSAR_EVENTS_TOPIC")
+        );
+        if (topic == null) {
+            topic = "persistent://retail/metadata/events";
+        }
+        String startMessageId = getenv("SILVER_PULSAR_START_MESSAGE_ID", "latest");
+        tEnv.executeSql(String.join("\n",
+            "CREATE TEMPORARY TABLE " + tableName + " (",
+            "  raw_payload STRING,",
+            "  event_time AS PROCTIME()",
+            ") WITH (",
+            "  'connector' = 'pulsar',",
+            "  'service-url' = '" + serviceUrl + "',",
+            "  'topics' = '" + topic + "',",
+            "  'format' = 'raw',",
+            "  'source.subscription-name' = '" + subscriptionName + "',",
+            "  'source.start.message-id' = '" + startMessageId + "'",
+            ")"
+        ));
     }
 
     private static String getenv(String k, String def) {
@@ -199,19 +257,6 @@ public class SilverRealtimeJob {
             }
         }
         return null;
-    }
-
-    private static String bronzeStreamingReadHint() {
-        String startingStrategy = getenv(
-            "SILVER_STREAM_STARTING_STRATEGY",
-            "INCREMENTAL_FROM_LATEST_SNAPSHOT"
-        );
-        String monitorInterval = getenv("SILVER_STREAM_MONITOR_INTERVAL", "1s");
-        return String.format(
-            "/*+ OPTIONS('streaming'='true', 'monitor-interval'='%s', 'starting-strategy'='%s') */",
-            monitorInterval,
-            startingStrategy
-        );
     }
 
     private static void applyJobParallelism(
