@@ -1,5 +1,29 @@
 # Vision KPI Evaluation
 
+## Download the KPI Dataset
+
+The annotated `KPI/src` dataset is not stored in GitHub because of its large
+file size. Download it from Google Drive:
+
+**[Download KPI/src dataset](https://drive.google.com/drive/folders/1auBp4d_U52SKsBdsFdD7Dqb9ur65c17U?usp=sharing)**
+
+Place the downloaded dataset contents in `KPI/src` before running the
+evaluation. The expected structure is:
+
+```text
+KPI/src/
+  data.yaml
+  train/
+    images/
+    labels/
+  valid/
+    images/
+    labels/
+  test/
+    images/
+    labels/
+```
+
 This folder evaluates the repository Vision detector against the annotated
 YOLO dataset. Only people whose bounding-box `bottom_center` lies inside the
 provided `main_aisle` polygon are included in the KPI calculation.
