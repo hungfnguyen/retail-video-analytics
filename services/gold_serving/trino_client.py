@@ -15,6 +15,9 @@ from typing import Any, NamedTuple
 from urllib.request import Request, urlopen
 
 
+TRINO_TIME_ZONE = os.getenv("TRINO_TIME_ZONE", os.getenv("APP_TIME_ZONE", "Asia/Ho_Chi_Minh"))
+
+
 class TrinoResult(NamedTuple):
     columns: list[str]
     rows: list[list[Any]]
@@ -30,6 +33,7 @@ def _headers() -> dict[str, str]:
         "X-Trino-User": os.getenv("TRINO_USER", "rva_gold_serving"),
         "X-Trino-Catalog": os.getenv("TRINO_CATALOG", "lakehouse"),
         "X-Trino-Schema": os.getenv("TRINO_SCHEMA", "rva_gold_serving"),
+        "X-Trino-Time-Zone": TRINO_TIME_ZONE,
     }
 
 

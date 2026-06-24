@@ -20,6 +20,7 @@ from rva_api.api.v1.live import (
     _safe_int,
 )
 from rva_api.schemas.system import SystemDashboardData
+from rva_api.timeutils import now_local
 
 router = APIRouter(prefix="/system", tags=["system"])
 
@@ -230,6 +231,7 @@ def _flow(services: list[dict[str, Any]]) -> list[dict[str, str]]:
 @router.get("/dashboard", response_model=SystemDashboardData)
 def get_system_dashboard(camera_id: str = "cam_01") -> SystemDashboardData:
     now = datetime.now(timezone.utc)
+    generated_at = now_local()
     frame, current_count, active_tracks, redis_status = _live_snapshot(camera_id)
     media_metadata = _read_media_metadata(camera_id)
     cameras = _load_camera_config()
@@ -241,7 +243,7 @@ def get_system_dashboard(camera_id: str = "cam_01") -> SystemDashboardData:
     )
 
     data = {
-        "generated_at": now.isoformat(),
+        "generated_at": generated_at.isoformat(),
         "pipeline_health": services,
         "throughput": _throughput_points(
             now, frame, media_metadata, current_count, active_tracks

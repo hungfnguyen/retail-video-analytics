@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 
 from rva_api.api.v1.analytics_queries import trino_query
+from rva_api.timeutils import APP_TIME_ZONE
 from core.settings import load_yaml_config
 from rva_api.schemas.live import LiveDashboardData
 from storage import RedisClientConfig, create_redis_client
@@ -716,9 +717,9 @@ def _traffic_from_redis(
     Flink writes: HINCRBY line:hist:{camera_id}:{YYYYMMDDHHMM} {direction}_count 1
     We read the last `window_minutes` buckets in a single pipeline round-trip.
     """
-    now_utc = datetime.now(timezone.utc)
+    now_local = datetime.now(APP_TIME_ZONE)
     bucket_times = [
-        now_utc - timedelta(minutes=delta)
+        now_local - timedelta(minutes=delta)
         for delta in range(window_minutes - 1, -1, -1)
     ]
     try:
@@ -732,7 +733,7 @@ def _traffic_from_redis(
     points: list[dict[str, Any]] = []
     total_in = total_out = 0
     peak_count = 0
-    peak_time = now_utc.strftime("%H:%M")
+    peak_time = now_local.strftime("%H:%M")
 
     for bucket_dt, raw in zip(bucket_times, raw_results):
         raw = raw or {}

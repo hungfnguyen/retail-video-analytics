@@ -48,6 +48,10 @@ table.exec.iceberg.infer-source-parallelism: false
 blob.server.port: 6124
 query.server.port: 6125
 
+# Force TIMESTAMP_LTZ -> DATE/HOUR casts and CURRENT_DATE in Flink SQL to use
+# Vietnam business time instead of the container's default UTC zone.
+table.local-time-zone: Asia/Ho_Chi_Minh
+
 # -- CHECKPOINT & STATE BACKEND --
 # Giá trị thực được render từ env bởi bootstrap-flink.sh vào runtime conf dir.
 state.backend.type: filesystem

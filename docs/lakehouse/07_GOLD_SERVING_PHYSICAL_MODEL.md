@@ -94,7 +94,7 @@ Các bảng dưới đây hiện nên giữ bằng Trino SQL vì chúng là aggr
 | `gold_serving_traffic_daily` | `gold_serving_traffic_hourly` | Trino SQL | daily rollup đơn giản |
 | `gold_serving_queue_hourly` | `gold_queue_sessions_v2` | Trino SQL | queue session đã là Gold fact, serving chỉ aggregate |
 | `gold_serving_queue_daily` | `gold_queue_sessions_v2` | Trino SQL | daily aggregate + percentile bounded |
-| `gold_serving_dwell_daily` | `gold_track_summary_v2` | Trino SQL | track lifecycle đã được Flink materialize |
+| `gold_serving_dwell_daily` | `gold_camera_daily_dwell` | Trino SQL | đọc aggregate theo camera/ngày để tránh scan trực tiếp bảng upsert track-level |
 | `gold_serving_executive_daily` | nhiều Gold facts / serving tables | Trino SQL | store/day rollup cho dashboard |
 | `gold_serving_alert_hourly` | `gold_alerts` | Trino SQL | count incident theo hour |
 | `gold_serving_alert_daily` | `gold_serving_alert_hourly` | Trino SQL | daily rollup đơn giản |

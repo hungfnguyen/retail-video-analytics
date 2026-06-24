@@ -5,7 +5,6 @@ import math
 import os
 import re
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from datetime import datetime, timezone
 from typing import Any
 from urllib.error import HTTPError, URLError
 
@@ -29,6 +28,7 @@ from rva_api.api.v1.analytics_queries import (
     weekday_pattern_sql,
 )
 from rva_api.schemas.analytics import AlertHistoryData, AnalyticsDashboardData, PresenceHeatmapData, QueueAnalyticsData
+from rva_api.timeutils import now_local
 from storage import RedisClientConfig, create_redis_client
 
 router = APIRouter(prefix="/analytics", tags=["analytics"])
@@ -175,7 +175,7 @@ def _cache_ttl_for_status(ready_ttl_sec: int, status: str) -> int:
 
 def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict[str, Any]:
     return {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": now_local().isoformat(),
         "range_label": f"Last {days} days",
         "data_status": status,
         "error_message": message,
@@ -260,7 +260,7 @@ def get_alert_history(
     if cached is not None:
         return cached
 
-    now = datetime.now(timezone.utc)
+    now = now_local()
     try:
         rows = trino_query(alerts_history_sql(days, camera_id), 10.0)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
@@ -321,7 +321,7 @@ def get_queue_analytics(
     if cached is not None:
         return cached
 
-    now = datetime.now(timezone.utc)
+    now = now_local()
     rows: dict[str, list[list[Any]]] = {}
     errors: dict[str, str] = {}
 
@@ -476,7 +476,7 @@ def get_analytics_dashboard(
     peak_day_row = max(daily_rows, key=lambda row: _safe_int(row[1])) if daily_rows else None
 
     data = {
-        "generated_at": datetime.now(timezone.utc).isoformat(),
+        "generated_at": now_local().isoformat(),
         "range_label": f"Last {days} days",
         "data_status": "ready",
         "error_message": None,
@@ -626,7 +626,7 @@ def get_presence_heatmap(
     if cached is not None:
         return cached
 
-    now = datetime.now(timezone.utc)
+    now = now_local()
     ttl_sec = HEATMAP_CACHE_TTL_1D_SEC if days <= 1 else HEATMAP_CACHE_TTL_LONG_SEC
 
     def _empty(status: str, msg: str | None = None) -> PresenceHeatmapData:

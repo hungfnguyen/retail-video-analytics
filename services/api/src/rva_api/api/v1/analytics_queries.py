@@ -6,6 +6,8 @@ import time
 from typing import Any
 from urllib.request import Request, urlopen
 
+from rva_api.timeutils import TRINO_TIME_ZONE
+
 MAX_DAYS = 31
 
 
@@ -37,6 +39,7 @@ def _headers() -> dict[str, str]:
         "X-Trino-User": os.getenv("TRINO_USER", "rva_api"),
         "X-Trino-Catalog": os.getenv("TRINO_CATALOG", "lakehouse"),
         "X-Trino-Schema": os.getenv("TRINO_SCHEMA", "rva"),
+        "X-Trino-Time-Zone": TRINO_TIME_ZONE,
     }
 
 

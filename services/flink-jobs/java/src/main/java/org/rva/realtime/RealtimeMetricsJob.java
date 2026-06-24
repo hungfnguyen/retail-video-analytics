@@ -33,7 +33,7 @@ import redis.clients.jedis.JedisPoolConfig;
 import java.time.Duration;
 import java.time.Instant;
 import java.time.OffsetDateTime;
-import java.time.ZoneOffset;
+import java.time.ZoneId;
 import java.time.ZonedDateTime;
 import java.time.format.DateTimeFormatter;
 import java.time.format.DateTimeParseException;
@@ -52,6 +52,9 @@ import java.util.Map;
 public class RealtimeMetricsJob {
 
     private static final Logger LOG = LoggerFactory.getLogger(RealtimeMetricsJob.class);
+    private static final ZoneId APP_ZONE = ZoneId.of(
+            System.getenv().getOrDefault("APP_TIME_ZONE", "Asia/Ho_Chi_Minh")
+    );
 
     private static final OutputTag<String> DLQ_TAG =
             new OutputTag<>("dlq-events", Types.STRING);
@@ -500,7 +503,7 @@ public class RealtimeMetricsJob {
                 jedis.expire(lineKey, LINE_EXPIRE_SEC);
 
                 // Per-minute bucket for 60-min traffic chart: line:hist:{cam}:{YYYYMMDDHHMM}
-                String minuteBucket = ZonedDateTime.now(ZoneOffset.UTC).format(MINUTE_FMT);
+                String minuteBucket = ZonedDateTime.now(APP_ZONE).format(MINUTE_FMT);
                 String histKey = "line:hist:" + evt.cameraId + ":" + minuteBucket;
                 jedis.hincrBy(histKey, direction + "_count", 1L);
                 jedis.expire(histKey, LINE_HIST_EXPIRE_SEC);

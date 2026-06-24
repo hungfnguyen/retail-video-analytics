@@ -43,7 +43,7 @@ SERVING_TABLES = [
     ("gold_serving_queue_daily", "queue_daily.sql", "gold_queue_sessions_v2"),
     ("gold_serving_zone_hourly", "zone_hourly.sql", "silver_detections_v2"),
     ("gold_serving_zone_daily", "zone_daily.sql", "silver_detections_v2"),
-    ("gold_serving_dwell_daily", "dwell_daily.sql", "gold_track_summary_v2"),
+    ("gold_serving_dwell_daily", "dwell_daily.sql", "gold_camera_daily_dwell"),
     ("gold_serving_alert_hourly", "alert_hourly.sql", "gold_alerts"),
     ("gold_serving_alert_daily", "alert_daily.sql", "gold_serving_alert_hourly"),
     ("gold_serving_executive_daily", "executive_daily.sql", "gold_serving_traffic_daily"),

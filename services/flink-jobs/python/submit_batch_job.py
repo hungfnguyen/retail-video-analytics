@@ -13,6 +13,7 @@ from pathlib import Path
 
 import requests
 
+TRINO_TIME_ZONE = os.getenv("TRINO_TIME_ZONE", os.getenv("APP_TIME_ZONE", "Asia/Ho_Chi_Minh"))
 
 DOMAIN_SPECS = {
     "traffic_hourly": {
@@ -57,8 +58,8 @@ DOMAIN_SPECS = {
     },
     "dwell_daily": {
         "target": "lakehouse.rva_gold_serving.gold_serving_dwell_daily",
-        "source": "lakehouse.rva.gold_track_summary_v2",
-        "source_date_sql": "visit_date",
+        "source": "lakehouse.rva.gold_camera_daily_dwell",
+        "source_date_sql": "metric_date",
     },
     "alert_hourly": {
         "target": "lakehouse.rva_gold_serving.gold_serving_alert_hourly",
@@ -106,6 +107,7 @@ def _trino_headers() -> dict[str, str]:
         "X-Trino-User": os.getenv("TRINO_USER", "rva_gold_serving"),
         "X-Trino-Catalog": os.getenv("TRINO_CATALOG", "lakehouse"),
         "X-Trino-Schema": os.getenv("TRINO_SCHEMA", "rva_gold_serving"),
+        "X-Trino-Time-Zone": TRINO_TIME_ZONE,
     }
 
 
