@@ -17,14 +17,11 @@ export type AlertTrendRow = { date: string; high: number; medium: number; low: n
 export function buildOverviewKpis(
   data: AnalyticsDashboardData | null,
   _queueData: QueueAnalyticsData | null,
-  alertData: AlertHistoryData | null,
 ): MetricCardProps[] {
   const totalVisitors = data?.total_visitors ?? 0
   const peakDay = data?.peak_day
   const peakHour = data?.peak_hour
   const avgDwellSec = data?.avg_dwell_sec ?? 0
-  const alertsCount = alertData?.records.length ?? 0
-  const previousLabel = data?.range_label?.toLowerCase() ?? 'previous period'
 
   return [
     {
@@ -55,13 +52,6 @@ export function buildOverviewKpis(
       tone: 'green',
       icon: TimerReset,
       meta: avgDwellSec > 0 ? 'Historical engagement time' : 'No dwell data yet',
-    },
-    {
-      label: 'Alerts Count',
-      value: formatNumber(alertsCount),
-      tone: alertsCount > 0 ? 'red' : 'green',
-      icon: Bell,
-      meta: alertsCount > 0 ? `${alertsCount} incidents in ${previousLabel}` : 'No alert incidents',
     },
   ]
 }

@@ -5,13 +5,11 @@ import { PageHeader } from '../../shared/components/ui/PageHeader'
 import { Tabs } from '../../shared/components/ui/Tabs'
 import { AnalyticsFilterBar } from './components/AnalyticsFilterBar'
 import { datePresetToDays, type DatePreset } from './datePresets'
-import { AlertsTab } from './components/tabs/AlertsTab'
 import { DwellTab } from './components/tabs/DwellTab'
 import { OverviewTab } from './components/tabs/OverviewTab'
 import { QueueTab } from './components/tabs/QueueTab'
 import { TrafficTab } from './components/tabs/TrafficTab'
 import { ZonesTab } from './components/tabs/ZonesTab'
-import { useAlertHistoryData } from './hooks/useAlertHistoryData'
 import { useAnalyticsData } from './hooks/useAnalyticsData'
 import { useQueueData } from './hooks/useQueueData'
 
@@ -20,14 +18,13 @@ type AnalyticsPageProps = {
   onPageChange: (page: AppPage) => void
 }
 
-type AnalyticsTab = 'overview' | 'traffic' | 'queue' | 'zones' | 'alerts' | 'dwell'
+type AnalyticsTab = 'overview' | 'traffic' | 'queue' | 'zones' | 'dwell'
 
 const TAB_ITEMS = [
   { id: 'overview' as const, label: 'Overview' },
   { id: 'traffic' as const, label: 'Traffic' },
   { id: 'queue' as const, label: 'Queue' },
   { id: 'zones' as const, label: 'Zones' },
-  { id: 'alerts' as const, label: 'Alerts' },
   { id: 'dwell' as const, label: 'Dwell Time' },
 ]
 
@@ -40,13 +37,11 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
   const selectedCameraId = cameraId === 'all' ? null : cameraId
   const { data, error, refresh } = useAnalyticsData(days, selectedCameraId)
   const { data: queueData, refresh: refreshQueue } = useQueueData(days, selectedCameraId)
-  const { data: alertHistoryData, refresh: refreshAlerts } = useAlertHistoryData(days, selectedCameraId)
   const cameraOptions = data?.camera_comparison.map((camera) => camera.camera_id) ?? []
 
   function refreshAll() {
     void refresh()
     void refreshQueue()
-    void refreshAlerts()
   }
 
   function renderContent() {
@@ -75,7 +70,7 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
 
     switch (activeTab) {
       case 'overview':
-        return <OverviewTab alertData={alertHistoryData ?? null} data={data} queueData={queueData ?? null} />
+        return <OverviewTab data={data} queueData={queueData ?? null} />
       case 'traffic':
         return <TrafficTab data={data} />
       case 'queue':
@@ -84,10 +79,6 @@ export function AnalyticsPage({ activePage, onPageChange }: AnalyticsPageProps) 
           : <EmptyState title="Queue analytics unavailable" description="Queue serving tables are empty or still refreshing." />
       case 'zones':
         return <ZonesTab data={data} />
-      case 'alerts':
-        return alertHistoryData
-          ? <AlertsTab data={alertHistoryData} />
-          : <EmptyState title="Alert analytics unavailable" description="Alert history is empty or still refreshing." />
       case 'dwell':
         return <DwellTab data={data} />
     }

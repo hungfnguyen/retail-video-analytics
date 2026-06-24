@@ -18,7 +18,6 @@ import { formatDuration, formatDurationMs } from '../../shared/utils/format'
 import { AlertDetail } from './components/AlertDetail'
 import { AlertList } from './components/AlertList'
 import { QueueStatusTable } from './components/QueueStatusTable'
-import { TrafficChart } from './components/TrafficChart'
 import { VideoPanel } from './components/VideoPanel'
 import { ZoneOccupancyPanel } from './components/ZoneOccupancyPanel'
 import { useLiveData } from './hooks/useLiveData'
@@ -91,7 +90,6 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
 
   const peakHourLabel = data.insights.peak_hour || data.traffic_summary.peak_time || '--'
   const peakHourVisitors = data.insights.peak_hour_visitors || data.traffic_summary.peak_count
-  const avgDwellSec = data.insights.avg_dwell_sec
 
   const updatedAt = new Date(data.stats.updated_at)
   const timeLabel = Number.isNaN(updatedAt.getTime())
@@ -99,7 +97,6 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
     : updatedAt.toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' })
 
   const queueTrend = totalQueuePeople > 0 ? formatDeltaSeconds(data.insights.avg_queue_wait_delta_sec) : undefined
-  const dwellTrend = avgDwellSec > 0 ? formatDeltaSeconds(data.insights.avg_dwell_delta_sec) : undefined
 
   const headerActions = (
       <div className="flex items-center gap-2">
@@ -183,7 +180,7 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
         actions={headerActions}
       />
 
-      <div className="mb-6 grid grid-cols-5 gap-4">
+      <div className="mb-6 grid grid-cols-4 gap-4">
         <MetricCard
           icon={Users}
           label="Visitors in Store"
@@ -213,14 +210,6 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
           meta={peakHourVisitors > 0 ? `${peakHourVisitors} visitors` : 'No historical traffic yet'}
           tone="amber"
           value={peakHourLabel}
-        />
-        <MetricCard
-          icon={TimerReset}
-          label="Dwell Time (Avg)"
-          meta={avgDwellSec > 0 ? 'Based on today visits' : 'Waiting for dwell aggregates'}
-          tone="green"
-          trend={dwellTrend}
-          value={avgDwellSec > 0 ? formatDuration(avgDwellSec) : '—'}
         />
         <MetricCard
           icon={AlertTriangle}
@@ -258,9 +247,8 @@ export function LivePage({ activePage, onPageChange }: LivePageProps) {
         <AlertList alerts={data.alerts} onAlertClick={setSelectedAlert} />
       </div>
 
-      <div className="grid grid-cols-3 gap-5">
+      <div className="grid grid-cols-2 gap-5">
         <QueueStatusTable zoneCounts={data.frame.zone_counts} />
-        <TrafficChart traffic={data.traffic} summary={data.traffic_summary} />
         <ZoneOccupancyPanel zoneCounts={data.frame.zone_counts} />
       </div>
 

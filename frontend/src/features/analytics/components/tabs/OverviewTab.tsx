@@ -13,12 +13,11 @@ import { MetricCard } from '../../../../shared/components/ui/MetricCard'
 import { SectionCard } from '../../../../shared/components/ui/SectionCard'
 import { EmptyState } from '../../../../shared/components/ui/EmptyState'
 import { buildOverviewKpis } from '../../adapters/analyticsViewModels'
-import type { AlertHistoryData, AnalyticsDashboardData, QueueAnalyticsData } from '../../types'
+import type { AnalyticsDashboardData, QueueAnalyticsData } from '../../types'
 
 type OverviewTabProps = {
   data: AnalyticsDashboardData | null
   queueData: QueueAnalyticsData | null
-  alertData: AlertHistoryData | null
 }
 
 const WEEKDAYS = ['Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun']
@@ -35,8 +34,8 @@ function heatColor(value: number, maxValue: number) {
   return '#e9d5ff'
 }
 
-export function OverviewTab({ data, queueData, alertData }: OverviewTabProps) {
-  const kpis = buildOverviewKpis(data, queueData, alertData)
+export function OverviewTab({ data, queueData }: OverviewTabProps) {
+  const kpis = buildOverviewKpis(data, queueData)
   const trend = data?.visitors_over_time ?? []
   const weekdayData = data?.weekday_pattern ?? []
   const topZones = data?.top_zones ?? []
@@ -47,7 +46,7 @@ export function OverviewTab({ data, queueData, alertData }: OverviewTabProps) {
 
   return (
     <div className="grid gap-5">
-      <div className="grid grid-cols-5 gap-4">
+      <div className="grid grid-cols-4 gap-4">
         {kpis.map((kpi) => (
           <MetricCard key={kpi.label} {...kpi} />
         ))}
