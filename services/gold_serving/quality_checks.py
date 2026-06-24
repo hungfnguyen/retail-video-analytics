@@ -29,11 +29,15 @@ DQ_RECENT_DAYS = int(os.getenv("DQ_RECENT_DAYS", "7"))
 # (table, column) additive measures that must never be negative.
 NON_NEGATIVE = [
     ("gold_serving_traffic_hourly", "detection_count"),
+    ("gold_serving_traffic_hourly", "unique_tracks"),
     ("gold_serving_traffic_hourly", "max_people_count"),
+    ("gold_serving_traffic_daily", "unique_tracks"),
     ("gold_serving_queue_hourly", "sessions"),
     ("gold_serving_queue_hourly", "max_wait_sec"),
     ("gold_serving_zone_hourly", "occupied_minutes"),
     ("gold_serving_zone_hourly", "detection_count"),
+    ("gold_serving_zone_hourly", "unique_tracks"),
+    ("gold_serving_zone_daily", "unique_tracks"),
     ("gold_serving_dwell_daily", "track_count"),
 ]
 

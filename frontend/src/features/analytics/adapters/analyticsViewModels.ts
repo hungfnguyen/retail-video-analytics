@@ -122,9 +122,9 @@ export function buildZoneInsights(topZones: TopZonePoint[]): string[] {
   const leader = topZones[0]
   const weakest = topZones[topZones.length - 1]
   return [
-    `${leader.zone_name} leads traffic with ${formatNumber(leader.visitors)} visitors.`,
-    `${leader.share.toFixed(1)}% of visible traffic is concentrated in the top zone.`,
-    `${weakest.zone_name} is the weakest visible zone in the current range.`,
+    `${leader.zone_name} leads zone traffic with ${formatNumber(leader.visitors)} unique visitors.`,
+    `${leader.share.toFixed(1)}% of zone visitors are concentrated in the top zone.`,
+    `${weakest.zone_name} has the lowest visible visitor volume in the current range.`,
   ]
 }
 

@@ -126,7 +126,7 @@ def _get_cache_client() -> Any | None:
 
 def _cache_key(name: str, *parts: str) -> str:
     normalized = [part.replace(" ", "_") for part in parts]
-    return ":".join(["analytics", "cache", "v1", name, *normalized])
+    return ":".join(["analytics", "cache", "v2", name, *normalized])
 
 
 def _camera_cache_parts(camera_id: str | None) -> tuple[str, ...]:
@@ -184,9 +184,9 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
         "peak_hour": None,
         "avg_dwell_sec": 0,
         "kpis": [
-            {"label": "Total detections", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
-            {"label": "Avg per active day", "value": "0", "meta": "Waiting for daily traffic aggregates", "tone": "emerald"},
-            {"label": "Peak hour", "value": "--", "meta": "Waiting for hourly metrics", "tone": "amber"},
+            {"label": "Total visitors", "value": "0", "meta": "No Gold aggregate rows", "tone": "blue"},
+            {"label": "Avg visitors/day", "value": "0", "meta": "Waiting for daily visitor aggregates", "tone": "emerald"},
+            {"label": "Peak hour", "value": "--", "meta": "Waiting for hourly visitor metrics", "tone": "amber"},
             {"label": "Busiest camera", "value": "--", "meta": "No camera rows", "tone": "violet"},
             {"label": "Avg dwell", "value": "0s", "meta": "Waiting for dwell aggregates", "tone": "emerald"},
             {"label": "Avg confidence", "value": "0.0%", "meta": "Waiting for model quality metrics", "tone": "blue"},
@@ -205,19 +205,15 @@ def _empty_dashboard(days: int, status: str, message: str | None = None) -> dict
 
 
 def _daily_summary_item(row: list[Any]) -> dict[str, Any]:
-    has_confidence = len(row) > 6
-    confidence_index = 4 if has_confidence else None
-    queue_index = 5 if has_confidence else 4
-    alerts_index = 6 if has_confidence else 5
-
     return {
         "date": str(_row_value(row, 0, "")),
-        "detections": _safe_int(_row_value(row, 1, 0)),
-        "peak": str(_row_value(row, 2, "")),
-        "avg_dwell_sec": round(_safe_float(_row_value(row, 3, 0)), 1),
-        "avg_confidence": round(_safe_float(_row_value(row, confidence_index, 0)), 3) if has_confidence else 0.0,
-        "avg_queue_wait_sec": round(_safe_float(_row_value(row, queue_index, 0)), 1),
-        "alerts": _safe_int(_row_value(row, alerts_index, 0)),
+        "visitors": _safe_int(_row_value(row, 1, 0)),
+        "detections": _safe_int(_row_value(row, 2, 0)),
+        "peak": str(_row_value(row, 3, "—") or "—"),
+        "avg_dwell_sec": round(_safe_float(_row_value(row, 4, 0)), 1),
+        "avg_confidence": round(_safe_float(_row_value(row, 5, 0)), 3),
+        "avg_queue_wait_sec": round(_safe_float(_row_value(row, 6, 0)), 1),
+        "alerts": _safe_int(_row_value(row, 7, 0)),
     }
 
 
@@ -474,7 +470,7 @@ def get_analytics_dashboard(
     total_visitors = _safe_int(summary_row[8] if len(summary_row) > 8 else 0)
     avg_visitors_per_active_day = round(total_visitors / active_days, 1) if active_days else 0.0
 
-    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0]
+    peak_row = max(hourly_rows, key=lambda row: _safe_int(row[1])) if hourly_rows else ["--", 0, 0, 0]
     selected_camera_row = next((row for row in camera_rows if str(row[0]) == camera_id), None)
     busiest_camera = selected_camera_row or (camera_rows[0] if camera_rows else ["--", 0, 0, 0])
     peak_day_row = max(daily_rows, key=lambda row: _safe_int(row[1])) if daily_rows else None
@@ -488,14 +484,7 @@ def get_analytics_dashboard(
         "peak_day": (
             {
                 "date": str(peak_day_row[0]),
-                "visitors": (
-                    next(
-                        (_safe_int(r[1]) for r in visitors_series_rows if str(r[0]) == str(peak_day_row[0])),
-                        0,
-                    )
-                    if days > 1 and visitors_series_rows
-                    else total_visitors
-                ),
+                "visitors": _safe_int(peak_day_row[1]),
             }
             if peak_day_row
             else None
@@ -521,7 +510,7 @@ def get_analytics_dashboard(
             {
                 "label": "Peak hour",
                 "value": str(peak_row[0]),
-                "meta": f"{_fmt_int(_safe_int(peak_row[1]))} detections",
+                "meta": f"{_fmt_int(_safe_int(peak_row[1]))} visitors",
                 "tone": "amber",
             },
             {
@@ -546,8 +535,9 @@ def get_analytics_dashboard(
         "hourly_traffic": [
             {
                 "hour": str(row[0]),
-                "detections": _safe_int(row[1]),
-                "average": _safe_int(row[2]),
+                "visitors": _safe_int(row[1]),
+                "avg_visitors": _safe_int(row[2]),
+                "detections": _safe_int(row[3]),
             }
             for row in hourly_rows
         ],
@@ -588,9 +578,10 @@ def get_analytics_dashboard(
                 "zone_id": str(row[0]),
                 "zone_name": str(row[1]),
                 "visitors": _safe_int(row[2]),
-                "share": _safe_float(row[3]),
-                "avg_occupancy": _safe_float(row[4]),
-                "occupied_minutes": _safe_int(row[5]),
+                "detections": _safe_int(row[3]),
+                "share": _safe_float(row[4]),
+                "avg_occupancy": _safe_float(row[5]),
+                "occupied_minutes": _safe_int(row[6]),
             }
             for row in top_zone_rows
         ],

@@ -21,7 +21,7 @@ export function ZonesTab({ data }: ZonesTabProps) {
   return (
     <div className="grid gap-5">
       <div className="grid grid-cols-[1.1fr_0.9fr] gap-5">
-        <SectionCard title="Top Zones" subtitle="Highest visitor concentration across the selected period">
+        <SectionCard title="Top Zones" subtitle="Highest unique visitor concentration across the selected period">
           {zones.length === 0 ? (
             <EmptyState title="No zone ranking available" />
           ) : (

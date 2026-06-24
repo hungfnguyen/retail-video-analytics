@@ -82,7 +82,7 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
       <div className="mt-3 grid grid-cols-[1.18fr_0.82fr] gap-3">
         <section className="rounded-lg border border-slate-200 bg-white p-4 shadow-[0_14px_36px_rgba(15,23,42,0.06)]">
           <div className="mb-3 flex items-center justify-between">
-            <h2 className="m-0 text-[17px] font-bold text-slate-950">Hourly detections</h2>
+            <h2 className="m-0 text-[17px] font-bold text-slate-950">Hourly visitors</h2>
             <span className="rounded-md bg-blue-50 px-2.5 py-1 text-xs font-bold text-blue-700">{data.range_label}</span>
           </div>
 
@@ -93,8 +93,8 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
                 <XAxis dataKey="hour" tickLine={false} />
                 <YAxis tickLine={false} width={44} />
                 <Tooltip formatter={(value) => formatNumber(Number(value))} />
-                <Bar dataKey="detections" fill="#2563eb" name="Detections" radius={[4, 4, 0, 0]} />
-                <Line dataKey="average" dot={false} name="Per-day avg" stroke="#059669" strokeDasharray="4 4" strokeWidth={2} />
+                <Bar dataKey="visitors" fill="#2563eb" name="Visitors" radius={[4, 4, 0, 0]} />
+                <Line dataKey="avg_visitors" dot={false} name="Per-day avg" stroke="#059669" strokeDasharray="4 4" strokeWidth={2} />
               </ComposedChart>
             </ResponsiveContainer>
           </div>
@@ -135,6 +135,7 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
             <thead>
               <tr className="border border-slate-200 bg-slate-50 text-slate-600">
                 <th className="px-3 py-2 text-left">Date</th>
+                <th className="px-3 py-2 text-right">Visitors</th>
                 <th className="px-3 py-2 text-right">Detections</th>
                 <th className="px-3 py-2 text-right">Peak</th>
                 <th className="px-3 py-2 text-right">Avg dwell</th>
@@ -145,6 +146,7 @@ export function AnalyticsPanels({ data }: { data: AnalyticsDashboardData }) {
               {data.daily_summary.map((row) => (
                 <tr className="border border-slate-200" key={row.date}>
                   <td className="px-3 py-2 font-semibold text-blue-700">{row.date}</td>
+                  <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.visitors)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatNumber(row.detections)}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{row.peak}</td>
                   <td className="px-3 py-2 text-right text-slate-700">{formatDuration(row.avg_dwell_sec)}</td>

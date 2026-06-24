@@ -26,7 +26,7 @@ export function TrafficTab({ data }: TrafficTabProps) {
   return (
     <div className="grid gap-5">
       <div className="grid grid-cols-[1.2fr_0.8fr] gap-5">
-        <SectionCard title="Traffic Trend" subtitle="Visitor volume across selected period">
+        <SectionCard title="Traffic Trend" subtitle="Unique visitor volume across selected period">
           {trend.length === 0 ? (
             <EmptyState title="No traffic trend available" />
           ) : (
@@ -44,7 +44,7 @@ export function TrafficTab({ data }: TrafficTabProps) {
           )}
         </SectionCard>
 
-        <SectionCard title="Peak Hour Distribution" subtitle="Average activity by hour of day">
+        <SectionCard title="Peak Hour Distribution" subtitle="Average unique visitors by hour of day">
           {hourly.length === 0 ? (
             <EmptyState title="No hourly pattern available" />
           ) : (
@@ -55,7 +55,7 @@ export function TrafficTab({ data }: TrafficTabProps) {
                   <XAxis dataKey="hour" tickLine={false} tick={{ fontSize: 11 }} />
                   <YAxis tickLine={false} width={38} tick={{ fontSize: 11 }} allowDecimals={false} />
                   <Tooltip isAnimationActive={false} formatter={(value) => [formatNumber(Number(value ?? 0)), 'Visitors']} />
-                  <Bar dataKey="average" fill="#7c3aed" isAnimationActive={false} radius={[6, 6, 0, 0]} />
+                  <Bar dataKey="avg_visitors" fill="#7c3aed" isAnimationActive={false} radius={[6, 6, 0, 0]} />
                 </BarChart>
               </ResponsiveContainer>
             </div>
@@ -73,6 +73,7 @@ export function TrafficTab({ data }: TrafficTabProps) {
                 <tr className="border-b border-slate-100 text-left text-[11px] font-semibold uppercase tracking-wide text-slate-500">
                   <th className="pb-3 pr-4">Date</th>
                   <th className="pb-3 pr-4 text-right">Visitors</th>
+                  <th className="pb-3 pr-4 text-right">Detections</th>
                   <th className="pb-3 pr-4 text-right">Peak Hour</th>
                   <th className="pb-3 pr-4 text-right">Avg Dwell</th>
                   <th className="pb-3 pr-4 text-right">Avg Queue Wait</th>
@@ -83,7 +84,8 @@ export function TrafficTab({ data }: TrafficTabProps) {
                 {summary.map((row) => (
                   <tr className="hover:bg-slate-50" key={row.date}>
                     <td className="py-3 pr-4 font-medium text-slate-800">{row.date}</td>
-                    <td className="py-3 pr-4 text-right text-slate-700">{formatNumber(row.detections)}</td>
+                    <td className="py-3 pr-4 text-right text-slate-700">{formatNumber(row.visitors)}</td>
+                    <td className="py-3 pr-4 text-right text-slate-600">{formatNumber(row.detections)}</td>
                     <td className="py-3 pr-4 text-right text-slate-600">{row.peak}</td>
                     <td className="py-3 pr-4 text-right text-slate-600">{row.avg_dwell_sec > 0 ? formatDuration(row.avg_dwell_sec) : '—'}</td>
                     <td className="py-3 pr-4 text-right text-slate-600">{row.avg_queue_wait_sec > 0 ? formatDuration(row.avg_queue_wait_sec) : '—'}</td>
