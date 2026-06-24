@@ -10,6 +10,7 @@ RUN_ID="manual__startup__$(date -u +%Y%m%dT%H%M%SZ)"
 
 cd "${PROJECT_ROOT}"
 mkdir -p runtime/flink
+chmod 777 runtime/flink
 
 echo "[restart-up] Starting Docker stack..."
 docker compose up -d --build
