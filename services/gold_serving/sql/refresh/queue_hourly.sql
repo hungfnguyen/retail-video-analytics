@@ -1,5 +1,5 @@
 -- LEGACY Trino fallback only. Scheduled Gold serving refresh uses Flink batch via submit_batch_job.py.
--- gold_serving_queue_hourly  <- gold_queue_sessions
+-- gold_serving_queue_hourly  <- gold_queue_sessions_v2
 DELETE FROM lakehouse.rva_gold_serving.gold_serving_queue_hourly
 WHERE metric_date BETWEEN DATE '{start}' AND DATE '{end}';
 
@@ -19,7 +19,7 @@ SELECT
     COUNT(*) FILTER (WHERE wait_time_sec >= 120) AS sla_breach_count,
     120 AS sla_threshold_sec,
     CAST(current_timestamp AS timestamp(6)) AS refreshed_at
-FROM lakehouse.rva.gold_queue_sessions
+FROM lakehouse.rva.gold_queue_sessions_v2
 WHERE wait_time_sec >= 0
   AND enter_ts IS NOT NULL
   AND queue_zone_id IS NOT NULL

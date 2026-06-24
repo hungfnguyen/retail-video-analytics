@@ -24,7 +24,7 @@ The evaluation should prove that the implemented pipeline is correct, observable
 SELECT COUNT(*) FROM lakehouse.rva.bronze_raw;
 SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2;
 SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2;
-SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions;
+SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions_v2;
 
 SELECT camera_id, COUNT(*)
 FROM lakehouse.rva.silver_detections_v2

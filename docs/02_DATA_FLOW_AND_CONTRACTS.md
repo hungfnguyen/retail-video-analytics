@@ -93,7 +93,7 @@ alerts:cooldown:{camera_id}:{alert_type} short TTL key to prevent alert spam
 lakehouse.rva.bronze_raw
 lakehouse.rva.silver_detections_v2       Supervision/global-id/zone detection rows
 lakehouse.rva.gold_track_summary_v2      global_track_id-based track summary
-lakehouse.rva.gold_queue_sessions
+lakehouse.rva.gold_queue_sessions_v2
 lakehouse.rva.gold_camera_hourly_metrics
 lakehouse.rva.gold_camera_daily_metrics
 lakehouse.rva.gold_camera_daily_dwell

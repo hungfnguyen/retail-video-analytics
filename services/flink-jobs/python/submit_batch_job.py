@@ -37,12 +37,12 @@ DOMAIN_SPECS = {
     },
     "queue_hourly": {
         "target": "lakehouse.rva_gold_serving.gold_serving_queue_hourly",
-        "source": "lakehouse.rva.gold_queue_sessions",
+        "source": "lakehouse.rva.gold_queue_sessions_v2",
         "source_date_sql": "CAST(enter_ts AS DATE)",
     },
     "queue_daily": {
         "target": "lakehouse.rva_gold_serving.gold_serving_queue_daily",
-        "source": "lakehouse.rva.gold_queue_sessions",
+        "source": "lakehouse.rva.gold_queue_sessions_v2",
         "source_date_sql": "CAST(enter_ts AS DATE)",
     },
     "zone_hourly": {

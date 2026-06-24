@@ -59,7 +59,7 @@ This path optimizes low latency. It is suitable for current count, active tracks
 Pulsar -> BronzeIngestJob -> bronze_raw
 bronze_raw -> SilverJob -> silver_detections_v2
 silver_detections_v2 -> GoldTrackSummaryJob -> gold_track_summary_v2
-silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions
+silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions_v2
 silver_detections_v2 + gold_track_summary_v2 -> GoldDashboardAggregateJob -> dashboard Gold facts
 media-events -> GoldAlertsJob -> gold_alerts
 Gold facts / Silver -> gold_serving_* -> FastAPI analytics

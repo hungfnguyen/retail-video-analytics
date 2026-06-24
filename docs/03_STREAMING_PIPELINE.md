@@ -22,7 +22,7 @@
 | `BronzeIngestJob` | Table API | Pulsar raw JSON | `lakehouse.rva.bronze_raw` | Raw audit trail |
 | `SilverJob` | Table API | `bronze_raw` streaming read | `lakehouse.rva.silver_detections_v2` | Flatten, clean, and enrich detections |
 | `GoldTrackSummaryJob` | Table API | `silver_detections_v2` streaming read | `lakehouse.rva.gold_track_summary_v2` | Global-track lifecycle aggregate |
-| `QueueAnalyticsJob` | Table API | `silver_detections_v2` streaming read | `lakehouse.rva.gold_queue_sessions` | Queue session facts |
+| `QueueAnalyticsJob` | Table API | `silver_detections_v2` streaming read | `lakehouse.rva.gold_queue_sessions_v2` | Queue session facts |
 | `GoldAlertsJob` | Table API | Pulsar `media-events` | `lakehouse.rva.gold_alerts` | Clip-backed alert incidents |
 | `GoldDashboardAggregateJob` | Table API | `silver_detections_v2`, `gold_track_summary_v2` streaming reads | `gold_camera_hourly_metrics`, `gold_camera_daily_metrics`, `gold_camera_daily_dwell`, `gold_alert_events` | Compact dashboard Gold facts |
 | `RealtimeMetricsJob` | DataStream API | Pulsar raw JSON | Redis + DLQ topic | Low-latency dashboard state |
@@ -33,7 +33,7 @@
 Pulsar -> BronzeIngestJob -> bronze_raw
 bronze_raw -> SilverJob -> silver_detections_v2
 silver_detections_v2 -> GoldTrackSummaryJob -> gold_track_summary_v2
-silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions
+silver_detections_v2 -> QueueAnalyticsJob -> gold_queue_sessions_v2
 media-events -> GoldAlertsJob -> gold_alerts
 silver_detections_v2 + gold_track_summary_v2 -> GoldDashboardAggregateJob -> dashboard Gold aggregate tables
 ```
@@ -99,7 +99,7 @@ docker exec redis redis-cli ZREVRANGE heatmap:live:cam_01 0 10 WITHSCORES
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.bronze_raw"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.silver_detections_v2"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_track_summary_v2"
-docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions"
+docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_queue_sessions_v2"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_hourly_metrics"
 docker exec trino trino --execute "SELECT COUNT(*) FROM lakehouse.rva.gold_camera_daily_dwell"

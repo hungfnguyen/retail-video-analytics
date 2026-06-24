@@ -12,7 +12,7 @@ SELECT
   SUM(CASE WHEN wait_time_sec >= 120 THEN CAST(1 AS BIGINT) ELSE CAST(0 AS BIGINT) END) AS sla_breach_count,
   120 AS sla_threshold_sec,
   CAST(CURRENT_TIMESTAMP AS TIMESTAMP(6)) AS refreshed_at
-FROM rva.gold_queue_sessions
+FROM rva.gold_queue_sessions_v2
 WHERE wait_time_sec >= 0
   AND enter_ts IS NOT NULL
   AND queue_zone_id IS NOT NULL

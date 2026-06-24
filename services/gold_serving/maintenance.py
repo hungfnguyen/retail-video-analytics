@@ -23,7 +23,7 @@ import trino_client as trino
 # Append-only silver is included only for small-file consolidation (no delete files).
 OPTIMIZE_TABLES = [
     "lakehouse.rva.silver_detections_v2",
-    "lakehouse.rva.gold_queue_sessions",
+    "lakehouse.rva.gold_queue_sessions_v2",
     "lakehouse.rva.gold_track_summary_v2",
     "lakehouse.rva.gold_alerts",
     "lakehouse.rva.gold_alert_events",
@@ -48,7 +48,7 @@ OPTIMIZE_TABLES = [
 # silver_detections_v2 is append-only (all data files still live in current
 # snapshot) so expiry saves only manifest overhead — skip it here.
 EXPIRE_TABLES = [
-    "lakehouse.rva.gold_queue_sessions",
+    "lakehouse.rva.gold_queue_sessions_v2",
     "lakehouse.rva.gold_track_summary_v2",
     "lakehouse.rva.gold_alerts",
     "lakehouse.rva.gold_alert_events",

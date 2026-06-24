@@ -53,9 +53,10 @@ public class QueueAnalyticsJob {
         tEnv.executeSql("USE rva");
 
         String createQueueSessions = String.join("\n",
-                "CREATE TABLE IF NOT EXISTS rva.gold_queue_sessions (",
+                "CREATE TABLE IF NOT EXISTS rva.gold_queue_sessions_v2 (",
                 "  store_id             STRING,",
                 "  camera_id            STRING,",
+                "  pipeline_run_id      STRING,",
                 "  queue_zone_id        STRING,",
                 "  global_track_id      STRING,",
                 "  visit_date           DATE,",
@@ -66,7 +67,7 @@ public class QueueAnalyticsJob {
                 "  completed            BOOLEAN,",
                 "  last_track_id        BIGINT,",
                 "  raw_track_id_count   BIGINT,",
-                "  PRIMARY KEY (store_id, camera_id, queue_zone_id, global_track_id) NOT ENFORCED",
+                "  PRIMARY KEY (store_id, camera_id, pipeline_run_id, queue_zone_id, global_track_id) NOT ENFORCED",
                 ") WITH (",
                 "  'format-version' = '2',",
                 "  'write.format.default' = 'parquet',",
@@ -77,10 +78,11 @@ public class QueueAnalyticsJob {
         tEnv.executeSql(createQueueSessions);
 
         String insertQueueSessions = String.join("\n",
-                "INSERT INTO rva.gold_queue_sessions",
+                "INSERT INTO rva.gold_queue_sessions_v2",
                 "SELECT",
                 "  store_id,",
                 "  camera_id,",
+                "  pipeline_run_id,",
                 "  queue_zone_id,",
                 "  global_track_id,",
                 "  CAST(MIN(capture_ts) AS DATE) AS visit_date,",
@@ -94,9 +96,10 @@ public class QueueAnalyticsJob {
                 "FROM rva.silver_detections_v2 /*+ OPTIONS('streaming'='true', 'monitor-interval'='1s', 'starting-strategy'='TABLE_SCAN_THEN_INCREMENTAL') */",
                 "WHERE in_queue = TRUE",
                 "  AND queue_zone_id IS NOT NULL",
+                "  AND pipeline_run_id IS NOT NULL",
                 "  AND global_track_id IS NOT NULL",
                 "  AND capture_ts IS NOT NULL",
-                "GROUP BY store_id, camera_id, queue_zone_id, global_track_id"
+                "GROUP BY store_id, camera_id, pipeline_run_id, queue_zone_id, global_track_id"
         );
         StatementSet statements = tEnv.createStatementSet();
         statements.addInsertSql(insertQueueSessions);

@@ -64,7 +64,7 @@ SQL file chỉ là một cách định nghĩa logic, không phải kiến trúc 
 Đây là các bảng business fact / aggregate gần realtime:
 
 - `gold_track_summary_v2`
-- `gold_queue_sessions`
+- `gold_queue_sessions_v2`
 - `gold_camera_hourly_metrics`
 - `gold_camera_daily_metrics`
 - `gold_camera_daily_dwell`
@@ -103,7 +103,7 @@ Ví dụ:
 - source tốt: `gold_camera_hourly_metrics`, `gold_camera_daily_metrics`
 
 `Queue serving`:
-- source tốt: `gold_queue_sessions`
+- source tốt: `gold_queue_sessions_v2`
 
 `Zone serving`:
 - source tốt: `silver_detections_v2`
