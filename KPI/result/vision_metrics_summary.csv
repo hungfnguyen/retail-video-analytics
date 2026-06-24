@@ -1,0 +1,2 @@
+total_images,total_ground_truth,total_predictions,total_zone_person_count,total_TP,total_FP,total_FN,overall_precision,overall_recall,overall_f1_score,total_inference_time_seconds,average_fps
+160,355,367,367,311,56,44,0.8474114441416893,0.8760563380281691,0.8614958448753463,13.40706250000403,11.934008661476136
