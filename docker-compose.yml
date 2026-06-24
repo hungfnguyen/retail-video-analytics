@@ -67,8 +67,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
-      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://s3-retail-video-analytics/flink/checkpoints}
-      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://s3-retail-video-analytics/flink/savepoints}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3a://s3-retail-video-analytics/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3a://s3-retail-video-analytics/flink/savepoints}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -106,8 +106,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
-      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://s3-retail-video-analytics/flink/checkpoints}
-      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://s3-retail-video-analytics/flink/savepoints}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3a://s3-retail-video-analytics/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3a://s3-retail-video-analytics/flink/savepoints}
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager
       REDIS_HOST: redis
       REDIS_PORT: "6379"
@@ -147,8 +147,8 @@ services:
       S3_SECRET_KEY: ${S3_SECRET_KEY}
       ICEBERG_REST_URI: ${ICEBERG_CATALOG_URI}
       ICEBERG_WAREHOUSE: ${ICEBERG_WAREHOUSE}
-      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3://s3-retail-video-analytics/flink/checkpoints}
-      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3://s3-retail-video-analytics/flink/savepoints}
+      FLINK_CHECKPOINTS_URI: ${FLINK_CHECKPOINTS_URI:-s3a://s3-retail-video-analytics/flink/checkpoints}
+      FLINK_SAVEPOINTS_URI: ${FLINK_SAVEPOINTS_URI:-s3a://s3-retail-video-analytics/flink/savepoints}
       FLINK_JOB_REGISTRY: /opt/flink/runtime/job-registry.tsv
       FLINK_SAVEPOINT_MANIFEST: /opt/flink/runtime/restore-manifest.tsv
       JOB_MANAGER_RPC_ADDRESS: flink-jobmanager

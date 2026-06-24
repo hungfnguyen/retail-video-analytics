@@ -53,6 +53,7 @@ query.server.port: 6125
 state.backend.type: filesystem
 state.checkpoints.dir: __FLINK_CHECKPOINTS_URI__
 state.savepoints.dir: __FLINK_SAVEPOINTS_URI__
+fs.allowed-fallback-filesystems: s3a
 
 # Cấu hình S3 cho Flink System (Checkpointing)
 # AWS S3 mode: endpoint is auto-resolved by AWS SDK
