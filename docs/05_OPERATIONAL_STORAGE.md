@@ -54,7 +54,7 @@ frames/         optional sampled JPEGs
 clips/          optional alert clips
 ```
 
-The bucket currently used by config is `retail-video-analytics-prod`.
+The bucket currently used by config is `s3-retail-video-analytics`.
 
 ## Iceberg And Trino
 
