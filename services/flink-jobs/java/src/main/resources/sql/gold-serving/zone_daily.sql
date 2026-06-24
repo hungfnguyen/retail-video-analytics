@@ -38,7 +38,7 @@ visitor_stats AS (
     primary_zone_id AS zone_id,
     COALESCE(primary_zone_type, 'unknown') AS zone_type,
     CAST(capture_ts AS DATE) AS metric_date,
-    COUNT(DISTINCT global_track_id) AS unique_tracks
+    COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
   FROM rva.silver_detections_v2
   WHERE class_id = 0
     AND is_predicted = FALSE

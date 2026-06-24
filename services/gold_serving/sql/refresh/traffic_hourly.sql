@@ -42,7 +42,7 @@ visitor_stats AS (
         CAST(date_trunc('hour', capture_ts) AS timestamp(6)) AS bucket_hour,
         CAST(capture_ts AS DATE) AS metric_date,
         CAST(hour(capture_ts) AS INTEGER) AS hour_of_day,
-        COUNT(DISTINCT global_track_id) AS unique_tracks
+        COUNT(DISTINCT CONCAT(COALESCE(pipeline_run_id, 'unknown'), ':', global_track_id)) AS unique_tracks
     FROM lakehouse.rva.silver_detections_v2
     WHERE class_id = 0
       AND is_predicted = false
