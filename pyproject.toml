@@ -3,7 +3,13 @@ name = "retail-video-analytics"
 version = "0.1.0"
 description = "Retail Video Analytics - Monorepo"
 requires-python = ">=3.12"
-dependencies = ["core", "messaging", "storage"]
+dependencies = [
+    "core",
+    "matplotlib>=3.10.9",
+    "messaging",
+    "pandas>=3.0.3",
+    "storage",
+]
 
 [tool.uv.sources]
 core = { workspace = true }

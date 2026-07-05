@@ -1,0 +1,127 @@
+// ─────────────────────────────────────────────────────────────────────────────
+// RVA Data Model — Medallion Architecture
+// Bronze → Silver → Gold → Gold Serving
+// ─────────────────────────────────────────────────────────────────────────────
+
+// ── BRONZE ───────────────────────────────────────────────────────────────────
+
+Table "default"."bronze_raw" {
+  "event_id" varchar(500) [pk, not null]
+
+  Note: 'Raw Pulsar event/frame (JSON payload).'
+}
+
+// ── SILVER ───────────────────────────────────────────────────────────────────
+
+Table "default"."silver_detections_v2" {
+  "event_id"         varchar(500) [ref: > "default"."bronze_raw"."event_id"]
+  "global_track_id"  varchar(500)
+  "camera_id"        varchar(500)
+  "queue_zone_id"    varchar(500)
+  "primary_zone_id"  varchar(500)
+
+  Note: '1 detection. Parsed + exploded + dedup + enriched from Bronze.'
+}
+
+// ── GOLD ─────────────────────────────────────────────────────────────────────
+
+Table "default"."gold_track_summary_v2" {
+  "global_track_id" varchar(500) [ref: > "default"."silver_detections_v2"."global_track_id"]
+  "camera_id"       varchar(500)
+
+  Note: '1 global track (dwell/visit lifecycle).'
+}
+
+Table "default"."gold_camera_hourly_metrics" {
+  "camera_id" varchar(500) [ref: > "default"."silver_detections_v2"."camera_id"]
+
+  Note: 'camera + hour traffic.'
+}
+
+Table "default"."gold_camera_daily_metrics" {
+  "camera_id" varchar(500) [ref: > "default"."silver_detections_v2"."camera_id"]
+
+  Note: 'camera + day traffic.'
+}
+
+Table "default"."gold_camera_daily_dwell" {
+  "camera_id" varchar(500) [ref: > "default"."gold_track_summary_v2"."camera_id"]
+
+  Note: 'camera + day dwell.'
+}
+
+Table "default"."gold_queue_sessions" {
+  "global_track_id" varchar(500) [ref: > "default"."silver_detections_v2"."global_track_id"]
+  "queue_zone_id"   varchar(500)
+
+  Note: '1 queue session per track (raw, incomplete sessions).'
+}
+
+Table "default"."gold_queue_sessions_v2" {
+  "global_track_id" varchar(500) [ref: > "default"."silver_detections_v2"."global_track_id"]
+  "queue_zone_id"   varchar(500)
+
+  Note: '1 queue session per track (enriched, used by serving layer).'
+}
+
+Table "default"."gold_alert_events" {
+  "camera_id" varchar(500) [ref: > "default"."silver_detections_v2"."camera_id"]
+
+  Note: 'frame-density alert event (per-frame signal, density_high type).'
+}
+
+Table "default"."gold_alerts" {
+  "alert_type" varchar(500)
+
+  Note: '1 alert incident (clip-backed, from GoldAlertsJob).'
+}
+
+// ── GOLD SERVING ─────────────────────────────────────────────────────────────
+
+Table "default"."gold_serving_heatmap_tile_5min" {
+  "camera_id" varchar(500) [note: 'store+camera+5min+tile', ref: > "default"."silver_detections_v2"."camera_id"]
+}
+
+Table "default"."gold_serving_heatmap_tile_hour" {
+  "camera_id" varchar(500) [note: 'rollup of 5min', ref: > "default"."gold_serving_heatmap_tile_5min"."camera_id"]
+}
+
+Table "default"."gold_serving_traffic_hourly" {
+  "camera_id" varchar(500) [note: 'store+camera+hour', ref: > "default"."silver_detections_v2"."camera_id"]
+}
+
+Table "default"."gold_serving_traffic_daily" {
+  "camera_id" varchar(500) [note: 'rollup of hourly', ref: > "default"."gold_serving_traffic_hourly"."camera_id"]
+}
+
+Table "default"."gold_serving_dwell_daily" {
+  "camera_id" varchar(500) [note: 'store+camera+day', ref: > "default"."gold_camera_daily_dwell"."camera_id"]
+}
+
+Table "default"."gold_serving_queue_hourly" {
+  "queue_zone_id" varchar(500) [note: 'store+camera+zone+hour', ref: > "default"."gold_queue_sessions_v2"."queue_zone_id"]
+}
+
+Table "default"."gold_serving_queue_daily" {
+  "queue_zone_id" varchar(500) [note: 'store+camera+zone+day', ref: > "default"."gold_serving_queue_hourly"."queue_zone_id"]
+}
+
+Table "default"."gold_serving_zone_hourly" {
+  "camera_id" varchar(500) [note: 'store+camera+zone+hour', ref: > "default"."silver_detections_v2"."camera_id"]
+}
+
+Table "default"."gold_serving_zone_daily" {
+  "camera_id" varchar(500) [note: 'rollup of hourly', ref: > "default"."gold_serving_zone_hourly"."camera_id"]
+}
+
+Table "default"."gold_serving_alert_hourly" {
+  "alert_type" varchar(500) [note: 'store+camera+type+hour', ref: > "default"."gold_alerts"."alert_type"]
+}
+
+Table "default"."gold_serving_alert_daily" {
+  "alert_type" varchar(500) [note: 'rollup of hourly', ref: > "default"."gold_serving_alert_hourly"."alert_type"]
+}
+
+Table "default"."gold_serving_executive_daily" {
+  "store_id" varchar(500) [note: 'store+day rollup', ref: > "default"."gold_serving_traffic_daily"."camera_id"]
+}
