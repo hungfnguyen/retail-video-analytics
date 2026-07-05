@@ -94,6 +94,10 @@ video_main.mp4
 
 data/
 
+chartdb-temp/
+compass_artifact_*.md
+**/.ipynb_checkpoints/
+
 text.txt
 
 knowledge/
