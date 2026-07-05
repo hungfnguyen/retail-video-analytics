@@ -12,6 +12,7 @@ from urllib.parse import urlparse
 from fastapi import APIRouter, HTTPException
 
 from rva_api.api.v1.analytics_queries import trino_query
+from rva_api.alerting import is_business_alert_type
 from rva_api.timeutils import APP_TIME_ZONE
 from core.settings import load_yaml_config
 from rva_api.schemas.live import LiveDashboardData
@@ -966,7 +967,8 @@ def _pipeline_health(
 
 
 def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str, Any]]:
-    alert_ids = client.zrevrange(f"alert:live:{camera_id}", 0, limit - 1)
+    fetch_limit = max(limit * 5, 25)
+    alert_ids = client.zrevrange(f"alert:live:{camera_id}", 0, fetch_limit - 1)
     if not alert_ids:
         return []
     pipe = client.pipeline(transaction=False)
@@ -976,13 +978,15 @@ def _recent_alerts(client: Any, camera_id: str, limit: int = 5) -> list[dict[str
     for r in pipe.execute():
         if not r:
             continue
+        if not is_business_alert_type(r.get("alert_type")):
+            continue
         # Strip empty strings for optional fields — Pydantic can't coerce "" to int|None
         c = {k: v for k, v in r.items() if v != ""}
         c.pop("track_id", None)
         c.pop("clip_s3_key", None) if not c.get("clip_s3_key") else None
         c.pop("snapshot_key", None) if not c.get("snapshot_key") else None
         cleaned.append(c)
-    return cleaned
+    return cleaned[:limit]
 
 
 @router.get("/{camera_id}/dashboard", response_model=LiveDashboardData)

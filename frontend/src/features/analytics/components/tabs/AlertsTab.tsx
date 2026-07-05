@@ -57,7 +57,7 @@ export function AlertsTab({ data }: AlertsTabProps) {
           {data.records.length === 0 ? (
             <EmptyState
               title="No alert history"
-              description="Alerts appear once Gold alerts pipeline is running and clip alerts are enabled."
+              description="Business alerts appear here once live alert writes reach the lakehouse history table."
             />
           ) : (
             <div className="overflow-x-auto">

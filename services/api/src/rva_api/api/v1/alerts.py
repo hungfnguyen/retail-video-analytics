@@ -6,6 +6,7 @@ from typing import Any
 from fastapi import APIRouter, HTTPException
 from fastapi.responses import RedirectResponse
 
+from rva_api.alerting import is_business_alert_type
 from rva_api.schemas.live import Alert
 from storage import RedisClientConfig, S3ClientConfig, create_redis_client, create_s3_client
 
@@ -53,6 +54,8 @@ def _parse_alert(r: dict[str, Any]) -> Alert | None:
         return None
     try:
         clean = {k: v for k, v in r.items() if v != ""}
+        if not is_business_alert_type(clean.get("alert_type")):
+            return None
         clean.pop("track_id", None)
         if not clean.get("clip_s3_key"):
             clean.pop("clip_s3_key", None)
@@ -81,7 +84,7 @@ def list_alerts(
 
     alert_ids: list[str] = []
     for cam in cam_keys:
-        ids = client.zrevrange(f"alert:live:{cam}", 0, limit - 1)
+        ids = client.zrevrange(f"alert:live:{cam}", 0, max(limit * 5, 25) - 1)
         if ids:
             alert_ids.extend(ids if isinstance(ids[0], str) else [i.decode() for i in ids])
 

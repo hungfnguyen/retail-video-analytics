@@ -144,3 +144,40 @@ def test_heatmap_empty_response_uses_short_cache_ttl(monkeypatch):
     assert first.data_status == "empty"
     assert second.generated_at == first.generated_at
     assert cache.ttls["analytics:cache:v2:heatmap:cam_01:days_1:metric_presence"] == analytics.EMPTY_RESULT_CACHE_TTL_SEC
+
+
+def test_alert_history_uses_direct_history_table_and_caches(monkeypatch):
+    cache = FakeCache()
+    calls = {"ensure": 0, "query": 0}
+
+    def fake_ensure() -> None:
+        calls["ensure"] += 1
+
+    def fake_trino_query(sql: str, max_wait: float | None = None):
+        calls["query"] += 1
+        assert "gold_alert_history" in sql
+        return [[
+            "a1",
+            "cam_02",
+            "store_001",
+            "density_high",
+            "high",
+            "High density detected",
+            "Clip recorded",
+            "camera",
+            "2026-07-05T05:58:18.296374+00:00",
+            "clips/cam_02/a1.mp4",
+        ]]
+
+    monkeypatch.setattr(analytics, "_get_cache_client", lambda: cache)
+    monkeypatch.setattr(analytics, "ensure_alert_history_table", fake_ensure)
+    monkeypatch.setattr(analytics, "trino_query", fake_trino_query)
+
+    first = analytics.get_alert_history(7, "cam_02")
+    second = analytics.get_alert_history(7, "cam_02")
+
+    assert calls["ensure"] == 1
+    assert calls["query"] == 1
+    assert first.generated_at == second.generated_at
+    assert first.records[0].alert_type == "density_high"
+    assert cache.ttls["analytics:cache:v2:alerts:days_7:camera_cam_02"] == analytics.ALERTS_CACHE_TTL_SEC

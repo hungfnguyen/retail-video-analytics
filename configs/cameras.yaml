@@ -1,0 +1,125 @@
+# Multi-camera configuration
+# 3 cameras: video1.mp4 (checkout), video2.mp4 (aisle), video3.mp4 (entrance)
+
+cameras:
+  - camera_id: cam_01
+    store_id: store_001
+    name: "Cam_1"
+    source_type: video_file
+    source_uri: data/videos/video1.mp4
+    enabled: true
+    fps_target: 25
+    role: checkout
+    priority: 100
+
+  - camera_id: cam_02
+    store_id: store_001
+    name: "Cam_2"
+    source_type: video_file
+    source_uri: data/videos/video2.mp4
+    enabled: true
+    fps_target: 25
+    role: aisle
+    priority: 80
+
+  - camera_id: cam_03
+    store_id: store_001
+    name: "Cam_3"
+    source_type: video_file
+    source_uri: data/videos/video3.mp4
+    enabled: false
+    fps_target: 25
+    role: entrance
+    priority: 60
+
+settings:
+  model_name: yolo11l.pt
+  detector_type: ultralytics_yolo
+  detector_iou: 0.70
+  detector_imgsz: 1280
+  detector_half: true
+  shared_inference_enabled: true
+  shared_inference_queue_size: 8
+  shared_inference_timeout_sec: 30
+  tracker_type: roboflow_bytetrack
+  conf_thres: 0.15
+  class_filter: [0]
+  event_schema_version: "1.0"
+  publish_vision_facts: true
+
+  frame_policy:
+    mode: tracking_safe
+    max_queue_size: 4
+    allow_drop: true
+    max_consecutive_drops: 3
+  frame_queue_size: 2
+
+  track_activation_threshold: 0.20
+  lost_track_buffer: 60
+  minimum_consecutive_frames: 2
+  minimum_iou_threshold: 0.20
+  high_conf_det_threshold: 0.50
+  track_smoothing_enabled: true
+  track_smoothing_length: 5
+  zones_config_path: configs/zones.yaml
+
+  # Short-term track memory bridges brief retail occlusions so live count and
+  # overlays do not flicker when a shopper is hidden for a few frames.
+  track_memory_enabled: true
+  track_lost_ttl_ms: 2000
+  track_lost_ttl_frames: 30
+  track_min_hits: 1
+  track_smooth_alpha: 0.65
+  track_publish_predicted: true
+  track_count_predicted: true
+  track_predicted_conf_decay: 0.85
+  track_min_predicted_conf: 0.20
+  track_reid_iou_threshold: 0.15
+  track_reid_center_distance_px: 120
+
+  health_check_interval_sec: 10
+  worker_graceful_shutdown_sec: 10
+  reconnect_delay_max_sec: 30
+
+  # Live media plane for dashboard video. Vision writes annotated latest JPEGs
+  # here; FastAPI serves them as MJPEG through /media/live/{camera_id}/stream.
+  live_media_enabled: true
+  live_media_dir: runtime/live_frames
+  live_media_fps: 15
+  live_media_jpeg_quality: 75
+  pulsar_service_url: pulsar://52.74.215.164:6650
+  live_media_transport: redis
+  live_redis_host: 52.74.215.164
+  live_redis_port: 16379
+  live_media_ttl_sec: 10
+
+  # S3 config for media upload (bucket/region must match AWS setup)
+  s3_bucket: s3-retail-video-analytics
+  s3_region: ap-southeast-1
+  s3_path_style: false
+
+  # Keep S3 media upload disabled during local accuracy testing to avoid extra
+  # host/network pressure while the GPU runs the larger 1280 inference profile.
+  media_upload_enabled: true
+  pulsar_media_topic: persistent://retail/metadata/media-events
+
+  frame_sampling_enabled: false
+  frame_sample_interval_sec: 1
+  frame_jpeg_quality: 85
+  frame_upload_workers: 2
+  frame_upload_inflight_limit: 8
+
+  # Clip extraction is implemented but disabled by default because it encodes
+  # every frame into a small pre-buffer. Enable it when testing alert replay.
+  alert_clip_enabled: true
+  alert_density_threshold: 4
+  alert_pre_buffer_sec: 3
+  alert_post_buffer_sec: 5
+  alert_cooldown_sec: 60
+  clip_jpeg_quality: 85
+  clip_upload_workers: 2
+
+  # Condition alert thresholds (evaluated by the API background evaluator)
+  alert_queue_overcrowded_threshold: 2   # zone count >= N fires queue_overcrowded
+  alert_long_wait_ms: 15000              # max_wait_ms > N fires long_wait
+  alert_pipeline_lag_sec: 15             # retained for health checks; not surfaced as a business alert

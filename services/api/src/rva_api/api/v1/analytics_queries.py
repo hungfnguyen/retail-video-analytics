@@ -6,13 +6,22 @@ import time
 from typing import Any
 from urllib.request import Request, urlopen
 
+from rva_api.alerting import BUSINESS_ALERT_TYPES
 from rva_api.timeutils import TRINO_TIME_ZONE
 
 MAX_DAYS = 31
+ALERT_HISTORY_TABLE = "lakehouse.rva.gold_alert_history"
+_alert_history_table_ready = False
 
 
 def _sql_string(value: str) -> str:
     return "'" + value.replace("'", "''") + "'"
+
+
+def _sql_nullable(value: str | None) -> str:
+    if value is None or value == "":
+        return "NULL"
+    return _sql_string(value)
 
 
 def _camera_filter(camera_id: str | None, column: str = "camera_id") -> str:
@@ -88,6 +97,75 @@ def trino_query(sql: str, max_wait: float | None = None) -> list[list[Any]]:
         if not next_uri:
             return rows
         payload = _read_json_response(next_uri)
+
+
+def trino_execute(sql: str, max_wait: float | None = None) -> None:
+    trino_query(sql, max_wait)
+
+
+def ensure_alert_history_table() -> None:
+    global _alert_history_table_ready
+    if _alert_history_table_ready:
+        return
+    trino_execute(
+        f"""
+        CREATE TABLE IF NOT EXISTS {ALERT_HISTORY_TABLE} (
+            alert_id      VARCHAR,
+            camera_id     VARCHAR,
+            store_id      VARCHAR,
+            alert_type    VARCHAR,
+            severity      VARCHAR,
+            title         VARCHAR,
+            description   VARCHAR,
+            zone          VARCHAR,
+            event_ts      VARCHAR,
+            clip_s3_key   VARCHAR,
+            snapshot_key  VARCHAR,
+            event_date    DATE
+        ) WITH (
+            format = 'PARQUET',
+            format_version = 2,
+            partitioning = ARRAY['event_date', 'store_id']
+        )
+        """,
+        15.0,
+    )
+    _alert_history_table_ready = True
+
+
+def insert_alert_history_sql(record: dict[str, Any]) -> str:
+    event_ts = str(record.get("event_ts") or "")
+    if not event_ts:
+        raise ValueError("event_ts is required for alert history inserts")
+    return f"""
+        INSERT INTO {ALERT_HISTORY_TABLE} (
+            alert_id,
+            camera_id,
+            store_id,
+            alert_type,
+            severity,
+            title,
+            description,
+            zone,
+            event_ts,
+            clip_s3_key,
+            snapshot_key,
+            event_date
+        ) VALUES (
+            {_sql_string(str(record.get("alert_id") or ""))},
+            {_sql_string(str(record.get("camera_id") or ""))},
+            {_sql_string(str(record.get("store_id") or ""))},
+            {_sql_string(str(record.get("alert_type") or ""))},
+            {_sql_string(str(record.get("severity") or "low"))},
+            {_sql_string(str(record.get("title") or ""))},
+            {_sql_string(str(record.get("description") or ""))},
+            {_sql_string(str(record.get("zone") or ""))},
+            {_sql_string(event_ts)},
+            {_sql_nullable(record.get("clip_s3_key"))},
+            {_sql_nullable(record.get("snapshot_key"))},
+            CAST(from_iso8601_timestamp({_sql_string(event_ts)}) AS DATE)
+        )
+    """
 
 
 def summary_sql(days: int, camera_id: str | None = None) -> str:
@@ -511,6 +589,7 @@ def queue_zone_summary_sql(days: int, camera_id: str | None = None) -> str:
 
 
 def alerts_history_sql(days: int, camera_id: str | None = None) -> str:
+    alert_types = ", ".join(_sql_string(alert_type) for alert_type in sorted(BUSINESS_ALERT_TYPES))
     return f"""
         SELECT
           alert_id,
@@ -521,12 +600,13 @@ def alerts_history_sql(days: int, camera_id: str | None = None) -> str:
           title,
           description,
           zone,
-          CAST(event_ts AS varchar) AS event_ts,
+          event_ts,
           clip_s3_key
-        FROM lakehouse.rva.gold_alerts
-        WHERE event_ts >= CURRENT_TIMESTAMP - INTERVAL '{days}' DAY
+        FROM {ALERT_HISTORY_TABLE}
+        WHERE event_date >= CURRENT_DATE - INTERVAL '{days}' DAY
+          AND alert_type IN ({alert_types})
           {_camera_filter(camera_id)}
-        ORDER BY event_ts DESC
+        ORDER BY from_iso8601_timestamp(event_ts) DESC
         LIMIT 100
     """
 

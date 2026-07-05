@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import json
 import logging
 import os
 from datetime import datetime, timezone
@@ -11,6 +10,12 @@ from pathlib import Path
 from typing import Any
 
 from core.settings import load_yaml_config
+from rva_api.alerting import is_business_alert_type
+from rva_api.api.v1.analytics_queries import (
+    ensure_alert_history_table,
+    insert_alert_history_sql,
+    trino_execute,
+)
 from storage import RedisClientConfig, create_redis_client
 
 log = logging.getLogger(__name__)
@@ -148,7 +153,7 @@ def _upload_snapshot(cam: str, alert_id: str) -> str:
         return ""
 
 
-def _load_alert_config() -> tuple[list[str], dict[str, Any]]:
+def _load_alert_config() -> tuple[list[str], dict[str, Any], dict[str, str]]:
     config_path = Path(os.getenv("RVA_CAMERA_CONFIG", "configs/cameras.yaml"))
     if not config_path.exists():
         example = config_path.with_name("cameras.yaml.example")
@@ -156,26 +161,72 @@ def _load_alert_config() -> tuple[list[str], dict[str, Any]]:
             config_path = example
     cfg = load_yaml_config(config_path)
     cameras = cfg.get("cameras", [])
+    camera_store_ids: dict[str, str] = {}
     camera_ids = [
         c["camera_id"]
         for c in cameras
         if isinstance(c, dict) and c.get("enabled", True) and c.get("camera_id")
     ]
+    for camera in cameras:
+        if not isinstance(camera, dict):
+            continue
+        camera_id = str(camera.get("camera_id") or "")
+        if not camera_id or not camera.get("enabled", True):
+            continue
+        camera_store_ids[camera_id] = str(camera.get("store_id") or "store_001")
     settings = cfg.get("settings", {}) if isinstance(cfg, dict) else {}
-    return camera_ids, settings
+    return camera_ids, settings, camera_store_ids
+
+
+def _invalidate_alert_history_cache(client: Any) -> None:
+    try:
+        keys = list(client.scan_iter("analytics:cache:v2:alerts:*"))
+    except Exception:
+        return
+    if not keys:
+        return
+    try:
+        client.delete(*keys)
+    except Exception:
+        return
+
+
+def _write_alert_history(record: dict[str, str], client: Any) -> None:
+    if not is_business_alert_type(record.get("alert_type")):
+        return
+    try:
+        ensure_alert_history_table()
+        trino_execute(insert_alert_history_sql(record), 15.0)
+    except Exception:
+        log.exception("alert history insert failed for %s", record.get("alert_id"))
+        return
+    _invalidate_alert_history_cache(client)
+
+
+def _write_live_alert_record(client: Any, record: dict[str, str], ts_ms: int) -> None:
+    alert_id = str(record["alert_id"])
+    camera_id = str(record["camera_id"])
+    pipe = client.pipeline()
+    pipe.hset(f"alert:item:{alert_id}", mapping=record)
+    pipe.expire(f"alert:item:{alert_id}", ALERT_STORE_TTL)
+    pipe.zadd(f"alert:live:{camera_id}", {alert_id: float(ts_ms)})
+    pipe.expire(f"alert:live:{camera_id}", ALERT_STORE_TTL)
+    pipe.zremrangebyrank(f"alert:live:{camera_id}", 0, -(ALERT_STORE_MAX + 1))
+    pipe.execute()
 
 
 def _maybe_emit(
     client: Any,
     cam: str,
+    store_id: str,
     zone: str,
     alert_type: str,
     severity: str,
     title: str,
     description: str,
     cooldown_sec: int,
-) -> str | None:
-    """Emit alert if not on cooldown. Returns alert_id if emitted, None otherwise."""
+) -> dict[str, str] | None:
+    """Emit alert if not on cooldown. Returns the alert record if emitted."""
     cooldown_key = f"alert:cooldown:{cam}:{zone}:{alert_type}"
     # SET NX EX is atomic — only the first uvicorn worker to acquire this key
     # proceeds; all other workers see None and skip, preventing duplicate alerts
@@ -189,6 +240,7 @@ def _maybe_emit(
 
     record: dict[str, str] = {
         "alert_id": alert_id,
+        "store_id": store_id,
         "camera_id": cam,
         "alert_type": alert_type,
         "severity": severity,
@@ -199,47 +251,19 @@ def _maybe_emit(
         "status": "new",
         "track_id": "",
         "snapshot_key": "",
+        "clip_s3_key": "",
+        "clip_s3_uri": "",
     }
 
-    pipe = client.pipeline()
-    pipe.hset(f"alert:item:{alert_id}", mapping=record)
-    pipe.expire(f"alert:item:{alert_id}", ALERT_STORE_TTL)
-    pipe.zadd(f"alert:live:{cam}", {alert_id: float(ts_ms)})
-    pipe.expire(f"alert:live:{cam}", ALERT_STORE_TTL)
-    pipe.zremrangebyrank(f"alert:live:{cam}", 0, -(ALERT_STORE_MAX + 1))
-    pipe.execute()
+    _write_live_alert_record(client, record, ts_ms)
     log.info("alert emitted: %s", alert_id)
-    return alert_id
-
-
-def _check_pipeline_lag(client: Any, cam: str, lag_sec: float, cooldown_sec: int) -> None:
-    raw = client.get(f"live:frame:{cam}")
-    if not raw:
-        return
-    try:
-        frame = json.loads(raw)
-        capture_ts = datetime.fromisoformat(frame["capture_ts"])
-        if capture_ts.tzinfo is None:
-            capture_ts = capture_ts.replace(tzinfo=timezone.utc)
-        age = (datetime.now(timezone.utc) - capture_ts).total_seconds()
-    except Exception:
-        return
-    if age > lag_sec:
-        aid = _maybe_emit(
-            client, cam, "camera", "pipeline_lag", "high",
-            f"Pipeline lag — {cam}",
-            f"Frame is {int(age)}s old — pipeline may be stalled",
-            cooldown_sec,
-        )
-        if aid:
-            snap = _upload_snapshot(cam, aid)
-            if snap:
-                client.hset(f"alert:item:{aid}", "snapshot_key", snap)
+    return record
 
 
 def _check_queue_zones(
     client: Any,
     cam: str,
+    store_id: str,
     overcrowded_threshold: int,
     long_wait_ms: int,
     cooldown_sec: int,
@@ -266,41 +290,55 @@ def _check_queue_zones(
         avg_wait = int(result.get("avg_wait_ms", 0) or 0)
 
         if count >= overcrowded_threshold:
-            aid = _maybe_emit(
-                client, cam, zone_id, "queue_overcrowded", "high",
+            record = _maybe_emit(
+                client, cam, store_id, zone_id, "queue_overcrowded", "high",
                 f"Queue overcrowded — {zone_id.replace('_', ' ')}",
                 f"{count} people waiting in queue",
                 cooldown_sec,
             )
-            if aid:
-                snap = _upload_snapshot(cam, aid)
+            if record is not None:
+                snap = _upload_snapshot(cam, record["alert_id"])
                 if snap:
-                    client.hset(f"alert:item:{aid}", "snapshot_key", snap)
+                    record["snapshot_key"] = snap
+                    client.hset(f"alert:item:{record['alert_id']}", "snapshot_key", snap)
+                _write_alert_history(record, client)
 
         if max_wait > long_wait_ms:
             max_m, max_s = divmod(max_wait // 1000, 60)
             avg_m, avg_s = divmod(avg_wait // 1000, 60)
-            aid = _maybe_emit(
-                client, cam, zone_id, "long_wait", "medium",
+            record = _maybe_emit(
+                client, cam, store_id, zone_id, "long_wait", "medium",
                 f"Long wait — {zone_id.replace('_', ' ')}",
                 f"Max {max_m}m {max_s:02d}s, avg {avg_m}m {avg_s:02d}s",
                 cooldown_sec,
             )
-            if aid:
-                snap = _upload_snapshot(cam, aid)
+            if record is not None:
+                snap = _upload_snapshot(cam, record["alert_id"])
                 if snap:
-                    client.hset(f"alert:item:{aid}", "snapshot_key", snap)
+                    record["snapshot_key"] = snap
+                    client.hset(f"alert:item:{record['alert_id']}", "snapshot_key", snap)
+                _write_alert_history(record, client)
 
 
-def _evaluate_once(client: Any, camera_ids: list[str], settings: dict[str, Any]) -> None:
+def _evaluate_once(
+    client: Any,
+    camera_ids: list[str],
+    settings: dict[str, Any],
+    camera_store_ids: dict[str, str],
+) -> None:
     overcrowded = int(settings.get("alert_queue_overcrowded_threshold", 5))
     long_wait = int(settings.get("alert_long_wait_ms", 120_000))
-    lag_sec = float(settings.get("alert_pipeline_lag_sec", 15))
     cooldown = int(settings.get("alert_cooldown_sec", 60))
 
     for cam in camera_ids:
-        _check_pipeline_lag(client, cam, lag_sec, cooldown)
-        _check_queue_zones(client, cam, overcrowded, long_wait, cooldown)
+        _check_queue_zones(
+            client,
+            cam,
+            camera_store_ids.get(cam, "store_001"),
+            overcrowded,
+            long_wait,
+            cooldown,
+        )
 
 
 def _write_clip_alert(client: Any, event: dict[str, Any]) -> None:
@@ -317,21 +355,29 @@ def _write_clip_alert(client: Any, event: dict[str, Any]) -> None:
         return
 
     alert_type = event.get("alert_type", "density_high")
+    if not is_business_alert_type(alert_type):
+        return
     now = datetime.now(timezone.utc)
     ts_ms = int(now.timestamp() * 1000)
     duration = event.get("clip_duration_sec") or 0
     record: dict[str, str] = {
         "alert_id": alert_id,
+        "store_id": str(source.get("store_id") or "store_001"),
         "camera_id": cam,
         "alert_type": alert_type,
         "severity": "high",
-        "title": f"Incident clip — {alert_type.replace('_', ' ')}",
-        "description": f"Camera {cam} — {duration:.0f}s clip recorded",
-        "zone": source.get("store_id", "unknown"),
+        "title": "High density detected" if alert_type == "density_high" else f"Incident clip — {alert_type.replace('_', ' ')}",
+        "description": (
+            f"Current density incident on camera {cam} — {duration:.0f}s clip recorded"
+            if alert_type == "density_high"
+            else f"Camera {cam} — {duration:.0f}s clip recorded"
+        ),
+        "zone": str(event.get("zone") or source.get("zone") or "camera"),
         "event_ts": event.get("trigger_ts", now.isoformat()),
         "status": "new",
         "track_id": "",
         "clip_s3_key": event.get("clip_s3_key", ""),
+        "clip_s3_uri": event.get("clip_s3_uri", ""),
         "snapshot_key": _upload_snapshot(cam, alert_id) or "",
     }
 
@@ -343,6 +389,7 @@ def _write_clip_alert(client: Any, event: dict[str, Any]) -> None:
     pipe.zremrangebyrank(f"alert:live:{cam}", 0, -(ALERT_STORE_MAX + 1))
     pipe.set(cooldown_key, 1, ex=3600)
     pipe.execute()
+    _write_alert_history(record, client)
     log.info("clip alert written: %s", alert_id)
 
 
@@ -382,7 +429,7 @@ def _media_consumer_loop(client: Any) -> None:
 async def run_alert_evaluator() -> None:
     """Async background loop — starts with the API lifespan, runs until cancelled."""
     try:
-        camera_ids, settings = _load_alert_config()
+        camera_ids, settings, camera_store_ids = _load_alert_config()
     except Exception:
         log.exception("alert evaluator: failed to load config, not starting")
         return
@@ -398,6 +445,11 @@ async def run_alert_evaluator() -> None:
         log.warning("alert evaluator: Redis unavailable, not starting")
         return
 
+    try:
+        ensure_alert_history_table()
+    except Exception:
+        log.exception("alert evaluator: failed to prepare alert history table")
+
     import threading
     media_thread = threading.Thread(
         target=_media_consumer_loop,
@@ -410,7 +462,7 @@ async def run_alert_evaluator() -> None:
     while True:
         try:
             # Run sync Redis calls in a thread so the async event loop is not blocked
-            await asyncio.to_thread(_evaluate_once, client, camera_ids, settings)
+            await asyncio.to_thread(_evaluate_once, client, camera_ids, settings, camera_store_ids)
         except Exception:
             log.exception("alert evaluator: evaluation error (continuing)")
         try:

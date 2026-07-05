@@ -16,6 +16,7 @@ from rva_api.api.v1.analytics_queries import (
     camera_sql,
     daily_sql,
     dwell_trend_sql,
+    ensure_alert_history_table,
     heatmap_presence_sql,
     hourly_sql,
     peak_heatmap_sql,
@@ -262,6 +263,7 @@ def get_alert_history(
 
     now = now_local()
     try:
+        ensure_alert_history_table()
         rows = trino_query(alerts_history_sql(days, camera_id), 10.0)
     except (HTTPError, URLError, TimeoutError, RuntimeError, OSError) as exc:
         payload = {

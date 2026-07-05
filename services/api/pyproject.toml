@@ -9,6 +9,7 @@ description = "Retail Video Analytics - Dashboard API Service"
 requires-python = ">=3.12"
 dependencies = [
     "core",
+    "messaging",
     "storage",
     "aiortc>=1.9",
     "fastapi>=0.115",
@@ -19,6 +20,7 @@ dependencies = [
 
 [tool.uv.sources]
 core = { workspace = true }
+messaging = { workspace = true }
 storage = { workspace = true }
 
 [tool.hatch.build.targets.wheel]

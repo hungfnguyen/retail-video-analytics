@@ -65,7 +65,7 @@ export const AlertHistoryPanel = memo(function AlertHistoryPanel({ data }: { dat
         <div className="grid min-h-24 place-items-center rounded-lg border border-dashed border-slate-200 bg-white text-sm text-slate-400">
           {data.data_status === 'error'
             ? `Query error: ${data.error_message}`
-            : 'No alert history in Gold lakehouse yet — requires clip alerts enabled + GoldAlertsJob running.'}
+            : 'No business alert history in the lakehouse yet.'}
         </div>
       )}
     </div>

@@ -100,3 +100,32 @@ def test_queue_and_alert_queries_accept_camera_filter():
     assert "camera_id = 'cam_02'" in analytics_queries.queue_zone_summary_sql(7, "cam_02")
     assert "camera_id = 'cam_02'" in analytics_queries.queue_wait_trend_sql(7, "cam_02")
     assert "camera_id = 'cam_02'" in analytics_queries.alerts_history_sql(7, "cam_02")
+
+
+def test_alert_history_queries_read_direct_history_table():
+    sql = analytics_queries.alerts_history_sql(7)
+
+    assert analytics_queries.ALERT_HISTORY_TABLE in sql
+    assert "gold_alerts" not in sql
+    assert "from_iso8601_timestamp(event_ts)" in sql
+
+
+def test_insert_alert_history_sql_uses_iso8601_date_projection():
+    sql = analytics_queries.insert_alert_history_sql(
+        {
+            "alert_id": "a1",
+            "camera_id": "cam_01",
+            "store_id": "store_001",
+            "alert_type": "queue_overcrowded",
+            "severity": "high",
+            "title": "Queue overcrowded",
+            "description": "2 people waiting",
+            "zone": "checkout_queue_02",
+            "event_ts": "2026-07-05T05:58:18.296374+00:00",
+            "clip_s3_key": None,
+            "snapshot_key": "snapshots/cam_01/a1.jpg",
+        }
+    )
+
+    assert "from_iso8601_timestamp('2026-07-05T05:58:18.296374+00:00')" in sql
+    assert "INSERT INTO lakehouse.rva.gold_alert_history" in sql
