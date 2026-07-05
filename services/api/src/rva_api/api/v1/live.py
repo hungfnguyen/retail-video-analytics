@@ -79,6 +79,17 @@ def _load_camera_config() -> list[dict[str, Any]]:
     ]
 
 
+def _camera_config(cameras: list[dict[str, Any]], camera_id: str) -> dict[str, Any] | None:
+    return next(
+        (
+            camera
+            for camera in cameras
+            if str(camera.get("camera_id") or "") == camera_id
+        ),
+        None,
+    )
+
+
 def _zone_config_path() -> Path:
     env_path = os.getenv("RVA_ZONE_CONFIG")
     if env_path:
@@ -355,10 +366,13 @@ def _is_fresh_latency(latency_ms: int | None) -> bool:
 
 
 def _media_current_count(
-    media_metadata: dict[str, Any], media_status: str
+    media_metadata: dict[str, Any], media_status: str, count_zone_id: str | None = None
 ) -> int | None:
     if media_status != "online":
         return None
+
+    if count_zone_id:
+        return _zone_count_from_payload(media_metadata.get("zone_counts"), count_zone_id)
 
     for key in ("tracked_objects_count", "detections_count"):
         if key in media_metadata:
@@ -369,14 +383,36 @@ def _media_current_count(
 def _resolve_current_count(
     client: Any,
     camera_id: str,
+    count_zone_id: str | None,
+    frame: dict[str, Any] | None,
     fallback_detection_count: int,
     metadata_latency_ms: int | None,
     media_metadata: dict[str, Any],
     media_status: str,
 ) -> tuple[int, str]:
-    media_count = _media_current_count(media_metadata, media_status)
+    media_count = _media_current_count(media_metadata, media_status, count_zone_id)
     if media_count is not None:
         return media_count, "camera_realtime"
+
+    if count_zone_id:
+        if _is_fresh_latency(metadata_latency_ms):
+            frame_zone_count = _zone_count_from_payload(
+                (frame or {}).get("zone_counts"), count_zone_id
+            )
+            if frame_zone_count is not None:
+                return frame_zone_count, "camera_realtime"
+
+        try:
+            raw_zone_counts = client.hgetall(f"zone:count:{camera_id}")
+        except Exception as exc:
+            raise HTTPException(
+                status_code=503, detail="Cannot read realtime zone counts from Redis"
+            ) from exc
+        for raw_zone_id, raw_count in (raw_zone_counts or {}).items():
+            zone_id = _decode_redis_value(raw_zone_id)
+            if zone_id == count_zone_id:
+                return max(0, _safe_int(_decode_redis_value(raw_count))), "redis"
+        return 0, "missing"
 
     raw_count = _redis_get(
         client,
@@ -669,6 +705,18 @@ def _normalize_zone_count(item: dict[str, Any], specs: dict[str, dict[str, str]]
         "avg_wait_ms": _safe_int(item.get("avg_wait_ms")) or _wait_ms_from_seconds(item.get("avg_wait_seconds")),
         "max_wait_ms": _safe_int(item.get("max_wait_ms")) or _wait_ms_from_seconds(item.get("max_wait_seconds")),
     }
+
+
+def _zone_count_from_payload(raw_zones: Any, zone_id: str) -> int | None:
+    if not isinstance(raw_zones, list):
+        return None
+    for item in raw_zones:
+        if not isinstance(item, dict):
+            continue
+        if str(item.get("zone_id") or "") != zone_id:
+            continue
+        return max(0, _safe_int(item.get("count")))
+    return None
 
 
 def _line_crossings_from_sources(
@@ -1022,6 +1070,14 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     reader_drop_count = _safe_int(media_metadata.get("reader_drop_count"))
     status = "stable" if metadata_status in {"fresh", "lagging"} else "warning"
 
+    cameras = _load_camera_config()
+    if cameras and camera_id not in {
+        str(camera.get("camera_id")) for camera in cameras
+    }:
+        raise HTTPException(status_code=404, detail="Camera not found")
+    camera_cfg = _camera_config(cameras, camera_id) or {}
+    count_zone_id = str(camera_cfg.get("count_zone_id") or "").strip() or None
+
     active_tracks = _active_track_count(client, camera_id)
     heatmap_cells = _read_heatmap(client, camera_id)
     detections = _detections_from_frame(frame)
@@ -1029,6 +1085,8 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     current_count, count_source = _resolve_current_count(
         client,
         camera_id,
+        count_zone_id,
+        frame,
         fallback_detection_count,
         latency_ms,
         media_metadata,
@@ -1036,11 +1094,6 @@ def get_live_dashboard(camera_id: str) -> LiveDashboardData:
     )
     if count_source == "missing":
         status = "warning"
-    cameras = _load_camera_config()
-    if cameras and camera_id not in {
-        str(camera.get("camera_id")) for camera in cameras
-    }:
-        raise HTTPException(status_code=404, detail="Camera not found")
     store = _build_store(frame, cameras, camera_id)
 
     frame_id = _safe_int((frame or {}).get("frame_index"), 0)

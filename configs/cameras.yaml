@@ -21,6 +21,7 @@ cameras:
     fps_target: 25
     role: aisle
     priority: 80
+    count_zone_id: main_aisle
 
   - camera_id: cam_03
     store_id: store_001

@@ -95,6 +95,16 @@ def _frame_from_packet(packet: Any) -> tuple[Any, int | None, float | None, int,
     return packet, None, None, 0, 0
 
 
+def _zone_count(zone_counts: list[dict[str, Any]], zone_id: str | None) -> int | None:
+    if not zone_id:
+        return None
+    for zone in zone_counts:
+        if str(zone.get("zone_id") or "") != zone_id:
+            continue
+        return max(0, int(zone.get("count") or 0))
+    return None
+
+
 def run_worker(
     camera_cfg: Dict[str, Any],
     global_cfg: Dict[str, Any],
@@ -107,6 +117,7 @@ def run_worker(
     pipeline_run_id = uuid.uuid4().hex[:12]
     camera_id = camera_cfg["camera_id"]
     store_id = camera_cfg["store_id"]
+    count_zone_id = str(camera_cfg.get("count_zone_id") or "").strip() or None
 
     logging.basicConfig(
         level=logging.INFO,
@@ -114,6 +125,8 @@ def run_worker(
     )
 
     logger.info("Worker starting: run=%s store=%s", pipeline_run_id, store_id)
+    if count_zone_id:
+        logger.info("Scoped counting enabled: count_zone_id=%s", count_zone_id)
 
     signal.signal(signal.SIGTERM, _shutdown)
     signal.signal(signal.SIGINT, _shutdown)
@@ -484,7 +497,10 @@ def run_worker(
 
             if clip_extractor:
                 clip_extractor.feed(frame, frame_index, capture_ts)
-                if len(detections) > global_cfg.get("alert_density_threshold", 10):
+                density_count = _zone_count(zone_counts, count_zone_id)
+                if density_count is None:
+                    density_count = len(detections)
+                if density_count > global_cfg.get("alert_density_threshold", 10):
                     clip_extractor.trigger(
                         alert_type="density_high",
                         trigger_frame_index=frame_index,

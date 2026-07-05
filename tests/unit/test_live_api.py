@@ -62,10 +62,10 @@ class FakeRedis:
         yield from [key for key in self.track_keys if key.startswith(match.rstrip("*"))]
 
     def zrevrange(self, key, start, end, withscores=False):
-        if key == "heatmap:live:cam_01":
+        if key.startswith("heatmap:live:"):
             members = self.heatmap[start : end + 1]
             return members if withscores else [member for member, _ in members]
-        if key == "alert:live:cam_01":
+        if key.startswith("alert:live:"):
             return self.alert_ids[start : end + 1]
         raise AssertionError(f"Unexpected sorted-set key: {key}")
 
@@ -408,3 +408,59 @@ def test_live_dashboard_marks_count_missing_when_frame_is_stale(monkeypatch):
         service for service in data.pipeline_health if service.service == "fastapi"
     )
     assert fastapi_health.status == "warning"
+
+
+def test_live_dashboard_uses_scoped_zone_count_for_configured_camera(monkeypatch):
+    fake_redis = FakeRedis()
+    frame = json.loads(fake_redis.values["live:frame:cam_01"])
+    frame["camera_id"] = "cam_02"
+    frame["zone_counts"] = [
+        {
+            "zone_id": "main_aisle",
+            "zone_name": "Main Aisle",
+            "zone_type": "aisle",
+            "count": 5,
+            "track_ids": [1, 2, 3, 4, 5],
+            "global_track_ids": [
+                "cam_02_g_000001",
+                "cam_02_g_000002",
+                "cam_02_g_000003",
+                "cam_02_g_000004",
+                "cam_02_g_000005",
+            ],
+        }
+    ]
+    fake_redis.values["live:frame:cam_02"] = json.dumps(frame)
+    fake_redis.values["stats:count:cam_02"] = "99"
+
+    monkeypatch.setattr(live, "_get_redis_client", lambda: fake_redis)
+    monkeypatch.setattr(
+        live,
+        "_load_camera_config",
+        lambda: [
+            {
+                "camera_id": "cam_02",
+                "store_id": "store_001",
+                "name": "Cam_2",
+                "source_type": "video_file",
+                "enabled": True,
+                "count_zone_id": "main_aisle",
+            }
+        ],
+    )
+    monkeypatch.setattr(
+        live,
+        "_read_media_metadata",
+        lambda camera_id: {
+            "camera_id": camera_id,
+            "updated_at_epoch_ms": int(time.time() * 1000),
+            "publish_fps": 12.0,
+            "tracked_objects_count": 18,
+        },
+    )
+
+    data = live.get_live_dashboard("cam_02")
+
+    assert data.stats.current_count == 5
+    assert data.stats.count_source == "camera_realtime"
+    assert data.traffic_summary.current_total == 5

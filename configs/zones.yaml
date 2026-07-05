@@ -42,8 +42,8 @@ stores:
 
       cam_02:
         resolution:
-          width: 1280
-          height: 720
+          width: 1920
+          height: 1080
         zones:
           - zone_id: main_aisle
             zone_name: Main Aisle
@@ -51,10 +51,11 @@ stores:
             priority: 70
             trigger_anchor: bottom_center
             polygon_norm:
-              - [0.44, 0.22]
-              - [0.68, 0.22]
-              - [0.68, 0.96]
-              - [0.44, 0.96]
+              - [0.47500, 0.98519]
+              - [0.81042, 0.98889]
+              - [0.65573, 0.30648]
+              - [0.64531, 0.00648]
+              - [0.50313, 0.00556]
         lines:
           - line_id: aisle_crossing
             line_name: Aisle Crossing
