@@ -2,16 +2,9 @@
 
 Data Engineering project for retail video analytics. The current implementation is an as-built realtime + lakehouse system:
 
-```text
-YOLO11 + Roboflow ByteTrack
-  -> Pulsar
-  -> Flink dual path
-      -> Redis realtime state
-      -> Iceberg tables on AWS S3
-  -> Trino
-  -> FastAPI
-  -> React frontend
-```
+### Architecture
+![Retail Video Analytics Architecture](docs/images/architecture.png)
+
 
 ## Current Scope
 
