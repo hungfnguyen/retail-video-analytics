@@ -11,7 +11,7 @@ The project focuses on end-to-end streaming data engineering, including event-ti
 
 ## Demo
 
-[Project UI & Demo Videos](https://drive.google.com/drive/u/0/folders/1NBOTVdMPl49KKEQuQbC6C4BTmg5h032I)
+[Project UI & Demo Videos](https://drive.google.com/file/d/195QhH4KIl8NqJn5kTWQFR0X6I02fIf1T/view?usp=sharing)
 
 ### Architecture
 ![Retail Video Analytics Architecture](docs/images/architecture.png)
